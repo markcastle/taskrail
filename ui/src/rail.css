@@ -523,3 +523,11 @@ button {
   font-size: 11px;
   color: var(--text-muted);
 }
+
+.settings__quit {
+  margin-right: auto;
+}
+
+.settings__actions .button--danger {
+  color: var(--priority);
+}

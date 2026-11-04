@@ -42,6 +42,17 @@ pub fn redock(app: &AppHandle) -> tauri::Result<()> {
     })
 }
 
+/// Undock and drop the platform dock. Safe to call more than once.
+pub fn release(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let taken = lock(&state.dock).take();
+    if let Some(mut dock) = taken {
+        if let Err(e) = dock.undock() {
+            eprintln!("task rail: undock failed: {e}");
+        }
+    }
+}
+
 fn apply(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();

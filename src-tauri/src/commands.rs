@@ -141,6 +141,12 @@ pub fn update_settings(
     Ok(lock(&state.rail).settings.clone())
 }
 
+/// Quit from the UI. The exit handler in `lib.rs` releases the strip.
+#[tauri::command]
+pub fn quit(app: AppHandle) {
+    app.exit(0);
+}
+
 fn changed(app: &AppHandle) {
     if let Err(e) = app.emit(CHANGED_EVENT, ()) {
         eprintln!("task rail: could not emit {CHANGED_EVENT}: {e}");

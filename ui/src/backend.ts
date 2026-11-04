@@ -62,6 +62,8 @@ export interface RailBackend {
   setActive(id: string | null): Promise<void>
   getSettings(): Promise<RailSettings>
   updateSettings(settings: RailSettings): Promise<RailSettings>
+  /** Close the app. Does nothing in a plain browser. */
+  quit(): Promise<void>
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
   onChanged(callback: () => void): () => void
   /** Fires when the global quick-add shortcut was pressed. Returns an unsubscribe. */
@@ -98,6 +100,7 @@ function tauriBackend(): RailBackend {
     setActive: (id) => call('set_active', { id }),
     getSettings: () => call('get_settings'),
     updateSettings: (settings) => call('update_settings', { settings }),
+    quit: () => call('quit'),
     onChanged: (cb) => listen('rail:changed', cb),
     onQuickAdd: (cb) => listen('rail:quick-add', cb),
   }
@@ -247,6 +250,7 @@ function browserBackend(): RailBackend {
     setActive: (id) => async(() => ((active = id), notify())),
     getSettings: () => async(() => settings),
     updateSettings: (next) => async(() => ((settings = { ...next }), notify(), settings)),
+    quit: () => async(() => undefined),
     onChanged: (cb) => (changedListeners.add(cb), () => changedListeners.delete(cb)),
     onQuickAdd: (cb) => (quickAddListeners.add(cb), () => quickAddListeners.delete(cb)),
   }

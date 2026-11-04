@@ -20,9 +20,10 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 chrono = { workspace = true }
+ctrlc = "3"
 serde = { workspace = true }
 serde_json = { workspace = true }
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
 taskrail-core = { path = "../crates/core" }
 taskrail-platform = { path = "../crates/platform" }

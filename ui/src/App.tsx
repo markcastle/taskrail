@@ -168,6 +168,7 @@ export default function App() {
               .catch((e) => setError(String(e)))
           }}
           onCancel={() => setSettingsOpen(false)}
+          onQuit={() => backend.quit().catch((e) => setError(String(e)))}
         />
       )}
 
@@ -244,10 +245,12 @@ function SettingsPanel({
   settings,
   onSave,
   onCancel,
+  onQuit,
 }: {
   settings: RailSettings
   onSave: (next: RailSettings) => void
   onCancel: () => void
+  onQuit: () => void
 }) {
   const [draft, setDraft] = useState<RailSettings>(settings)
   const set = <K extends keyof RailSettings>(key: K, value: RailSettings[K]) => setDraft((d) => ({ ...d, [key]: value }))
@@ -288,6 +291,9 @@ function SettingsPanel({
         />
       </label>
       <div className="settings__actions">
+        <button type="button" className="button--danger settings__quit" onClick={onQuit}>
+          Quit Task Rail
+        </button>
         <button type="button" onClick={onCancel}>
           Cancel
         </button>
