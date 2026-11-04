@@ -23,5 +23,7 @@ chrono = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
+tauri-plugin-global-shortcut = "2"
 taskrail-core = { path = "../crates/core" }
 taskrail-platform = { path = "../crates/platform" }
+taskrail-store-sqlite = { path = "../crates/store-sqlite" }

@@ -16,8 +16,8 @@ The plan, with every decision and why, lives in the project doc linked from the 
 
 | Milestone | State |
 | --- | --- |
-| 1. Docking spike: a reserved strip on Windows, a floating edge panel on macOS | In progress |
-| 2. Core and local tasks: sections, cards, active task mode, quick-add | Not started |
+| 1. Docking spike: a reserved strip on Windows, a floating edge panel on macOS | Built, awaiting hands-on testing on both platforms |
+| 2. Core and local tasks: sections, cards, active task mode, quick-add | Built: SQLite store, drag to reorder, flick to complete, quick-add with a global shortcut, settings |
 | 3. Generic MCP connector: discovery, profiles, two-way sync | Not started |
 | 4. Rail as an MCP server, tray, settings, release pipeline | Not started |
 
@@ -47,17 +47,38 @@ To run the Rust tests, which is where the product rules are specified:
 cargo test --workspace
 ```
 
+To drive the UI through its gestures in a headless browser, the way CI does:
+
+```bash
+npx playwright install chromium
+```
+
+```bash
+npm run ui:test
+```
+
+## Using it
+
+- **Press and hold** a card, then drag it up or down to reorder it, or drop it in another section.
+- **Flick** a card sideways to complete it.
+- **Tap** a card to open it. From there you can start it, make it the active one, send it back, or delete it.
+- **Ctrl+Shift+Space** anywhere on the desktop opens quick-add. Enter saves, Escape closes.
+- **The gear** sets the edge, the width, how many Top Priorities show, and how soon an upcoming event is pulled into the list.
+
+Your data lives in `rail.sqlite` in the app's data directory for your user. Delete that file for a fresh start.
+
 ## How the code is laid out
 
 | Path | What lives there |
 | --- | --- |
 | `crates/core` | The domain model, the ports, and the rules for what the rail shows. No I/O, fully tested. Start here. |
 | `crates/platform` | Desktop docking. The Windows AppBar and the macOS floating panel behind one trait. |
+| `crates/store-sqlite` | Where items and settings live between runs. One SQLite file, bundled, nothing to install. |
 | `src-tauri` | The Tauri shell: the window, the commands the UI calls, and the glue to the dock. |
 | `ui` | The React frontend. Cards, sections, and soon the drag physics. |
 | `docs` | Longer-form notes for people working on the code. |
 
-Dependencies point inward. `src-tauri` depends on `platform` and `core`; `platform` depends on `core`; `core` depends on nothing of ours. If a change in one crate forces a change in `core`, stop and ask whether it belongs there.
+Dependencies point inward. `src-tauri` depends on `platform`, `store-sqlite` and `core`; those depend only on `core`; `core` depends on nothing of ours. If a change in one crate forces a change in `core`, stop and ask whether it belongs there.
 
 Read [docs/architecture.md](docs/architecture.md) before adding a connector or touching docking.
 

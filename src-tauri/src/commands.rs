@@ -1,41 +1,148 @@
 //! What the UI can ask the shell to do. Each command is a thin translation
-//! from the webview's JSON world into a call on the core or the platform.
+//! from the webview's JSON world into a call on the core, followed by a
+//! `rail:changed` event so every view refreshes.
 
-use taskrail_core::domain::ItemId;
-use taskrail_core::settings::{Edge, RailSettings};
-use taskrail_core::usecases::{build_rail_view, RailView};
-use tauri::{AppHandle, State};
+use serde::Deserialize;
+use taskrail_core::domain::{Item, ItemId, Status};
+use taskrail_core::settings::RailSettings;
+use taskrail_core::usecases::RailView;
+use tauri::{AppHandle, Emitter, State};
 
-use crate::state::AppState;
+use crate::state::{lock, AppState};
+
+pub const CHANGED_EVENT: &str = "rail:changed";
+
+type CommandResult<T> = Result<T, String>;
 
 #[tauri::command]
-pub fn rail_view(state: State<'_, AppState>) -> RailView {
-    let settings = lock(&state.settings).clone();
-    let items = lock(&state.items).clone();
-    let active = lock(&state.active).clone();
-    build_rail_view(&items, active.as_ref(), chrono::Utc::now(), &settings)
+pub fn rail_view(state: State<'_, AppState>, expand_top: Option<bool>) -> CommandResult<RailView> {
+    lock(&state.rail).view(expand_top.unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn add_task(app: AppHandle, state: State<'_, AppState>, title: String) -> CommandResult<Item> {
+    if title.trim().is_empty() {
+        return Err("a task needs a title".into());
+    }
+    let item = lock(&state.rail)
+        .service
+        .add_task(&title)
+        .map_err(|e| e.to_string())?;
+    changed(&app);
+    Ok(item)
+}
+
+#[tauri::command]
+pub fn start_task(app: AppHandle, state: State<'_, AppState>, id: ItemId) -> CommandResult<Item> {
+    let item = lock(&state.rail)
+        .service
+        .start(&id)
+        .map_err(|e| e.to_string())?;
+    changed(&app);
+    Ok(item)
+}
+
+#[tauri::command]
+pub fn complete_task(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: ItemId,
+) -> CommandResult<Item> {
+    let mut rail = lock(&state.rail);
+    let item = rail.service.complete(&id).map_err(|e| e.to_string())?;
+    if rail.active.as_ref() == Some(&id) {
+        rail.save_active(None)?;
+    }
+    drop(rail);
+    changed(&app);
+    Ok(item)
+}
+
+#[tauri::command]
+pub fn reopen_task(app: AppHandle, state: State<'_, AppState>, id: ItemId) -> CommandResult<Item> {
+    let item = lock(&state.rail)
+        .service
+        .reopen(&id)
+        .map_err(|e| e.to_string())?;
+    changed(&app);
+    Ok(item)
+}
+
+#[derive(Debug, Deserialize)]
+pub struct MoveRequest {
+    pub id: ItemId,
+    pub status: Status,
+    pub index: usize,
+}
+
+#[tauri::command]
+pub fn move_task(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: MoveRequest,
+) -> CommandResult<Item> {
+    let mut rail = lock(&state.rail);
+    let item = rail
+        .service
+        .move_to(&request.id, request.status, request.index)
+        .map_err(|e| e.to_string())?;
+    if request.status != Status::InProgress && rail.active.as_ref() == Some(&request.id) {
+        rail.save_active(None)?;
+    }
+    drop(rail);
+    changed(&app);
+    Ok(item)
+}
+
+#[tauri::command]
+pub fn remove_task(app: AppHandle, state: State<'_, AppState>, id: ItemId) -> CommandResult<()> {
+    let mut rail = lock(&state.rail);
+    rail.service.remove(&id).map_err(|e| e.to_string())?;
+    if rail.active.as_ref() == Some(&id) {
+        rail.save_active(None)?;
+    }
+    drop(rail);
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn set_active(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: Option<ItemId>,
+) -> CommandResult<()> {
+    lock(&state.rail).save_active(id)?;
+    changed(&app);
+    Ok(())
 }
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> RailSettings {
-    lock(&state.settings).clone()
+    lock(&state.rail).settings.clone()
 }
 
 #[tauri::command]
-pub fn set_edge(app: AppHandle, state: State<'_, AppState>, edge: Edge) -> Result<(), String> {
-    lock(&state.settings).edge = edge;
-    crate::dock::redock(&app).map_err(|e| e.to_string())
+pub fn update_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    settings: RailSettings,
+) -> CommandResult<RailSettings> {
+    let needs_redock = {
+        let mut rail = lock(&state.rail);
+        let before = rail.settings.clone();
+        rail.save_settings(settings)?;
+        before.edge != rail.settings.edge || before.width_px != rail.settings.width_px
+    };
+    if needs_redock {
+        crate::dock::redock(&app).map_err(|e| e.to_string())?;
+    }
+    changed(&app);
+    Ok(lock(&state.rail).settings.clone())
 }
 
-#[tauri::command]
-pub fn set_active(state: State<'_, AppState>, id: Option<ItemId>) {
-    *lock(&state.active) = id;
-}
-
-/// A poisoned mutex here means a command panicked mid-update. The data is
-/// plain values, so carrying on is safer than taking the whole rail down.
-pub(crate) fn lock<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
-    mutex
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
+fn changed(app: &AppHandle) {
+    if let Err(e) = app.emit(CHANGED_EVENT, ()) {
+        eprintln!("task rail: could not emit {CHANGED_EVENT}: {e}");
+    }
 }

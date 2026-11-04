@@ -29,11 +29,13 @@ pub struct RailView {
     pub done_today: Vec<Item>,
 }
 
+/// `expand_top` lifts the fold, for when the person taps "more".
 pub fn build_rail_view(
     items: &[Item],
     active: Option<&ItemId>,
     now: DateTime<Utc>,
     settings: &RailSettings,
+    expand_top: bool,
 ) -> RailView {
     let lead = Duration::minutes(i64::from(settings.event_lead_minutes));
 
@@ -59,7 +61,11 @@ pub fn build_rail_view(
     todo.sort_by(|a, b| a.rank.cmp(&b.rank).then(b.priority.cmp(&a.priority)));
     top.extend(todo);
 
-    let limit = settings.effective_top_limit();
+    let limit = if expand_top {
+        top.len()
+    } else {
+        settings.effective_top_limit()
+    };
     let top_hidden = top.len().saturating_sub(limit);
     top.truncate(limit);
 
@@ -120,7 +126,7 @@ mod tests {
     }
 
     fn view(items: &[Item], active: Option<&ItemId>) -> RailView {
-        build_rail_view(items, active, now(), &RailSettings::default())
+        build_rail_view(items, active, now(), &RailSettings::default(), false)
     }
 
     #[test]
@@ -139,9 +145,17 @@ mod tests {
             top_limit: 50,
             ..RailSettings::default()
         };
-        let v = build_rail_view(&items, None, now(), &settings);
+        let v = build_rail_view(&items, None, now(), &settings, false);
         assert_eq!(v.top.len(), 10);
         assert_eq!(v.top_hidden, 2);
+    }
+
+    #[test]
+    fn expanding_lifts_the_fold() {
+        let items: Vec<Item> = (1..=12).map(|n| todo(&format!("t{n}"), n)).collect();
+        let v = build_rail_view(&items, None, now(), &RailSettings::default(), true);
+        assert_eq!(v.top.len(), 12);
+        assert_eq!(v.top_hidden, 0);
     }
 
     #[test]

@@ -54,3 +54,17 @@ pub trait SecretStore {
     fn set(&self, key: &str, value: &str) -> Result<(), SecretError>;
     fn delete(&self, key: &str) -> Result<(), SecretError>;
 }
+
+#[derive(Debug, thiserror::Error)]
+pub enum KeyValueError {
+    #[error("key-value store failure: {0}")]
+    Store(String),
+}
+
+/// Small named blobs that need to survive a restart: the settings, the
+/// active item. Anything bigger or more structured deserves its own port.
+pub trait KeyValueStore {
+    fn get_value(&self, key: &str) -> Result<Option<String>, KeyValueError>;
+    fn set_value(&mut self, key: &str, value: &str) -> Result<(), KeyValueError>;
+    fn remove_value(&mut self, key: &str) -> Result<(), KeyValueError>;
+}

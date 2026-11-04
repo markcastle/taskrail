@@ -4,8 +4,7 @@ use taskrail_core::settings::Edge;
 use taskrail_platform::{DockError, DockRequest, RawWindow};
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
-use crate::commands::lock;
-use crate::state::AppState;
+use crate::state::{lock, AppState};
 
 pub const RAIL_WINDOW: &str = "rail";
 
@@ -46,7 +45,7 @@ pub fn redock(app: &AppHandle) -> tauri::Result<()> {
 fn apply(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();
-    let settings = lock(&state.settings).clone();
+    let settings = lock(&state.rail).settings.clone();
     let scale = window.scale_factor().unwrap_or(1.0);
     let request = DockRequest {
         edge: settings.edge,
@@ -62,7 +61,7 @@ fn apply(app: &AppHandle) -> Result<(), DockError> {
 /// The no-docking fallback: an always-on-top window at the chosen edge of the
 /// primary monitor.
 fn park(window: &WebviewWindow, app: &AppHandle) -> tauri::Result<()> {
-    let settings = lock(&app.state::<AppState>().settings).clone();
+    let settings = lock(&app.state::<AppState>().rail).settings.clone();
     let Some(monitor) = window.primary_monitor()? else {
         return Ok(());
     };

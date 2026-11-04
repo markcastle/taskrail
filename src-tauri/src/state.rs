@@ -1,27 +1,29 @@
 use std::sync::Mutex;
 
-use taskrail_core::domain::{Item, ItemId};
-use taskrail_core::settings::RailSettings;
 use taskrail_platform::DesktopDock;
 
+use crate::rail::Rail;
+
 /// Everything the shell holds between commands.
-///
-/// Items are an in-memory fixture until the SQLite store lands in milestone
-/// two. Settings are defaults until the settings file lands with it.
 pub struct AppState {
-    pub settings: Mutex<RailSettings>,
-    pub items: Mutex<Vec<Item>>,
-    pub active: Mutex<Option<ItemId>>,
+    pub rail: Mutex<Rail>,
     pub dock: Mutex<Option<Box<dyn DesktopDock>>>,
 }
 
-impl Default for AppState {
-    fn default() -> Self {
+impl AppState {
+    pub fn new(rail: Rail) -> Self {
         Self {
-            settings: Mutex::new(RailSettings::default()),
-            items: Mutex::new(crate::fixtures::items(chrono::Utc::now())),
-            active: Mutex::new(Some(ItemId::new("design-dashboard"))),
+            rail: Mutex::new(rail),
             dock: Mutex::new(None),
         }
     }
+}
+
+/// A poisoned mutex here means a command panicked mid-update. The data is
+/// plain values on top of a transactional store, so carrying on is safer
+/// than taking the whole rail down.
+pub fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }

@@ -19,12 +19,27 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy -p taskrail-core -p taskrail-platform --all-targets -- -D warnings
-      - run: cargo test -p taskrail-core -p taskrail-platform
+      - run: cargo clippy -p taskrail-core -p taskrail-platform -p taskrail-store-sqlite --all-targets -- -D warnings
+      - run: cargo test -p taskrail-core -p taskrail-platform -p taskrail-store-sqlite
+
+  ui:
+    name: UI (browser test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run ui:build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run ui:test
 
   desktop:
     name: Desktop (${{ matrix.os }})
-    needs: core
+    needs: [core, ui]
     strategy:
       fail-fast: false
       matrix:

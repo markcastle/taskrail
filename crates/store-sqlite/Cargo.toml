@@ -1,0 +1,18 @@
+[package]
+name = "taskrail-store-sqlite"
+description = "SQLite-backed storage for Task Rail: items and small key-value settings."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde_json = { workspace = true }
+taskrail-core = { path = "../core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+chrono = { workspace = true }
+tempfile = "3"

@@ -15,5 +15,6 @@
 pub mod domain;
 pub mod memory;
 pub mod ports;
+pub mod services;
 pub mod settings;
 pub mod usecases;
