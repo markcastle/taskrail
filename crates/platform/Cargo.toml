@@ -1,0 +1,25 @@
+[package]
+name = "taskrail-platform"
+description = "Desktop docking for Task Rail: a reserved strip on Windows, a floating edge panel on macOS."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+taskrail-core = { path = "../core" }
+thiserror = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSResponder", "NSGraphics"] }
+objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
