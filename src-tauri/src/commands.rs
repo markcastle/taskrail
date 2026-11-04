@@ -4,11 +4,14 @@
 
 use serde::Deserialize;
 use taskrail_core::domain::{Item, ItemId, Status};
+use taskrail_core::ports::ItemRepository;
 use taskrail_core::settings::RailSettings;
 use taskrail_core::usecases::RailView;
 use tauri::{AppHandle, Emitter, State};
 
+use crate::connectors::{demo_profile, ConnectorSummary};
 use crate::state::{lock, AppState};
+use crate::sync::write_back;
 
 pub const CHANGED_EVENT: &str = "rail:changed";
 
@@ -38,6 +41,7 @@ pub fn start_task(app: AppHandle, state: State<'_, AppState>, id: ItemId) -> Com
         .service
         .start(&id)
         .map_err(|e| e.to_string())?;
+    write_back(&app, item.origin.clone(), item.status);
     changed(&app);
     Ok(item)
 }
@@ -54,6 +58,7 @@ pub fn complete_task(
         rail.save_active(None)?;
     }
     drop(rail);
+    write_back(&app, item.origin.clone(), item.status);
     changed(&app);
     Ok(item)
 }
@@ -64,6 +69,7 @@ pub fn reopen_task(app: AppHandle, state: State<'_, AppState>, id: ItemId) -> Co
         .service
         .reopen(&id)
         .map_err(|e| e.to_string())?;
+    write_back(&app, item.origin.clone(), item.status);
     changed(&app);
     Ok(item)
 }
@@ -82,6 +88,13 @@ pub fn move_task(
     request: MoveRequest,
 ) -> CommandResult<Item> {
     let mut rail = lock(&state.rail);
+    let before = rail
+        .service
+        .repository()
+        .get(&request.id)
+        .ok()
+        .flatten()
+        .map(|i| i.status);
     let item = rail
         .service
         .move_to(&request.id, request.status, request.index)
@@ -90,6 +103,9 @@ pub fn move_task(
         rail.save_active(None)?;
     }
     drop(rail);
+    if before != Some(item.status) {
+        write_back(&app, item.origin.clone(), item.status);
+    }
     changed(&app);
     Ok(item)
 }
@@ -139,6 +155,100 @@ pub fn update_settings(
     }
     changed(&app);
     Ok(lock(&state.rail).settings.clone())
+}
+
+#[tauri::command]
+pub fn list_connectors(state: State<'_, AppState>) -> Vec<ConnectorSummary> {
+    lock(&state.connectors).summaries()
+}
+
+/// Add a connector from a profile the user pasted or discovery produced,
+/// then pull from it straight away.
+#[tauri::command]
+pub async fn add_connector_profile(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    profile_json: String,
+) -> CommandResult<ConnectorSummary> {
+    let profile: taskrail_connector_mcp::ConnectorProfile =
+        serde_json::from_str(&profile_json).map_err(|e| format!("not a valid profile: {e}"))?;
+    add_and_pull(&app, &state, profile).await
+}
+
+#[tauri::command]
+pub async fn add_demo_connector(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CommandResult<ConnectorSummary> {
+    add_and_pull(&app, &state, demo_profile()?).await
+}
+
+async fn add_and_pull(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    profile: taskrail_connector_mcp::ConnectorProfile,
+) -> CommandResult<ConnectorSummary> {
+    let id = profile.id.clone();
+    {
+        let mut registry = lock(&state.connectors);
+        registry.add(profile)?;
+        let mut rail = lock(&state.rail);
+        registry.save(rail.service.repository_mut())?;
+    }
+    crate::sync::pull(app, &id).await?;
+    changed(app);
+    let registry = lock(&state.connectors);
+    registry
+        .summaries()
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| "connector vanished".to_owned())
+}
+
+/// Remove a connector and every card that came from it.
+#[tauri::command]
+pub fn remove_connector(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> CommandResult<()> {
+    let mut registry = lock(&state.connectors);
+    if !registry.remove(&id) {
+        return Err(format!("no connector {id}"));
+    }
+    let mut rail = lock(&state.rail);
+    registry.save(rail.service.repository_mut())?;
+    let gone: Vec<ItemId> = rail
+        .service
+        .items()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|i| {
+            i.origin
+                .as_ref()
+                .is_some_and(|o| o.connector.as_str() == id)
+        })
+        .map(|i| i.id)
+        .collect();
+    for item_id in gone {
+        rail.service.remove(&item_id).map_err(|e| e.to_string())?;
+    }
+    if rail
+        .active
+        .as_ref()
+        .is_some_and(|a| a.as_str().starts_with(&format!("{id}:")))
+    {
+        rail.save_active(None)?;
+    }
+    drop(rail);
+    drop(registry);
+    changed(&app);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn sync_connector(app: AppHandle, id: String) -> CommandResult<usize> {
+    crate::sync::pull(&app, &id).await
 }
 
 /// Quit from the UI. The exit handler in `lib.rs` releases the strip.

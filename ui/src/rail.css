@@ -531,3 +531,126 @@ button {
 .settings__actions .button--danger {
   color: var(--priority);
 }
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--priority) 18%, var(--bg-raised));
+  font-size: 12px;
+}
+
+.notice span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.notice__close {
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.connectors {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.connectors legend {
+  padding: 0 4px;
+  font-weight: 650;
+}
+
+.connectors__empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.connector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.connector__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.connector__name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.connector__meta {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.connector__error {
+  color: var(--priority);
+}
+
+.connector button,
+.connectors__actions button,
+.connectors__add button {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.connector button:hover,
+.connectors__actions button:hover {
+  background: var(--bg-hover);
+}
+
+.connectors__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.connectors__add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.connectors__add textarea {
+  width: 100%;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  resize: vertical;
+}
+
+.card__source {
+  max-width: 72px;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--line);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

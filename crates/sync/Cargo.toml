@@ -1,0 +1,19 @@
+[package]
+name = "taskrail-sync"
+description = "Keeps the rail's cards in step with the systems that own them: pull on a schedule, push status changes back."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+serde = { workspace = true }
+taskrail-connector-api = { path = "../connector-api" }
+taskrail-core = { path = "../core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "macros"] }

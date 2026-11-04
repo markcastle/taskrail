@@ -51,6 +51,22 @@ export interface RailSettings {
   event_lead_minutes: number
 }
 
+export interface ConnectorSummary {
+  id: string
+  name: string
+  server: string
+  capabilities: { read: boolean; write_status: boolean; create: boolean }
+  poll_seconds: number
+  last_sync: string | null
+  last_error: string | null
+  item_count: number
+}
+
+export interface SyncError {
+  connector: string
+  message: string
+}
+
 export interface RailBackend {
   view(expandTop: boolean): Promise<RailView>
   addTask(title: string): Promise<Item>
@@ -64,6 +80,15 @@ export interface RailBackend {
   updateSettings(settings: RailSettings): Promise<RailSettings>
   /** Close the app. Does nothing in a plain browser. */
   quit(): Promise<void>
+  listConnectors(): Promise<ConnectorSummary[]>
+  /** Add a connector from a pasted Connector Profile, then pull from it. */
+  addConnectorProfile(profileJson: string): Promise<ConnectorSummary>
+  /** Add the built-in demo tracker, then pull from it. */
+  addDemoConnector(): Promise<ConnectorSummary>
+  removeConnector(id: string): Promise<void>
+  syncConnector(id: string): Promise<number>
+  /** Fires when a pull or a write-back failed. Returns an unsubscribe. */
+  onSyncError(callback: (error: SyncError) => void): () => void
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
   onChanged(callback: () => void): () => void
   /** Fires when the global quick-add shortcut was pressed. Returns an unsubscribe. */
@@ -80,10 +105,10 @@ function tauriBackend(): RailBackend {
   const core = import('@tauri-apps/api/core')
   const event = import('@tauri-apps/api/event')
   const call = async <T>(command: string, args?: Record<string, unknown>) => (await core).invoke<T>(command, args)
-  const listen = (name: string, callback: () => void) => {
+  const listen = <T,>(name: string, callback: (payload: T) => void) => {
     let unlisten: (() => void) | null = null
     let cancelled = false
-    event.then((m) => m.listen(name, () => callback())).then((u) => (cancelled ? u() : (unlisten = u)))
+    event.then((m) => m.listen<T>(name, (e) => callback(e.payload))).then((u) => (cancelled ? u() : (unlisten = u)))
     return () => {
       cancelled = true
       unlisten?.()
@@ -101,8 +126,14 @@ function tauriBackend(): RailBackend {
     getSettings: () => call('get_settings'),
     updateSettings: (settings) => call('update_settings', { settings }),
     quit: () => call('quit'),
+    listConnectors: () => call('list_connectors'),
+    addConnectorProfile: (profileJson) => call('add_connector_profile', { profileJson }),
+    addDemoConnector: () => call('add_demo_connector'),
+    removeConnector: (id) => call('remove_connector', { id }),
+    syncConnector: (id) => call('sync_connector', { id }),
     onChanged: (cb) => listen('rail:changed', cb),
     onQuickAdd: (cb) => listen('rail:quick-add', cb),
+    onSyncError: (cb) => listen<SyncError>('rail:sync-error', cb),
   }
 }
 
@@ -153,7 +184,19 @@ function browserBackend(): RailBackend {
   let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60 }
   const changedListeners = new Set<() => void>()
   const quickAddListeners = new Set<() => void>()
+  const syncErrorListeners = new Set<(e: SyncError) => void>()
   const notify = () => changedListeners.forEach((cb) => cb())
+  let connectors: ConnectorSummary[] = []
+  const demoSummary = (): ConnectorSummary => ({
+    id: 'demo-tracker',
+    name: 'Demo tracker',
+    server: 'taskrail --fake-mcp-server',
+    capabilities: { read: true, write_status: true, create: true },
+    poll_seconds: 30,
+    last_sync: new Date().toISOString(),
+    last_error: null,
+    item_count: 3,
+  })
 
   const find = (id: string) => {
     const item = items.find((i) => i.id === id)
@@ -251,6 +294,45 @@ function browserBackend(): RailBackend {
     getSettings: () => async(() => settings),
     updateSettings: (next) => async(() => ((settings = { ...next }), notify(), settings)),
     quit: () => async(() => undefined),
+    listConnectors: () => async(() => connectors),
+    addConnectorProfile: (profileJson) =>
+      async(() => {
+        let profile: { id?: string; name?: string }
+        try {
+          profile = JSON.parse(profileJson)
+        } catch (e) {
+          throw new Error(`not a valid profile: ${e}`)
+        }
+        if (!profile.id || !profile.name) throw new Error('a profile needs an id and a name')
+        if (connectors.some((c) => c.id === profile.id)) throw new Error(`a connector with id "${profile.id}" already exists`)
+        const summary = { ...demoSummary(), id: profile.id, name: profile.name, item_count: 0 }
+        connectors = [...connectors, summary]
+        notify()
+        return summary
+      }),
+    addDemoConnector: () =>
+      async(() => {
+        if (connectors.some((c) => c.id === 'demo-tracker')) throw new Error('a connector with id "demo-tracker" already exists')
+        const summary = demoSummary()
+        connectors = [...connectors, summary]
+        const origin = (id: string) => ({ connector: 'demo-tracker', external_id: id, url: `https://tracker.example/tickets/${id}` })
+        items = [
+          ...items,
+          { ...task('demo-tracker:T-201', 'Fix login timeout', 'todo', 'highest'), origin: origin('T-201') },
+          { ...task('demo-tracker:T-202', 'Write release notes', 'todo'), origin: origin('T-202') },
+          { ...task('demo-tracker:T-203', 'Migrate billing job', 'in_progress'), origin: origin('T-203') },
+        ]
+        notify()
+        return summary
+      }),
+    removeConnector: (id) =>
+      async(() => {
+        connectors = connectors.filter((c) => c.id !== id)
+        items = items.filter((i) => i.origin?.connector !== id)
+        notify()
+      }),
+    syncConnector: (id) => async(() => items.filter((i) => i.origin?.connector === id).length),
+    onSyncError: (cb) => (syncErrorListeners.add(cb), () => syncErrorListeners.delete(cb)),
     onChanged: (cb) => (changedListeners.add(cb), () => changedListeners.delete(cb)),
     onQuickAdd: (cb) => (quickAddListeners.add(cb), () => quickAddListeners.delete(cb)),
   }

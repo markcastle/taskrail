@@ -2,18 +2,21 @@ use std::sync::Mutex;
 
 use taskrail_platform::DesktopDock;
 
+use crate::connectors::ConnectorRegistry;
 use crate::rail::Rail;
 
 /// Everything the shell holds between commands.
 pub struct AppState {
     pub rail: Mutex<Rail>,
+    pub connectors: Mutex<ConnectorRegistry>,
     pub dock: Mutex<Option<Box<dyn DesktopDock>>>,
 }
 
 impl AppState {
-    pub fn new(rail: Rail) -> Self {
+    pub fn new(rail: Rail, connectors: ConnectorRegistry) -> Self {
         Self {
             rail: Mutex::new(rail),
+            connectors: Mutex::new(connectors),
             dock: Mutex::new(None),
         }
     }

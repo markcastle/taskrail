@@ -46,9 +46,15 @@ React, TypeScript, Vite. `backend.ts` is the one interface the components talk t
 
 The gestures are built from one library and one hook, and direction tells them apart. dnd-kit picks a card up after eight pixels of vertical movement, but gives up if the pointer goes twelve pixels sideways first. `useSwipe.ts` takes over in exactly that case and handles the flick on the same element. The first version used a press-and-hold delay instead, and a hand that started moving a fraction early cancelled the drag, which felt random. `ui/tests/rail.test.cjs` drives all of it in headless Chromium against the browser backend, and `npm run ui:test` is how you run it.
 
-## What the generic MCP connector will look like
+### `crates/connector-api`, `crates/connector-mcp` and `crates/sync`
 
-This is milestone three, and the most important design in the project, so it is written down before the code exists.
+Three crates carry milestone three. `connector-api` is the contract: one `Connector` trait with capability flags, `RemoteItem` as the shape every system translates into, and `StatusMap` for the three sections. `connector-mcp` is the only implementation so far and the one that matters most, described below. `sync` is the merge: `apply_remote` takes a connector's list and updates the repository, with the remote system winning on the fields it owns and the rail winning on rank. The shell's `sync.rs` runs the loop and the write-backs; `connectors.rs` keeps the registry of profiles in the key-value store.
+
+The fake tracker in `connector-mcp/src/fake_server.rs` is worth knowing about. It is a real MCP server with deliberately unfamiliar vocabulary, it backs the end-to-end test, and the app runs it in-process when launched with `--fake-mcp-server`, which is how the demo connector works without shipping a second binary.
+
+## How the generic MCP connector works
+
+This is the most important design in the project.
 
 A connector is any MCP server. When the user adds one, Task Rail fetches the server's tool list and hands it to a language model along with the capability contract. The model's job is to write a **Connector Profile**: a saved JSON document that says which tool lists the user's items and with what arguments, how to pull id, title, status, priority, URL and times out of the result, which tool changes status, and how the server's status values map onto To Do, In Progress and Done.
 
@@ -57,6 +63,8 @@ The profile is validated against the live server during setup, by calling the li
 After setup the model is out of the loop. Sync is deterministic: poll, apply the extractors, write status changes back through the mapped tool. The model is only called again if the server's tool list changes or a profile stops validating. Profiles are visible, editable and exportable, and good ones for popular servers ship with the app as presets.
 
 A calendar is just a connector whose items carry a time window and no status.
+
+What exists today: the profile format, the session over stdio and streamable HTTP, extraction with JSONPath that prefers structured content and falls back to JSON in text, status write-back and create with placeholder arguments, and the pull loop. What does not exist yet: discovery itself, the sign-in flow for remote servers, and the connectors page beyond adding the demo tracker or pasting a profile.
 
 ## What we have deliberately not done
 

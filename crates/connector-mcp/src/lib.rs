@@ -19,6 +19,7 @@
 
 pub mod connector;
 pub mod extract;
+pub mod fake_server;
 pub mod profile;
 pub mod session;
 

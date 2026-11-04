@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { createBackend, type Item, type RailBackend, type RailSettings, type RailView, type Status } from './backend'
+import { createBackend, type ConnectorSummary, type Item, type RailBackend, type RailSettings, type RailView, type Status, type SyncError } from './backend'
 import { dueLabel, formatTime, relativeStart } from './format'
 import { useSwipe } from './useSwipe'
 
@@ -27,6 +27,7 @@ export default function App() {
   const [openCard, setOpenCard] = useState<string | null>(null)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
     backend
@@ -41,6 +42,18 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => backend.onChanged(refresh), [refresh])
+  useEffect(
+    () =>
+      backend.onSyncError((e: SyncError) => {
+        setNotice(`${e.connector}: ${e.message}`)
+      }),
+    [],
+  )
+  useEffect(() => {
+    if (!notice) return
+    const t = window.setTimeout(() => setNotice(null), 8000)
+    return () => window.clearTimeout(t)
+  }, [notice])
   useEffect(
     () =>
       backend.onQuickAdd(() => {
@@ -169,7 +182,17 @@ export default function App() {
           }}
           onCancel={() => setSettingsOpen(false)}
           onQuit={() => backend.quit().catch((e) => setError(String(e)))}
+          onNotice={setNotice}
         />
+      )}
+
+      {notice && (
+        <div className="notice" role="status">
+          <span>{notice}</span>
+          <button className="notice__close" aria-label="Dismiss" onClick={() => setNotice(null)}>
+            ×
+          </button>
+        </div>
       )}
 
       {view.up_next && <UpNext item={view.up_next} />}
@@ -246,11 +269,13 @@ function SettingsPanel({
   onSave,
   onCancel,
   onQuit,
+  onNotice,
 }: {
   settings: RailSettings
   onSave: (next: RailSettings) => void
   onCancel: () => void
   onQuit: () => void
+  onNotice: (message: string) => void
 }) {
   const [draft, setDraft] = useState<RailSettings>(settings)
   const set = <K extends keyof RailSettings>(key: K, value: RailSettings[K]) => setDraft((d) => ({ ...d, [key]: value }))
@@ -262,6 +287,7 @@ function SettingsPanel({
         onSave(draft)
       }}
     >
+      <ConnectorsPanel onNotice={onNotice} />
       <fieldset className="settings__row">
         <legend>Dock to</legend>
         <label>
@@ -302,6 +328,91 @@ function SettingsPanel({
         </button>
       </div>
     </form>
+  )
+}
+
+function ConnectorsPanel({ onNotice }: { onNotice: (message: string) => void }) {
+  const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
+  const [adding, setAdding] = useState(false)
+  const [profileJson, setProfileJson] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const reload = useCallback(() => {
+    backend.listConnectors().then(setConnectors).catch((e) => onNotice(String(e)))
+  }, [onNotice])
+  useEffect(() => {
+    reload()
+  }, [reload])
+
+  const run = (work: () => Promise<unknown>, done?: () => void) => {
+    setBusy(true)
+    work()
+      .then(() => {
+        done?.()
+        reload()
+      })
+      .catch((e) => onNotice(String(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <fieldset className="connectors">
+      <legend>Connectors</legend>
+      {connectors.length === 0 && <div className="connectors__empty">No connectors yet. Your cards are local only.</div>}
+      {connectors.map((c) => (
+        <div className="connector" key={c.id} data-testid={`connector-${c.id}`}>
+          <div className="connector__main">
+            <span className="connector__name">{c.name}</span>
+            <span className="connector__meta">
+              {c.item_count} items
+              {c.capabilities.write_status ? ', two-way' : ', read-only'}
+              {c.last_error && <span className="connector__error"> · {c.last_error}</span>}
+            </span>
+          </div>
+          <button type="button" disabled={busy} onClick={() => run(() => backend.syncConnector(c.id))} title="Pull now">
+            Sync
+          </button>
+          <button type="button" disabled={busy} className="button--danger" onClick={() => run(() => backend.removeConnector(c.id))}>
+            Remove
+          </button>
+        </div>
+      ))}
+      <div className="connectors__actions">
+        <button type="button" disabled={busy} onClick={() => run(() => backend.addDemoConnector())}>
+          Add demo tracker
+        </button>
+        <button type="button" disabled={busy} onClick={() => setAdding((a) => !a)} aria-expanded={adding}>
+          Add from profile
+        </button>
+      </div>
+      {adding && (
+        <div className="connectors__add">
+          <textarea
+            aria-label="Connector profile JSON"
+            placeholder="Paste a Connector Profile (JSON)"
+            rows={6}
+            value={profileJson}
+            onChange={(e) => setProfileJson(e.target.value)}
+          />
+          <button
+            type="button"
+            className="button--primary"
+            disabled={busy || !profileJson.trim()}
+            onClick={() =>
+              run(
+                () => backend.addConnectorProfile(profileJson),
+                () => {
+                  setProfileJson('')
+                  setAdding(false)
+                },
+              )
+            }
+          >
+            Add connector
+          </button>
+        </div>
+      )}
+    </fieldset>
   )
 }
 
@@ -392,6 +503,7 @@ function Card(props: CardProps) {
       <div className="card__body" style={bodyStyle} {...swipe.handlers}>
         <span className="card__mark" aria-hidden="true" />
         <span className="card__title">{item.title}</span>
+        {item.origin && <span className="card__source" title={item.origin.connector}>{item.origin.connector}</span>}
         {active && <span className="card__active-tag">Active</span>}
         {item.window ? (
           <time className="card__meta">{formatTime(item.window.start)}</time>

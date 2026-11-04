@@ -3801,12 +3801,16 @@ dependencies = [
  "ctrlc",
  "serde",
  "serde_json",
+ "taskrail-connector-api",
+ "taskrail-connector-mcp",
  "taskrail-core",
  "taskrail-platform",
  "taskrail-store-sqlite",
+ "taskrail-sync",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",
+ "tokio",
 ]
 
 [[package]]
@@ -3868,6 +3872,19 @@ dependencies = [
  "taskrail-core",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "taskrail-sync"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "taskrail-connector-api",
+ "taskrail-core",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

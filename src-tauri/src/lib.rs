@@ -7,11 +7,13 @@
 //! live in the core; OS rules live in the platform crate.
 
 mod commands;
+mod connectors;
 mod dock;
 mod rail;
 mod seed;
 mod shortcuts;
 mod state;
+mod sync;
 mod tray;
 
 pub use state::AppState;
@@ -33,14 +35,21 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::quit,
+            commands::list_connectors,
+            commands::add_connector_profile,
+            commands::add_demo_connector,
+            commands::remove_connector,
+            commands::sync_connector,
         ])
         .setup(|app| {
             let rail = rail::Rail::open(data_file(app.handle()))?;
-            app.manage(AppState::new(rail));
+            let connectors = connectors::ConnectorRegistry::load(rail.service.repository());
+            app.manage(AppState::new(rail, connectors));
             dock::attach(app.handle())?;
             shortcuts::register(app.handle());
             tray::install(app.handle())?;
             release_on_console_signal(app.handle().clone());
+            sync::start(app.handle().clone());
             Ok(())
         })
         .build(tauri::generate_context!())

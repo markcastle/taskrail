@@ -25,6 +25,10 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-global-shortcut = "2"
+taskrail-connector-api = { path = "../crates/connector-api" }
+taskrail-connector-mcp = { path = "../crates/connector-mcp" }
 taskrail-core = { path = "../crates/core" }
 taskrail-platform = { path = "../crates/platform" }
 taskrail-store-sqlite = { path = "../crates/store-sqlite" }
+taskrail-sync = { path = "../crates/sync" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }

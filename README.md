@@ -18,7 +18,7 @@ The plan, with every decision and why, lives in the project doc linked from the 
 | --- | --- |
 | 1. Docking spike: a reserved strip on Windows, a floating edge panel on macOS | Built, awaiting hands-on testing on both platforms |
 | 2. Core and local tasks: sections, cards, active task mode, quick-add | Built: SQLite store, drag to reorder, flick to complete, quick-add with a global shortcut, settings |
-| 3. Generic MCP connector: discovery, profiles, two-way sync | Not started |
+| 3. Generic MCP connector: discovery, profiles, two-way sync | Profiles, the MCP client, two-way sync and a demo tracker are built. Model-assisted discovery is next |
 | 4. Rail as an MCP server, tray, settings, release pipeline | Not started |
 
 ## Running it
@@ -68,6 +68,15 @@ npm run ui:test
 
 Your data lives in `rail.sqlite` in the app's data directory for your user. Delete that file for a fresh start.
 
+## Connecting a system
+
+Open the gear and look at the Connectors box.
+
+- **Add demo tracker** connects a small fake issue tracker that ships inside the app. Its tickets appear as cards within a few seconds, marked with their source. Drag one into In Progress and the tracker's ticket moves state too. It's the quickest way to see two-way sync working.
+- **Add from profile** takes a Connector Profile, a JSON document that says how to reach an MCP server, which tool lists your items, how to read each field out of the result, which tool changes a status, and how its status words map onto the rail's sections. The profile for the demo tracker in `crates/connector-mcp/src/profile.rs` is the worked example. Discovery, which writes one of these for you with a model's help, is the next piece of work.
+
+Cards from a connector show its id as a small tag. Their title, status, priority, due date and link belong to the remote system and are refreshed on every pull. Their position in the rail belongs to you and is never touched by a pull.
+
 ## How the code is laid out
 
 | Path | What lives there |
@@ -75,6 +84,9 @@ Your data lives in `rail.sqlite` in the app's data directory for your user. Dele
 | `crates/core` | The domain model, the ports, and the rules for what the rail shows. No I/O, fully tested. Start here. |
 | `crates/platform` | Desktop docking. The Windows AppBar and the macOS floating panel behind one trait. |
 | `crates/store-sqlite` | Where items and settings live between runs. One SQLite file, bundled, nothing to install. |
+| `crates/connector-api` | The contract every connector implements, and the small remote item model they all translate into. |
+| `crates/connector-mcp` | The generic connector: any MCP server described by a Connector Profile. Also the fake tracker used for tests and demos. |
+| `crates/sync` | Merging what a connector returns into the rail without disturbing what the user arranged. |
 | `src-tauri` | The Tauri shell: the window, the commands the UI calls, and the glue to the dock. |
 | `ui` | The React frontend. Cards, sections, and soon the drag physics. |
 | `docs` | Longer-form notes for people working on the code. |
