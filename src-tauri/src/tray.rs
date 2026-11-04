@@ -2,7 +2,7 @@
 //! when it is hidden, and the proper way to quit an app with no title bar.
 
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
-use tauri::tray::{TrayIcon, TrayIconBuilder, TrayIconEvent};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
 const SHOW: &str = "show";
@@ -23,7 +23,14 @@ pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click { .. } = event {
+            // Only a completed left click. A right click also arrives here,
+            // and focusing the rail on it would close the menu it just opened.
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
                 show_rail(tray.app_handle());
             }
         });
