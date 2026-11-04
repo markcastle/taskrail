@@ -1,0 +1,27 @@
+//! Any MCP server, as a Task Rail connector.
+//!
+//! The pieces, in the order they are used:
+//!
+//! - [`profile`] is the saved description of one server: how to reach it,
+//!   which tool lists the user's items, how to read each field out of the
+//!   result, which tool changes a status, and how its status words map onto
+//!   the rail's sections. A profile is plain JSON that a person can read and
+//!   edit. Discovery writes one with a model's help; presets ship with the app.
+//! - [`session`] holds the live connection, over a child process or HTTP,
+//!   and turns tool results into JSON values.
+//! - [`extract`] applies a profile's JSONPath expressions to those values.
+//! - [`connector`] puts the three together behind the [`Connector`] trait.
+//!
+//! Nothing in this crate calls a model. Once a profile exists, sync is
+//! deterministic.
+//!
+//! [`Connector`]: taskrail_connector_api::Connector
+
+pub mod connector;
+pub mod extract;
+pub mod profile;
+pub mod session;
+
+pub use connector::McpConnector;
+pub use profile::{ConnectorProfile, FieldPaths, ListSpec, ServerSpec, ToolSpec};
+pub use session::{McpSession, ToolSummary};

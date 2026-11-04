@@ -51,7 +51,7 @@ pub enum ItemKind {
 
 /// The three states every connector's statuses collapse into. The UI calls
 /// `Todo` "Top Priorities", but underneath it is just the work not yet begun.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
     Todo,

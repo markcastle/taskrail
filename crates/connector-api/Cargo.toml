@@ -1,0 +1,18 @@
+[package]
+name = "taskrail-connector-api"
+description = "The contract every Task Rail connector implements, and the remote item shape they all speak."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+chrono = { workspace = true }
+serde = { workspace = true }
+taskrail-core = { path = "../core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
