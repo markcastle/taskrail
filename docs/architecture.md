@@ -44,7 +44,7 @@ The shell. It opens the store, builds a `RailService` over it in `rail.rs`, turn
 
 React, TypeScript, Vite. `backend.ts` is the one interface the components talk to, with two implementations: Tauri commands in the app, and an in-memory stand-in with the same rules in a plain browser. The types mirror `core/src/domain.rs` by hand, and when one changes the other must.
 
-The gestures are built from two libraries and one hook. dnd-kit handles press-and-hold drag with a 150 ms delay, which is what makes a card feel picked up rather than nudged. `useSwipe.ts` handles the sideways flick on the same element and leaves vertical movement alone, so the two never fight. `ui/tests/rail.test.cjs` drives all of it in headless Chromium against the browser backend, and `npm run ui:test` is how you run it.
+The gestures are built from one library and one hook, and direction tells them apart. dnd-kit picks a card up after eight pixels of vertical movement, but gives up if the pointer goes twelve pixels sideways first. `useSwipe.ts` takes over in exactly that case and handles the flick on the same element. The first version used a press-and-hold delay instead, and a hand that started moving a fraction early cancelled the drag, which felt random. `ui/tests/rail.test.cjs` drives all of it in headless Chromium against the browser backend, and `npm run ui:test` is how you run it.
 
 ## What the generic MCP connector will look like
 

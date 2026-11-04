@@ -60,8 +60,10 @@ export default function App() {
     [refresh],
   )
 
+  // Direction decides the gesture, not timing: eight pixels up or down picks
+  // the card up, but twelve pixels sideways first hands it to the flick.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: { y: 8 }, tolerance: { x: 12 } } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
@@ -360,11 +362,7 @@ function Card(props: CardProps) {
   const sortable = isTask && item.status !== 'done'
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: !sortable })
 
-  const swipe = useSwipe(
-    isTask && item.status !== 'done',
-    () => props.onComplete(),
-    onToggle,
-  )
+  const swipe = useSwipe(isTask && item.status !== 'done' && !isDragging, () => props.onComplete(), onToggle)
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),

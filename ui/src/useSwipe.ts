@@ -5,8 +5,8 @@ export type SwipeDirection = 'left' | 'right'
 /**
  * Flick-to-complete. Horizontal pulls follow the pointer; a fast or long one
  * sends the card off screen and fires `onFlick`. Anything that did not move
- * counts as a tap. Vertical movement is left alone so press-and-hold drag
- * (dnd-kit) keeps working on the same card.
+ * counts as a tap. Vertical movement is left alone so dnd-kit's drag can take
+ * it, and `enabled` goes false while a drag is live so the two never fight.
  */
 export function useSwipe(enabled: boolean, onFlick: (direction: SwipeDirection) => void, onTap: () => void) {
   const [dx, setDx] = useState(0)

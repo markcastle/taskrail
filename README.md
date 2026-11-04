@@ -59,7 +59,7 @@ npm run ui:test
 
 ## Using it
 
-- **Press and hold** a card, then drag it up or down to reorder it, or drop it in another section.
+- **Drag** a card up or down to reorder it, or drop it in another section.
 - **Flick** a card sideways to complete it.
 - **Tap** a card to open it. From there you can start it, make it the active one, send it back, or delete it.
 - **Ctrl+Shift+Space** anywhere on the desktop opens quick-add. Enter saves, Escape closes.

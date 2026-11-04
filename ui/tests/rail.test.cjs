@@ -70,7 +70,7 @@ await page.locator('[data-testid="section-done"] .section__header').click()
 await page.locator('[data-testid="section-done"] .card__title', { hasText: 'Call the bank' }).waitFor()
 assert.equal(await page.locator('.card--active').count(), 0, 'completing the active card clears active')
 
-// 7. Press-and-hold drag: move "Book venue" above "Prepare board deck".
+// 7. Drag: move "Book venue" above "Prepare board deck".
 const from = await page.locator('.card__body', { hasText: 'Book venue' }).boundingBox()
 const to = await page.locator('.card__body', { hasText: 'Prepare board deck' }).boundingBox()
 await page.mouse.move(from.x + 100, from.y + from.height / 2)
@@ -88,6 +88,25 @@ await page.waitForFunction(() => {
 const after = await titles('priority')
 assert.ok(after.indexOf('Book venue') < after.indexOf('Prepare board deck'), `drag reordered: ${after.join(', ')}`)
 if (shots) await page.screenshot({ path: `${shots}/03-reordered.png` })
+
+// 7b. A drag that starts with a small sideways wobble and no hold must still work.
+{
+  const from2 = await page.locator('.card__body', { hasText: 'Update docs' }).boundingBox()
+  const to2 = await page.locator('.card__body', { hasText: 'Prepare board deck' }).boundingBox()
+  const x = from2.x + 100, y = from2.y + from2.height / 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x + 8, y + 1)
+  for (let i = 1; i <= 8; i++) {
+    await page.mouse.move(x + 8, y + ((to2.y - from2.y) * i) / 8)
+    await page.waitForTimeout(16)
+  }
+  await page.mouse.up()
+  await page.waitForFunction(() => {
+    const t = [...document.querySelectorAll('[data-testid="section-priority"] .card__title')].map((n) => n.textContent)
+    return t.indexOf('Update docs') < t.indexOf('Prepare board deck')
+  })
+}
 
 // 8. Settings round trip. dnd-kit swallows the first click for a moment
 // after a drop (so a drag never reads as a click); give that moment time to pass.

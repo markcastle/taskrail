@@ -10,6 +10,6 @@ pub fn welcome<R: ItemRepository, C: Clock>(
     // Added in reverse because each quick-add lands at the top.
     service.add_task("Flick a card sideways to complete it")?;
     service.add_task("Pull a card into In Progress to start it")?;
-    service.add_task("Press and hold to drag, then drop to reorder")?;
+    service.add_task("Drag a card up or down to reorder it")?;
     Ok(())
 }
