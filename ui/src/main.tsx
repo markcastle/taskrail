@@ -8,6 +8,8 @@ import './rail.css'
 // Anything that goes wrong before React is up would otherwise be a blank
 // window with no clue in it. Put the error on the page and in the log.
 const backend = createBackend()
+// The browser test drives settings through this handle; the app itself never reads it.
+;(window as unknown as { __taskrail: typeof backend }).__taskrail = backend
 window.addEventListener('error', (e) => {
   const text = String(e.error ?? e.message)
   backend.logFromUi('error', text)

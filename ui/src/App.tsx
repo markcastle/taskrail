@@ -34,6 +34,8 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
+  const [foldLimit, setFoldLimit] = useState(5)
+  const [moreProgress, setMoreProgress] = useState(false)
   const addInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
 
@@ -45,6 +47,10 @@ export default function App() {
     backend
       .listConnectors()
       .then(setConnectors)
+      .catch(() => {})
+    backend
+      .getSettings()
+      .then((s) => setFoldLimit(Math.max(1, s.top_limit)))
       .catch(() => {})
   }, [])
 
@@ -115,6 +121,9 @@ export default function App() {
   }, [view, showAll, matches])
   const later = useMemo(() => (view && !showAll ? view.later : []), [view, showAll])
   const inProgress = useMemo(() => view?.in_progress.filter(matches) ?? [], [view, matches])
+  // In progress folds the same way Priorities does, inside its own section.
+  const progressFolded = !showAll && !moreProgress && inProgress.length > foldLimit
+  const progressShown = progressFolded ? inProgress.slice(0, foldLimit) : inProgress
   const done = useMemo(() => view?.done_today.filter(matches) ?? [], [view, matches])
   const sortableTodo = useMemo(() => priorities.filter((i) => i.kind === 'task'), [priorities])
 
@@ -279,12 +288,22 @@ export default function App() {
         </Section>
 
         <Section title="In progress" tone="progress" count={inProgress.length} dropId={`${SECTION_DROP_PREFIX}in_progress`}>
-          <SortableContext items={inProgress.map((i) => i.id)} strategy={verticalListSortingStrategy}>
-            {inProgress.map((item) => (
+          <SortableContext items={progressShown.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+            {progressShown.map((item) => (
               <Row key={item.id} {...rowProps(item)} />
             ))}
           </SortableContext>
           {inProgress.length === 0 && <div className="section__hint">{needle ? 'No matches' : 'Pull a task here to start it'}</div>}
+          {progressFolded && (
+            <button className="section__more" onClick={() => setMoreProgress(true)}>
+              Show {inProgress.length - foldLimit} more
+            </button>
+          )}
+          {moreProgress && !showAll && inProgress.length > foldLimit && (
+            <button className="section__more" onClick={() => setMoreProgress(false)}>
+              Show fewer
+            </button>
+          )}
         </Section>
       </DndContext>
 

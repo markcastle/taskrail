@@ -40,6 +40,24 @@ assert.equal(await page.getByTestId('section-later').count(), 0, 'no Later secti
 await page.getByRole('radio', { name: 'Today' }).click()
 await page.locator('[data-testid="section-later"]').waitFor()
 
+// 2a. In progress folds at the same limit as Priorities. Drop the limit to 1 through the stand-in's settings.
+await page.evaluate(async () => {
+  const b = window.__taskrail
+  const s = await b.getSettings()
+  await b.updateSettings({ ...s, top_limit: 1 })
+})
+await page.locator('[data-testid="section-progress"] .section__more', { hasText: 'Show 1 more' }).waitFor()
+assert.deepEqual(await titles('progress'), ['Design dashboard'], 'the active item stays visible above the fold')
+await page.locator('[data-testid="section-progress"] .section__more').click()
+assert.deepEqual(await titles('progress'), ['Design dashboard', 'Review pull request'])
+await page.getByText('Show fewer').click()
+await page.evaluate(async () => {
+  const b = window.__taskrail
+  const s = await b.getSettings()
+  await b.updateSettings({ ...s, top_limit: 5 })
+})
+await page.locator('[data-testid="section-later"] .section__count', { hasText: '3' }).waitFor()
+
 // 2b. Search filters every section and ignores the fold.
 await page.getByRole('button', { name: 'Search', exact: true }).click()
 await page.getByLabel('Search tasks').fill('deploy')
