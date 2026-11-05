@@ -446,6 +446,15 @@ pub fn expand_rail(
 }
 
 #[tauri::command]
+pub fn app_version() -> String {
+    format!(
+        "{} ({})",
+        env!("CARGO_PKG_VERSION"),
+        env!("TASKRAIL_COMMIT")
+    )
+}
+
+#[tauri::command]
 pub fn read_log(app: AppHandle, lines: Option<usize>) -> String {
     crate::logs::tail(&app, lines.unwrap_or(400))
 }

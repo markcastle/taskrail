@@ -641,6 +641,10 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
 function LogsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
   const [text, setText] = useState('')
   const [follow, setFollow] = useState(true)
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    backend.appVersion().then(setVersion).catch(() => setVersion(''))
+  }, [])
   const refresh = useCallback(() => {
     backend.readLog(400).then(setText).catch(fail)
   }, [fail])
@@ -656,6 +660,7 @@ function LogsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void
         <label className="inline-toggle">
           <Toggle checked={follow} onChange={setFollow} label="Follow the log" />
           <span>Follow</span>
+          {version && <span className="connector__meta" data-testid="build">Build {version}</span>}
         </label>
         <span className="settings-actions__group">
           <button type="button" className="button button--quiet" onClick={() => backend.openLogFolder().catch(fail)}>

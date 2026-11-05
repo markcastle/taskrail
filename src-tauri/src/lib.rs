@@ -54,11 +54,16 @@ pub fn run() {
             commands::discover_connector,
             commands::sign_in,
             commands::read_log,
+            commands::app_version,
             commands::log_from_ui,
             commands::open_log_folder,
         ])
         .setup(|app| {
-            log::info!("Task Rail {} starting", env!("CARGO_PKG_VERSION"));
+            log::info!(
+                "Task Rail {} ({}) starting",
+                env!("CARGO_PKG_VERSION"),
+                env!("TASKRAIL_COMMIT")
+            );
             if let Some(path) = logs::file(app.handle()) {
                 log::info!("log file: {}", path.display());
             }

@@ -18,33 +18,53 @@ const SERVICE: &str = "taskrail";
 const CHUNK_CHARS: usize = 2000;
 const CHUNKED_MARKER: &str = "taskrail-chunks:";
 
+/// The raw store underneath: one value per key, with whatever limits the
+/// platform has. The keyring is the real one; tests use memory.
+pub trait Backend {
+    fn read(&self, key: &str) -> Result<Option<String>, SecretError>;
+    fn write(&self, key: &str, value: &str) -> Result<(), SecretError>;
+    fn remove(&self, key: &str) -> Result<(), SecretError>;
+}
+
 #[derive(Debug, Default, Clone, Copy)]
-pub struct OsSecrets;
+pub struct Keyring;
+
+impl Backend for Keyring {
+    fn read(&self, key: &str) -> Result<Option<String>, SecretError> {
+        match entry(key)?.get_password() {
+            Ok(value) => Ok(Some(value)),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(e) => Err(SecretError::Store(e.to_string())),
+        }
+    }
+
+    fn write(&self, key: &str, value: &str) -> Result<(), SecretError> {
+        entry(key)?
+            .set_password(value)
+            .map_err(|e| SecretError::Store(e.to_string()))
+    }
+
+    fn remove(&self, key: &str) -> Result<(), SecretError> {
+        match entry(key)?.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(e) => Err(SecretError::Store(e.to_string())),
+        }
+    }
+}
 
 fn entry(key: &str) -> Result<keyring::Entry, SecretError> {
     keyring::Entry::new(SERVICE, key).map_err(|e| SecretError::Store(e.to_string()))
 }
 
-fn read(key: &str) -> Result<Option<String>, SecretError> {
-    match entry(key)?.get_password() {
-        Ok(value) => Ok(Some(value)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(SecretError::Store(e.to_string())),
-    }
-}
+/// A secret store that splits long values into pieces the backend accepts.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Chunked<B: Backend>(pub B);
 
-fn write(key: &str, value: &str) -> Result<(), SecretError> {
-    entry(key)?
-        .set_password(value)
-        .map_err(|e| SecretError::Store(e.to_string()))
-}
+/// The store the app uses.
+pub type OsSecrets = Chunked<Keyring>;
 
-fn remove(key: &str) -> Result<(), SecretError> {
-    match entry(key)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(e) => Err(SecretError::Store(e.to_string())),
-    }
-}
+#[allow(non_upper_case_globals)]
+pub const OsSecrets: OsSecrets = Chunked(Keyring);
 
 fn chunk_key(key: &str, index: usize) -> String {
     format!("{key}#{index}")
@@ -63,19 +83,21 @@ pub(crate) fn chunk_count(marker: &str) -> Option<usize> {
     marker.strip_prefix(CHUNKED_MARKER)?.trim().parse().ok()
 }
 
-/// Remove numbered pieces from `from` upward until one is missing.
-fn remove_chunks_from(key: &str, from: usize) -> Result<(), SecretError> {
-    let mut index = from;
-    while read(&chunk_key(key, index))?.is_some() {
-        remove(&chunk_key(key, index))?;
-        index += 1;
+impl<B: Backend> Chunked<B> {
+    /// Remove numbered pieces from `from` upward until one is missing.
+    fn remove_chunks_from(&self, key: &str, from: usize) -> Result<(), SecretError> {
+        let mut index = from;
+        while self.0.read(&chunk_key(key, index))?.is_some() {
+            self.0.remove(&chunk_key(key, index))?;
+            index += 1;
+        }
+        Ok(())
     }
-    Ok(())
 }
 
-impl SecretStore for OsSecrets {
+impl<B: Backend> SecretStore for Chunked<B> {
     fn get(&self, key: &str) -> Result<Option<String>, SecretError> {
-        let Some(head) = read(key)? else {
+        let Some(head) = self.0.read(key)? else {
             return Ok(None);
         };
         let Some(count) = chunk_count(&head) else {
@@ -83,7 +105,7 @@ impl SecretStore for OsSecrets {
         };
         let mut value = String::new();
         for index in 0..count {
-            let piece = read(&chunk_key(key, index))?.ok_or_else(|| {
+            let piece = self.0.read(&chunk_key(key, index))?.ok_or_else(|| {
                 SecretError::Store(format!("piece {index} of {count} is missing for {key}"))
             })?;
             value.push_str(&piece);
@@ -93,20 +115,26 @@ impl SecretStore for OsSecrets {
 
     fn set(&self, key: &str, value: &str) -> Result<(), SecretError> {
         if value.chars().count() <= CHUNK_CHARS {
-            write(key, value)?;
-            return remove_chunks_from(key, 0);
+            self.0.write(key, value)?;
+            return self.remove_chunks_from(key, 0);
         }
         let pieces = split_into_chunks(value);
+        log::info!(
+            "storing {key} as {} pieces ({} chars)",
+            pieces.len(),
+            value.chars().count()
+        );
         for (index, piece) in pieces.iter().enumerate() {
-            write(&chunk_key(key, index), piece)?;
+            self.0.write(&chunk_key(key, index), piece)?;
         }
-        write(key, &format!("{CHUNKED_MARKER}{}", pieces.len()))?;
-        remove_chunks_from(key, pieces.len())
+        self.0
+            .write(key, &format!("{CHUNKED_MARKER}{}", pieces.len()))?;
+        self.remove_chunks_from(key, pieces.len())
     }
 
     fn delete(&self, key: &str) -> Result<(), SecretError> {
-        remove(key)?;
-        remove_chunks_from(key, 0)
+        self.0.remove(key)?;
+        self.remove_chunks_from(key, 0)
     }
 }
 
@@ -149,6 +177,59 @@ impl taskrail_connector_mcp::CredentialPersistence for KeychainCredentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    /// Behaves like Windows Credential Manager: refuses anything over 2560
+    /// UTF-16 units.
+    #[derive(Default)]
+    struct WindowsLike(RefCell<HashMap<String, String>>);
+
+    impl Backend for WindowsLike {
+        fn read(&self, key: &str) -> Result<Option<String>, SecretError> {
+            Ok(self.0.borrow().get(key).cloned())
+        }
+        fn write(&self, key: &str, value: &str) -> Result<(), SecretError> {
+            if value.encode_utf16().count() > 2560 {
+                return Err(SecretError::Store(
+                    "longer than platform limit of 2560 chars".into(),
+                ));
+            }
+            self.0.borrow_mut().insert(key.to_owned(), value.to_owned());
+            Ok(())
+        }
+        fn remove(&self, key: &str) -> Result<(), SecretError> {
+            self.0.borrow_mut().remove(key);
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn an_oauth_bundle_survives_the_windows_limit() {
+        let store = Chunked(WindowsLike::default());
+        let bundle = format!("{{\"client_id\":\"abc\",\"token_response\":{{\"access_token\":\"{}\",\"refresh_token\":\"{}\"}}}}", "a".repeat(3000), "r".repeat(1500));
+        store.set("connector:tuesday:oauth", &bundle).unwrap();
+        assert_eq!(
+            store.get("connector:tuesday:oauth").unwrap().as_deref(),
+            Some(bundle.as_str())
+        );
+        assert!(
+            store.0 .0.borrow().len() >= 4,
+            "head plus at least three pieces"
+        );
+
+        // A shorter replacement clears the leftover pieces.
+        store.set("connector:tuesday:oauth", "short").unwrap();
+        assert_eq!(
+            store.get("connector:tuesday:oauth").unwrap().as_deref(),
+            Some("short")
+        );
+        assert_eq!(store.0 .0.borrow().len(), 1);
+
+        store.delete("connector:tuesday:oauth").unwrap();
+        assert_eq!(store.get("connector:tuesday:oauth").unwrap(), None);
+        assert!(store.0 .0.borrow().is_empty());
+    }
 
     #[test]
     fn long_values_split_on_character_boundaries_and_rejoin() {

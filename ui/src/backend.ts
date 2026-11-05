@@ -144,6 +144,8 @@ export interface RailBackend {
   onOpenSettings(callback: () => void): () => void
   /** The tail of the app's log file. */
   readLog(lines?: number): Promise<string>
+  /** Version and commit of the running build. */
+  appVersion(): Promise<string>
   /** Reveal the log folder in the file manager. */
   openLogFolder(): Promise<void>
   /** Write a line from this page into the app's log. Never rejects. */
@@ -212,6 +214,7 @@ function tauriBackend(): RailBackend {
     listMonitors: () => call('list_monitors'),
     onOpenSettings: (cb) => listen('rail:open-settings', cb),
     readLog: (lines) => call('read_log', { lines: lines ?? null }),
+    appVersion: () => call('app_version'),
     openLogFolder: () => call('open_log_folder'),
     logFromUi: (level, message) => call<void>('log_from_ui', { level, message }).catch(() => undefined),
     listConnectors: () => call('list_connectors'),
@@ -450,6 +453,7 @@ function browserBackend(): RailBackend {
       ]),
     onOpenSettings: () => () => undefined,
     readLog: () => async(() => devLog.join('\n')),
+    appVersion: () => async(() => 'browser stand-in'),
     openLogFolder: () => async(() => undefined),
     logFromUi: (level, message) =>
       async(() => {
