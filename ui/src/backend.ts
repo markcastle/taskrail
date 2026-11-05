@@ -484,10 +484,13 @@ function browserBackend(): RailBackend {
         return modelSettings
       }),
     testModel: () =>
-      async(() => {
-        if (!modelSettings.has_key) throw new Error('no API key saved; add one under Model in settings')
-        return `${modelSettings.provider} · ${modelSettings.model ?? 'default model'} replied: Hello, Task Rail.`
-      }),
+      new Promise((resolve, reject) =>
+        setTimeout(() => {
+          load()
+          if (!modelSettings.has_key) return reject(new Error('no API key saved; add one under Model in settings'))
+          resolve(`${modelSettings.provider} · ${modelSettings.model ?? 'default model'} replied: Hello, Task Rail.`)
+        }, 400),
+      ),
     discoverConnector: (request) =>
       new Promise((resolve, reject) =>
         setTimeout(() => {

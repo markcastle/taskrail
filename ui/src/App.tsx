@@ -171,9 +171,9 @@ export default function App() {
       )}
 
       {notice && (
-        <div className="notice" role="status">
+        <div className="toast toast--error toast--inline" role="alert">
           <span>{notice}</span>
-          <button className="notice__close" aria-label="Dismiss" onClick={() => setNotice(null)}>
+          <button className="toast__close" aria-label="Dismiss" onClick={() => setNotice(null)}>
             ×
           </button>
         </div>

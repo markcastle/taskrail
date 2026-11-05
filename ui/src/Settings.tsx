@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   createBackend,
   type ConnectorSummary,
@@ -11,6 +11,8 @@ import {
   type ServerSpec,
   type Theme,
 } from './backend'
+import { Result, SavedMark, Segmented, Slider, Spinner, Toggle, type Tone } from './controls'
+import { useDebouncedSave } from './useDebouncedSave'
 import { followTheme } from './theme'
 
 const backend: RailBackend = createBackend()
@@ -18,15 +20,20 @@ const backend: RailBackend = createBackend()
 type Page = 'rail' | 'model' | 'connectors' | 'logs'
 
 const PAGES: { id: Page; label: string; blurb: string }[] = [
-  { id: 'rail', label: 'Rail', blurb: 'Where it sits and how much it shows.' },
+  { id: 'rail', label: 'Rail', blurb: 'Where it sits and how much it shows. Changes apply as you make them.' },
   { id: 'connectors', label: 'Connectors', blurb: 'The systems your cards come from.' },
   { id: 'model', label: 'Model', blurb: 'Used once per connector, to work out what a server is.' },
   { id: 'logs', label: 'Logs', blurb: 'What the app has been doing, for when something is wrong.' },
 ]
 
+export interface Toast {
+  tone: Tone
+  text: string
+}
+
 export default function Settings({ onClose }: { onClose: () => void }) {
   const [page, setPage] = useState<Page>('rail')
-  const [notice, setNotice] = useState<string | null>(null)
+  const [toast, setToast] = useState<Toast | null>(null)
   useEffect(() => followTheme(backend), [])
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -37,10 +44,13 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   }, [onClose])
 
   useEffect(() => {
-    if (!notice) return
-    const t = window.setTimeout(() => setNotice(null), 8000)
+    if (!toast) return
+    const t = window.setTimeout(() => setToast(null), toast.tone === 'error' ? 8000 : 3500)
     return () => window.clearTimeout(t)
-  }, [notice])
+  }, [toast])
+
+  const notify = useCallback((tone: Tone, text: string) => setToast({ tone, text }), [])
+  const fail = useCallback((e: unknown) => setToast({ tone: 'error', text: String(e) }), [])
 
   const current = PAGES.find((p) => p.id === page)!
   return (
@@ -59,7 +69,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
         <button className="settings-nav__item settings-nav__item--close" onClick={onClose}>
           ← Back to the rail
         </button>
-        <button className="settings-nav__item settings-nav__item--danger" onClick={() => backend.quit().catch((e) => setNotice(String(e)))}>
+        <button className="settings-nav__item settings-nav__item--danger" onClick={() => backend.quit().catch(fail)}>
           Quit Task Rail
         </button>
       </nav>
@@ -68,244 +78,261 @@ export default function Settings({ onClose }: { onClose: () => void }) {
           <h1>{current.label}</h1>
           <p>{current.blurb}</p>
         </header>
-        {notice && (
-          <div className="notice" role="status">
-            <span>{notice}</span>
-            <button className="notice__close" aria-label="Dismiss" onClick={() => setNotice(null)}>
+        {page === 'rail' && <RailPage fail={fail} />}
+        {page === 'model' && <ModelPage notify={notify} fail={fail} />}
+        {page === 'connectors' && <ConnectorsPage notify={notify} fail={fail} />}
+        {page === 'logs' && <LogsPage notify={notify} fail={fail} />}
+        {toast && (
+          <div className={`toast toast--${toast.tone}`} role={toast.tone === 'error' ? 'alert' : 'status'} data-testid="toast">
+            <span>{toast.text}</span>
+            <button className="toast__close" aria-label="Dismiss" onClick={() => setToast(null)}>
               ×
             </button>
           </div>
         )}
-        {page === 'rail' && <RailPage onNotice={setNotice} />}
-        {page === 'model' && <ModelPage onNotice={setNotice} />}
-        {page === 'connectors' && <ConnectorsPage onNotice={setNotice} />}
-        {page === 'logs' && <LogsPage onNotice={setNotice} />}
       </main>
     </div>
   )
 }
 
-function LogsPage({ onNotice }: { onNotice: (m: string) => void }) {
-  const [text, setText] = useState('')
-  const refresh = useCallback(() => {
-    backend.readLog(400).then(setText).catch((e) => onNotice(String(e)))
-  }, [onNotice])
-  useEffect(() => {
-    refresh()
-    const t = window.setInterval(refresh, 3000)
-    return () => window.clearInterval(t)
-  }, [refresh])
+function Row({ label, help, children, trailing }: { label: string; help?: string; children: ReactNode; trailing?: ReactNode }) {
   return (
-    <div className="settings-form settings-form--wide">
-      <div className="settings-actions">
-        <button type="button" onClick={refresh}>
-          Refresh
-        </button>
-        <button type="button" onClick={() => backend.openLogFolder().catch((e) => onNotice(String(e)))}>
-          Open logs folder
-        </button>
-        <button
-          type="button"
-          onClick={() => navigator.clipboard?.writeText(text).then(() => onNotice('Copied')).catch(() => onNotice('Could not copy'))}
-        >
-          Copy
-        </button>
+    <div className="row">
+      <div className="row__text">
+        <span className="row__label">{label}</span>
+        {help && <span className="row__help">{help}</span>}
       </div>
-      <pre className="log" data-testid="log">
-        {text || 'Nothing logged yet.'}
-      </pre>
+      <div className="row__control">
+        {children}
+        {trailing}
+      </div>
     </div>
   )
 }
 
-function Field({ label, help, children }: { label: string; help?: string; children: ReactNode }) {
+/* ------------------------------------------------------------------ rail */
+
+function RailPage({ fail }: { fail: (e: unknown) => void }) {
+  const [draft, setDraft] = useState<RailSettings | null>(null)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  useEffect(() => {
+    backend.getSettings().then(setDraft).catch(fail)
+  }, [fail])
+  useDebouncedSave(draft, (value) => {
+    backend
+      .updateSettings(value)
+      .then(() => setSavedAt(Date.now()))
+      .catch(fail)
+  })
+  if (!draft) return <Spinner label="Loading…" />
+  const set = <K extends keyof RailSettings>(key: K, value: RailSettings[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d))
+
   return (
-    <label className="field">
-      <span className="field__label">{label}</span>
-      {children}
-      {help && <span className="field__help">{help}</span>}
-    </label>
+    <section className="group">
+      <div className="group__head">
+        <SavedMark at={savedAt} />
+      </div>
+      <Row label="Appearance">
+        <Segmented<Theme>
+          label="Appearance"
+          value={draft.theme}
+          onChange={(v) => set('theme', v)}
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+        />
+      </Row>
+      <Row label="Dock to" help="Windows shrinks the desktop work area to make room.">
+        <Segmented
+          label="Dock to"
+          value={draft.edge}
+          onChange={(v) => set('edge', v)}
+          options={[
+            { value: 'left', label: 'Left edge' },
+            { value: 'right', label: 'Right edge' },
+          ]}
+        />
+      </Row>
+      <Row label="Width">
+        <Slider label="Width" value={draft.width_px} min={240} max={480} step={10} unit="px" onChange={(v) => set('width_px', v)} />
+      </Row>
+      <Row label="Top priorities shown" help="The rest wait behind the fold.">
+        <Slider label="Top priorities shown" value={draft.top_limit} min={1} max={10} unit={draft.top_limit === 1 ? 'card' : 'cards'} onChange={(v) => set('top_limit', v)} />
+      </Row>
+      <Row label="Pull in events starting within" help="A meeting this close joins Top Priorities.">
+        <Slider label="Pull in events starting within" value={draft.event_lead_minutes} min={0} max={240} step={5} unit="min" onChange={(v) => set('event_lead_minutes', v)} />
+      </Row>
+    </section>
   )
 }
 
-function RailPage({ onNotice }: { onNotice: (m: string) => void }) {
-  const [draft, setDraft] = useState<RailSettings | null>(null)
-  const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    backend.getSettings().then(setDraft).catch((e) => onNotice(String(e)))
-  }, [onNotice])
-  if (!draft) return <p className="settings-muted">Loading…</p>
-  const set = <K extends keyof RailSettings>(key: K, value: RailSettings[K]) => setDraft((d) => (d ? { ...d, [key]: value } : d))
-  const save = () => {
-    setBusy(true)
-    backend
-      .updateSettings(draft)
-      .then((saved) => {
-        setDraft(saved)
-        onNotice('Rail settings saved')
-      })
-      .catch((e) => onNotice(String(e)))
-      .finally(() => setBusy(false))
-  }
-  return (
-    <form
-      className="settings-form"
-      onSubmit={(e) => {
-        e.preventDefault()
-        save()
-      }}
-    >
-      <fieldset className="field">
-        <legend className="field__label">Appearance</legend>
-        <div className="field__choices">
-          {(['system', 'light', 'dark'] as Theme[]).map((t) => (
-            <label key={t}>
-              <input type="radio" name="theme" checked={draft.theme === t} onChange={() => set('theme', t)} /> {t === 'system' ? 'Match system' : t === 'light' ? 'Light' : 'Dark'}
-            </label>
-          ))}
-        </div>
-      </fieldset>
-      <fieldset className="field">
-        <legend className="field__label">Dock to</legend>
-        <div className="field__choices">
-          <label>
-            <input type="radio" name="edge" checked={draft.edge === 'left'} onChange={() => set('edge', 'left')} /> Left edge
-          </label>
-          <label>
-            <input type="radio" name="edge" checked={draft.edge === 'right'} onChange={() => set('edge', 'right')} /> Right edge
-          </label>
-        </div>
-      </fieldset>
-      <Field label="Width" help="Pixels. The desktop work area shrinks by this much on Windows.">
-        <input type="number" min={240} max={600} step={10} value={draft.width_px} onChange={(e) => set('width_px', Number(e.target.value))} />
-      </Field>
-      <Field label="Top priorities shown" help="The rest sit behind the fold. Ten at most.">
-        <input type="number" min={1} max={10} value={draft.top_limit} onChange={(e) => set('top_limit', Number(e.target.value))} />
-      </Field>
-      <Field label="Pull in events starting within" help="Minutes. A meeting this close joins Top Priorities.">
-        <input type="number" min={0} max={720} step={5} value={draft.event_lead_minutes} onChange={(e) => set('event_lead_minutes', Number(e.target.value))} />
-      </Field>
-      <div className="settings-actions">
-        <button type="submit" className="button--primary" disabled={busy}>
-          Save
-        </button>
-      </div>
-    </form>
-  )
-}
+/* ----------------------------------------------------------------- model */
 
 const PROVIDERS: { value: Provider; label: string; modelHint: string }[] = [
-  { value: 'anthropic', label: 'Anthropic', modelHint: 'claude-opus-5-5 (default)' },
-  { value: 'open_router', label: 'OpenRouter', modelHint: 'e.g. anthropic/claude-opus-5.5' },
-  { value: 'open_ai', label: 'OpenAI', modelHint: 'e.g. gpt-5' },
+  { value: 'anthropic', label: 'Anthropic', modelHint: 'claude-opus-5-5' },
+  { value: 'open_router', label: 'OpenRouter', modelHint: 'anthropic/claude-opus-5.5' },
+  { value: 'open_ai', label: 'OpenAI', modelHint: 'gpt-5' },
 ]
 
-function ModelPage({ onNotice }: { onNotice: (m: string) => void }) {
+function ModelPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
   const [settings, setSettings] = useState<ModelSettings | null>(null)
-  const [provider, setProvider] = useState<Provider>('anthropic')
   const [model, setModel] = useState('')
   const [apiKey, setApiKey] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [savedAt, setSavedAt] = useState<number | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ tone: Tone; text: string } | null>(null)
+  const modelRef = useRef('')
 
   useEffect(() => {
     backend
       .getModelSettings()
       .then((s) => {
         setSettings(s)
-        setProvider(s.provider)
         setModel(s.model ?? '')
+        modelRef.current = s.model ?? ''
       })
-      .catch((e) => onNotice(String(e)))
-  }, [onNotice])
+      .catch(fail)
+  }, [fail])
 
-  const save = () => {
-    setBusy(true)
-    backend
-      .saveModelSettings({ provider, model: model.trim() || null, base_url: null }, apiKey.trim() ? apiKey.trim() : undefined)
+  if (!settings) return <Spinner label="Loading…" />
+  const hint = PROVIDERS.find((p) => p.value === settings.provider)?.modelHint ?? ''
+
+  const persist = (next: Partial<ModelSettings>, key?: string) => {
+    const merged = { provider: settings.provider, model: settings.model, base_url: settings.base_url, ...next }
+    return backend
+      .saveModelSettings({ provider: merged.provider, model: merged.model?.trim() || null, base_url: merged.base_url }, key)
       .then((s) => {
         setSettings(s)
-        setApiKey('')
-        onNotice(s.has_key ? 'Model settings saved' : 'Model settings saved, but no API key yet')
+        setSavedAt(Date.now())
+        setTestResult(null)
+        return s
       })
-      .catch((e) => onNotice(String(e)))
-      .finally(() => setBusy(false))
+      .catch(fail)
   }
+  const commitModel = () => {
+    if (model.trim() === modelRef.current) return
+    modelRef.current = model.trim()
+    persist({ model: model.trim() || null })
+  }
+  const commitKey = () => {
+    const key = apiKey.trim()
+    if (!key) return
+    persist({}, key).then((s) => {
+      if (s) {
+        setApiKey('')
+        notify('success', 'Key saved to your keychain')
+      }
+    })
+  }
+  const removeKey = () => persist({}, '').then((s) => s && notify('info', 'Key removed'))
   const test = () => {
-    setBusy(true)
+    setTesting(true)
+    setTestResult(null)
     backend
       .testModel()
-      .then(onNotice)
-      .catch((e) => onNotice(String(e)))
-      .finally(() => setBusy(false))
+      .then((line) => setTestResult({ tone: 'success', text: line }))
+      .catch((e) => setTestResult({ tone: 'error', text: String(e) }))
+      .finally(() => setTesting(false))
   }
-  const hint = PROVIDERS.find((p) => p.value === provider)?.modelHint ?? ''
 
   return (
-    <form
-      className="settings-form"
-      onSubmit={(e) => {
-        e.preventDefault()
-        save()
-      }}
-    >
-      <p className="settings-muted">
-        The model is only used when you add a server: it reads the server's tool list and writes the connector profile. Syncing never involves it. Bring your own
-        key; it is kept in your operating system's credential store.
-      </p>
-      <Field label="Provider">
-        <select aria-label="Provider" value={provider} onChange={(e) => setProvider(e.target.value as Provider)}>
-          {PROVIDERS.map((p) => (
-            <option key={p.value} value={p.value}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Model" help={provider === 'anthropic' ? 'Leave blank for the default.' : 'Required for this provider.'}>
-        <input type="text" aria-label="Model name" placeholder={hint} value={model} onChange={(e) => setModel(e.target.value)} />
-      </Field>
-      <Field label="API key" help={settings?.has_key ? 'A key is saved. Paste a new one to replace it.' : 'No key saved yet.'}>
-        <input type="password" aria-label="API key" placeholder={settings?.has_key ? '••••••••' : 'paste a key'} value={apiKey} onChange={(e) => setApiKey(e.target.value)} autoComplete="off" />
-      </Field>
-      <div className="settings-actions">
-        <button type="submit" className="button--primary" disabled={busy}>
-          Save model
-        </button>
-        <button type="button" disabled={busy || !settings?.has_key} onClick={test}>
-          Test
-        </button>
+    <section className="group">
+      <div className="group__head">
+        <p className="settings-muted">
+          The model reads a server's tool list and writes its connector profile. That's all it does; syncing never involves it. Your key stays in your operating
+          system's credential store.
+        </p>
+        <SavedMark at={savedAt} />
       </div>
-    </form>
+      <Row label="Provider">
+        <Segmented<Provider> label="Provider" value={settings.provider} onChange={(v) => persist({ provider: v })} options={PROVIDERS.map((p) => ({ value: p.value, label: p.label }))} />
+      </Row>
+      <Row label="Model" help={settings.provider === 'anthropic' ? 'Leave blank to use the default.' : 'Required for this provider.'}>
+        <input
+          type="text"
+          aria-label="Model name"
+          placeholder={hint}
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          onBlur={commitModel}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+        />
+      </Row>
+      <Row
+        label="API key"
+        help={settings.has_key ? 'A key is saved. Paste a new one to replace it.' : 'Paste a key and press Enter.'}
+        trailing={
+          settings.has_key && (
+            <button type="button" className="link" onClick={removeKey}>
+              Remove key
+            </button>
+          )
+        }
+      >
+        <input
+          type="password"
+          aria-label="API key"
+          placeholder={settings.has_key ? '••••••••••••' : 'sk-…'}
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          onBlur={commitKey}
+          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+          autoComplete="off"
+        />
+      </Row>
+      <Row label="Connection" help="Sends one short message and shows what comes back.">
+        <button type="button" className="button" disabled={testing || !settings.has_key} onClick={test} data-testid="test-model">
+          {testing ? <Spinner label="Testing…" /> : 'Test connection'}
+        </button>
+      </Row>
+      {testResult && (
+        <Result tone={testResult.tone}>
+          {testResult.tone === 'success' ? (
+            <>
+              <strong>Connected.</strong> {testResult.text}
+            </>
+          ) : (
+            <>
+              <strong>Not connected.</strong> {testResult.text}
+            </>
+          )}
+        </Result>
+      )}
+    </section>
   )
 }
 
-function ConnectorsPage({ onNotice }: { onNotice: (m: string) => void }) {
+/* ------------------------------------------------------------ connectors */
+
+function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
   const [mode, setMode] = useState<'list' | 'server' | 'profile'>('list')
   const [profileJson, setProfileJson] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
 
   const reload = useCallback(() => {
-    backend.listConnectors().then(setConnectors).catch((e) => onNotice(String(e)))
-  }, [onNotice])
+    backend.listConnectors().then(setConnectors).catch(fail)
+  }, [fail])
   useEffect(() => {
     reload()
   }, [reload])
   useEffect(() => backend.onChanged(reload), [reload])
 
-  const run = (work: () => Promise<unknown>, done?: () => void) => {
-    setBusy(true)
+  const run = (what: string, work: () => Promise<unknown>, done?: (result: unknown) => void) => {
+    setBusy(what)
     work()
-      .then(() => {
-        done?.()
+      .then((r) => {
+        done?.(r)
         reload()
       })
-      .catch((e) => onNotice(String(e)))
-      .finally(() => setBusy(false))
+      .catch(fail)
+      .finally(() => setBusy(null))
   }
 
   return (
-    <div className="settings-form">
+    <section className="group">
       <div className="connector-list">
         {connectors.length === 0 && <p className="settings-muted">No connectors yet. Your cards are local only.</p>}
         {connectors.map((c) => (
@@ -317,29 +344,30 @@ function ConnectorsPage({ onNotice }: { onNotice: (m: string) => void }) {
               </span>
               {c.last_error && <span className="connector__error">{c.last_error}</span>}
             </div>
-            <button type="button" disabled={busy} onClick={() => run(() => backend.syncConnector(c.id))} title="Pull now">
-              Sync
+            <button type="button" className="button" disabled={busy !== null} onClick={() => run(`sync-${c.id}`, () => backend.syncConnector(c.id), (n) => notify('success', `Pulled ${n} items from ${c.name}`))}>
+              {busy === `sync-${c.id}` ? <Spinner label="Syncing…" /> : 'Sync now'}
             </button>
-            <button type="button" disabled={busy} className="button--danger" onClick={() => run(() => backend.removeConnector(c.id))}>
+            <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`remove-${c.id}`, () => backend.removeConnector(c.id), () => notify('info', `Removed ${c.name}`))}>
               Remove
             </button>
           </div>
         ))}
       </div>
       <div className="settings-actions">
-        <button type="button" className="button--primary" disabled={busy} onClick={() => setMode(mode === 'server' ? 'list' : 'server')} aria-expanded={mode === 'server'}>
+        <button type="button" className="button button--primary" disabled={busy !== null} onClick={() => setMode(mode === 'server' ? 'list' : 'server')} aria-expanded={mode === 'server'}>
           Add server
         </button>
-        <button type="button" disabled={busy} onClick={() => run(() => backend.addDemoConnector())}>
-          Add demo tracker
+        <button type="button" className="button" disabled={busy !== null} onClick={() => run('demo', () => backend.addDemoConnector(), () => notify('success', 'Demo tracker connected'))}>
+          {busy === 'demo' ? <Spinner label="Connecting…" /> : 'Add demo tracker'}
         </button>
-        <button type="button" disabled={busy} onClick={() => setMode(mode === 'profile' ? 'list' : 'profile')} aria-expanded={mode === 'profile'}>
+        <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => setMode(mode === 'profile' ? 'list' : 'profile')} aria-expanded={mode === 'profile'}>
           Paste profile
         </button>
       </div>
       {mode === 'server' && (
         <AddServer
-          onNotice={onNotice}
+          notify={notify}
+          fail={fail}
           onAdded={() => {
             setMode('list')
             reload()
@@ -352,39 +380,38 @@ function ConnectorsPage({ onNotice }: { onNotice: (m: string) => void }) {
           <div className="settings-actions">
             <button
               type="button"
-              className="button--primary"
-              disabled={busy || !profileJson.trim()}
+              className="button button--primary"
+              disabled={busy !== null || !profileJson.trim()}
               onClick={() =>
-                run(
-                  () => backend.addConnectorProfile(profileJson),
-                  () => {
-                    setProfileJson('')
-                    setMode('list')
-                  },
-                )
+                run('profile', () => backend.addConnectorProfile(profileJson), () => {
+                  setProfileJson('')
+                  setMode('list')
+                  notify('success', 'Connector added')
+                })
               }
             >
-              Add connector
+              {busy === 'profile' ? <Spinner label="Adding…" /> : 'Add connector'}
             </button>
           </div>
         </div>
       )}
-    </div>
+    </section>
   )
 }
 
 /** Describe a server, let the model write a profile, check the sample it pulled, then save. */
-function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void; onAdded: () => void }) {
+function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void; onAdded: () => void }) {
   const [name, setName] = useState('')
-  const [transport, setTransport] = useState<'stdio' | 'http'>('http')
+  const [transport, setTransport] = useState<'http' | 'stdio'>('http')
   const [url, setUrl] = useState('')
   const [command, setCommand] = useState('')
   const [kind, setKind] = useState<ItemKind>('task')
   const [hint, setHint] = useState('')
   const [bearer, setBearer] = useState('')
   const [allowUnannotated, setAllowUnannotated] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [phase, setPhase] = useState<'idle' | 'discovering' | 'signing-in' | 'adding'>('idle')
   const [result, setResult] = useState<DiscoveryResult | null>(null)
+  const [problem, setProblem] = useState<string | null>(null)
   const [profileJson, setProfileJson] = useState('')
 
   const id = name
@@ -404,110 +431,125 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
           })()
         : null
   const ready = id.length > 0 && server !== null
+  const busy = phase !== 'idle'
 
   const discover = (allow = allowUnannotated) => {
     if (!server) return
-    setBusy(true)
+    setPhase('discovering')
     setResult(null)
+    setProblem(null)
     backend
       .discoverConnector({ id, name: name.trim(), server, kind, hint, allow_unannotated_list: allow, bearer: bearer.trim() || null })
       .then((r) => {
         setResult(r)
         if (r.status === 'ok') setProfileJson(JSON.stringify(r.profile, null, 2))
       })
-      .catch((e) => onNotice(String(e)))
-      .finally(() => setBusy(false))
+      .catch((e) => setProblem(String(e)))
+      .finally(() => setPhase('idle'))
   }
   const signIn = () => {
     if (!server || server.transport !== 'http') return
-    setBusy(true)
+    setPhase('signing-in')
     setResult(null)
-    onNotice('Finish signing in in your browser; this window will carry on by itself.')
+    setProblem(null)
     backend
       .signIn(id, server.url)
       .then(() => {
-        onNotice('Signed in. Discovering…')
+        notify('success', 'Signed in')
         discover()
       })
       .catch((e) => {
-        onNotice(String(e))
-        setBusy(false)
+        setProblem(String(e))
+        setPhase('idle')
       })
   }
   const add = () => {
-    setBusy(true)
+    setPhase('adding')
     backend
       .addConnectorProfile(profileJson, bearer.trim() || undefined)
       .then(() => {
-        onNotice(`Connected ${name.trim()}`)
+        notify('success', `${name.trim()} connected`)
         onAdded()
       })
-      .catch((e) => onNotice(String(e)))
-      .finally(() => setBusy(false))
+      .catch(fail)
+      .finally(() => setPhase('idle'))
   }
 
   return (
     <div className="panel" data-testid="add-server">
       <div className="panel__grid">
-        <Field label="Name">
+        <Row label="Name">
           <input type="text" aria-label="Server name" placeholder="Tuesday" value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="It holds">
-          <select aria-label="Item kind" value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
-            <option value="task">Tasks</option>
-            <option value="event">Calendar events</option>
-          </select>
-        </Field>
+        </Row>
+        <Row label="It holds">
+          <Segmented<ItemKind>
+            label="Item kind"
+            value={kind}
+            onChange={setKind}
+            options={[
+              { value: 'task', label: 'Tasks' },
+              { value: 'event', label: 'Calendar' },
+            ]}
+          />
+        </Row>
       </div>
-      <fieldset className="field">
-        <legend className="field__label">Reach it by</legend>
-        <div className="field__choices">
-          <label>
-            <input type="radio" name="transport" checked={transport === 'http'} onChange={() => setTransport('http')} /> URL
-          </label>
-          <label>
-            <input type="radio" name="transport" checked={transport === 'stdio'} onChange={() => setTransport('stdio')} /> Command
-          </label>
-        </div>
-      </fieldset>
+      <Row label="Reach it by">
+        <Segmented<'http' | 'stdio'>
+          label="Transport"
+          value={transport}
+          onChange={setTransport}
+          options={[
+            { value: 'http', label: 'URL' },
+            { value: 'stdio', label: 'Command' },
+          ]}
+        />
+      </Row>
       {transport === 'http' ? (
         <>
-          <Field label="Server URL">
+          <Row label="Server URL">
             <input type="url" aria-label="Server URL" placeholder="https://example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
-          </Field>
-          <Field label="Bearer token" help="Only if the server wants a static token. Servers with a sign-in flow leave this blank.">
+          </Row>
+          <Row label="Bearer token" help="Only for servers that hand out a static token. Servers with a sign-in leave this blank.">
             <input type="password" aria-label="Bearer token" placeholder="optional" value={bearer} onChange={(e) => setBearer(e.target.value)} autoComplete="off" />
-          </Field>
+          </Row>
         </>
       ) : (
-        <Field label="Command" help="Run on this machine; speaks MCP over its standard input and output.">
+        <Row label="Command" help="Runs on this machine and speaks MCP over its standard input and output.">
           <input type="text" aria-label="Server command" placeholder="npx some-mcp-server --flag" value={command} onChange={(e) => setCommand(e.target.value)} />
-        </Field>
+        </Row>
       )}
-      <Field label="Hint for the model" help="Optional. Anything that helps: which project, whose items, what the product is called.">
-        <input type="text" aria-label="Hint for the model" placeholder="e.g. only tickets assigned to me in the Platform project" value={hint} onChange={(e) => setHint(e.target.value)} />
-      </Field>
+      <Row label="Hint for the model" help="Optional. Which project, whose items, what the product is called.">
+        <input type="text" aria-label="Hint for the model" placeholder="only tickets assigned to me in the Platform project" value={hint} onChange={(e) => setHint(e.target.value)} />
+      </Row>
       <div className="settings-actions">
-        <button type="button" className="button--primary" disabled={busy || !ready} onClick={() => discover()}>
-          {busy ? 'Discovering…' : 'Discover'}
+        <button type="button" className="button button--primary" disabled={busy || !ready} onClick={() => discover()}>
+          {phase === 'discovering' ? <Spinner label="Asking the model and checking the server…" /> : phase === 'signing-in' ? <Spinner label="Waiting for your browser…" /> : 'Discover'}
         </button>
       </div>
+      {problem && (
+        <Result tone="error">
+          <strong>Couldn't connect.</strong> {problem}
+        </Result>
+      )}
       {result?.status === 'sign_in_required' && (
-        <div className="callout callout--info" data-testid="sign-in-required">
-          This server wants you to sign in before it will talk. Your browser will open; when you come back, discovery continues on its own.
-          <div className="settings-actions">
-            <button type="button" className="button--primary" disabled={busy} onClick={signIn}>
-              Sign in
-            </button>
+        <Result tone="info">
+          <div data-testid="sign-in-required">
+            <strong>This server wants you to sign in first.</strong> Your browser will open. When you come back, discovery continues on its own.
+            <div className="settings-actions">
+              <button type="button" className="button button--primary" disabled={busy} onClick={signIn}>
+                Sign in
+              </button>
+            </div>
           </div>
-        </div>
+        </Result>
       )}
       {result?.status === 'needs_confirmation' && (
-        <div className="callout">
-          The model wants to list items with <code>{result.tool}</code>, which the server does not mark as read-only. Discovery will call it once.
+        <Result tone="info">
+          <strong>One check before going on.</strong> The model wants to list items with <code>{result.tool}</code>, which the server does not mark as read-only. Discovery would call it once.
           <div className="settings-actions">
             <button
               type="button"
+              className="button"
               disabled={busy}
               onClick={() => {
                 setAllowUnannotated(true)
@@ -517,14 +559,14 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
               Allow and continue
             </button>
           </div>
-        </div>
+        </Result>
       )}
       {result?.status === 'ok' && (
         <div className="discovery" data-testid="discovery-result">
-          <p className="discovery__summary">
-            Found {result.sample.length} items in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
+          <Result tone="success">
+            <strong>Found {result.sample.length} items</strong> in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
             {result.notes.length > 0 && <span className="connector__meta"> Earlier tries: {result.notes.join('; ')}</span>}
-          </p>
+          </Result>
           <ul className="discovery__sample">
             {result.sample.slice(0, 6).map((item) => (
               <li key={item.external_id}>
@@ -534,16 +576,54 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
             ))}
             {result.sample.length > 6 && <li className="connector__meta">and {result.sample.length - 6} more</li>}
           </ul>
-          <Field label="Profile" help="What the model decided. Edit it if something looks wrong; it is saved as shown.">
+          <details className="disclosure">
+            <summary>Profile the model wrote</summary>
             <textarea aria-label="Discovered profile JSON" rows={12} value={profileJson} onChange={(e) => setProfileJson(e.target.value)} />
-          </Field>
+          </details>
           <div className="settings-actions">
-            <button type="button" className="button--primary" disabled={busy || !profileJson.trim()} onClick={add}>
-              Add connector
+            <button type="button" className="button button--primary" disabled={busy || !profileJson.trim()} onClick={add}>
+              {phase === 'adding' ? <Spinner label="Adding…" /> : 'Add connector'}
             </button>
           </div>
         </div>
       )}
     </div>
+  )
+}
+
+/* ------------------------------------------------------------------ logs */
+
+function LogsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
+  const [text, setText] = useState('')
+  const [follow, setFollow] = useState(true)
+  const refresh = useCallback(() => {
+    backend.readLog(400).then(setText).catch(fail)
+  }, [fail])
+  useEffect(() => {
+    refresh()
+    if (!follow) return
+    const t = window.setInterval(refresh, 3000)
+    return () => window.clearInterval(t)
+  }, [refresh, follow])
+  return (
+    <section className="group group--wide">
+      <div className="settings-actions settings-actions--spread">
+        <label className="inline-toggle">
+          <Toggle checked={follow} onChange={setFollow} label="Follow the log" />
+          <span>Follow</span>
+        </label>
+        <span className="settings-actions__group">
+          <button type="button" className="button button--quiet" onClick={() => backend.openLogFolder().catch(fail)}>
+            Open folder
+          </button>
+          <button type="button" className="button button--quiet" onClick={() => navigator.clipboard?.writeText(text).then(() => notify('success', 'Log copied')).catch(() => notify('error', 'Could not copy'))}>
+            Copy
+          </button>
+        </span>
+      </div>
+      <pre className="log" data-testid="log">
+        {text || 'Nothing logged yet.'}
+      </pre>
+    </section>
   )
 }
