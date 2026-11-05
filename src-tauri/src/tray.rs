@@ -7,6 +7,7 @@ use tauri::{AppHandle, Manager};
 
 const SHOW: &str = "show";
 const SETTINGS: &str = "settings";
+const LOGS: &str = "logs";
 const QUIT: &str = "quit";
 
 pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
@@ -31,7 +32,12 @@ pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
             SHOW => show_rail(app),
             SETTINGS => {
                 if let Err(e) = crate::settings_window::open(app) {
-                    eprintln!("task rail: could not queue the settings window: {e}");
+                    log::warn!("could not queue the settings window: {e}");
+                }
+            }
+            LOGS => {
+                if let Err(e) = crate::commands::open_log_folder(app.clone()) {
+                    log::warn!("could not open the logs folder: {e}");
                 }
             }
             QUIT => app.exit(0),

@@ -187,6 +187,11 @@ await settings.getByTestId('connector-jira').waitFor()
 await settings.getByTestId('connector-jira').getByRole('button', { name: 'Remove', exact: true }).click()
 await settings.getByText('No connectors yet').waitFor()
 
+// 12. The Logs page shows the stand-in's log, including this page's own start line.
+await settings.getByRole('button', { name: 'Logs', exact: true }).click()
+await settings.getByTestId('log').waitFor()
+assert.match(await settings.getByTestId('log').textContent(), /browser stand-in started/)
+
 assert.deepEqual(errors, [], 'no console or page errors')
 console.log('UI test passed')
 await browser.close()

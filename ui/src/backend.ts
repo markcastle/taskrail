@@ -127,6 +127,14 @@ export interface RailBackend {
   quit(): Promise<void>
   /** Open (or focus) the settings window. In a plain browser, opens the settings route in a new tab. */
   openSettings(): Promise<void>
+  /** Close the settings window. */
+  closeSettings(): Promise<void>
+  /** The tail of the app's log file. */
+  readLog(lines?: number): Promise<string>
+  /** Reveal the log folder in the file manager. */
+  openLogFolder(): Promise<void>
+  /** Write a line from this page into the app's log. Never rejects. */
+  logFromUi(level: 'info' | 'warn' | 'error', message: string): Promise<void>
   listConnectors(): Promise<ConnectorSummary[]>
   /** Add a connector from a Connector Profile, then pull from it. A bearer token, if given, goes to the keychain. */
   addConnectorProfile(profileJson: string, bearer?: string): Promise<ConnectorSummary>
@@ -194,6 +202,10 @@ function tauriBackend(): RailBackend {
     updateSettings: (settings) => call('update_settings', { settings }),
     quit: () => call('quit'),
     openSettings: () => call('open_settings'),
+    closeSettings: () => call('close_settings'),
+    readLog: (lines) => call('read_log', { lines: lines ?? null }),
+    openLogFolder: () => call('open_log_folder'),
+    logFromUi: (level, message) => call<void>('log_from_ui', { level, message }).catch(() => undefined),
     listConnectors: () => call('list_connectors'),
     addConnectorProfile: (profileJson, bearer) => call('add_connector_profile', { profileJson, bearer: bearer ?? null }),
     addDemoConnector: () => call('add_demo_connector'),
@@ -271,6 +283,7 @@ function browserBackend(): RailBackend {
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
+  const devLog: string[] = [`${new Date().toISOString()} [info] browser stand-in started`]
   const changedListeners = new Set<() => void>()
   const quickAddListeners = new Set<() => void>()
   const syncErrorListeners = new Set<(e: SyncError) => void>()
@@ -424,6 +437,13 @@ function browserBackend(): RailBackend {
     openSettings: () =>
       async(() => {
         window.open('/#settings', 'taskrail-settings')
+      }),
+    closeSettings: () => async(() => window.close()),
+    readLog: () => async(() => devLog.join('\n')),
+    openLogFolder: () => async(() => undefined),
+    logFromUi: (level, message) =>
+      async(() => {
+        devLog.push(`${new Date().toISOString()} [${level}] ${message}`)
       }),
     listConnectors: () => async(() => connectors),
     addConnectorProfile: (profileJson) =>

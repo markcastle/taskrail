@@ -838,3 +838,20 @@ button {
 .callout--info {
   background: color-mix(in srgb, var(--progress) 14%, var(--bg));
 }
+
+.settings-form--wide {
+  max-width: none;
+}
+
+.log {
+  margin: 0;
+  padding: 12px;
+  max-height: 60vh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-raised);
+  font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

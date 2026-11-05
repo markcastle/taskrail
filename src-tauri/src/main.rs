@@ -7,7 +7,7 @@ fn main() {
     if std::env::args().any(|a| a == "--fake-mcp-server") {
         let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
         if let Err(e) = runtime.block_on(taskrail_connector_mcp::fake_server::serve_stdio()) {
-            eprintln!("fake tracker: {e}");
+            log::info!("fake tracker: {e}");
             std::process::exit(1);
         }
         return;

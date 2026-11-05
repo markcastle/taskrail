@@ -18,13 +18,13 @@ pub fn attach(app: &AppHandle) -> tauri::Result<()> {
         Ok(dock) => {
             *lock(&state.dock) = Some(dock);
             if let Err(e) = apply(app) {
-                eprintln!("task rail: docking failed, falling back: {e}");
+                log::warn!("docking failed, falling back: {e}");
                 park(&window, app)?;
             }
         }
         Err(DockError::Unsupported) => park(&window, app)?,
         Err(e) => {
-            eprintln!("task rail: could not create dock, falling back: {e}");
+            log::warn!("could not create dock, falling back: {e}");
             park(&window, app)?;
         }
     }
@@ -37,7 +37,7 @@ pub fn redock(app: &AppHandle) -> tauri::Result<()> {
     let handle = app.clone();
     app.run_on_main_thread(move || {
         if let Err(e) = apply(&handle) {
-            eprintln!("task rail: re-dock failed: {e}");
+            log::warn!("re-dock failed: {e}");
         }
     })
 }
@@ -48,7 +48,7 @@ pub fn release(app: &AppHandle) {
     let taken = lock(&state.dock).take();
     if let Some(mut dock) = taken {
         if let Err(e) = dock.undock() {
-            eprintln!("task rail: undock failed: {e}");
+            log::warn!("undock failed: {e}");
         }
     }
 }
@@ -65,7 +65,7 @@ fn apply(app: &AppHandle) -> Result<(), DockError> {
     let mut guard = lock(&state.dock);
     let dock = guard.as_mut().ok_or(DockError::NotDocked)?;
     let rect = dock.dock(request)?;
-    eprintln!("task rail: docked at {rect:?}");
+    log::info!("docked at {rect:?}");
     Ok(())
 }
 

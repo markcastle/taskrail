@@ -15,12 +15,13 @@ import { followTheme } from './theme'
 
 const backend: RailBackend = createBackend()
 
-type Page = 'rail' | 'model' | 'connectors'
+type Page = 'rail' | 'model' | 'connectors' | 'logs'
 
 const PAGES: { id: Page; label: string; blurb: string }[] = [
   { id: 'rail', label: 'Rail', blurb: 'Where it sits and how much it shows.' },
   { id: 'connectors', label: 'Connectors', blurb: 'The systems your cards come from.' },
   { id: 'model', label: 'Model', blurb: 'Used once per connector, to work out what a server is.' },
+  { id: 'logs', label: 'Logs', blurb: 'What the app has been doing, for when something is wrong.' },
 ]
 
 export default function Settings() {
@@ -48,6 +49,9 @@ export default function Settings() {
           </button>
         ))}
         <div className="settings-nav__spacer" />
+        <button className="settings-nav__item" onClick={() => backend.closeSettings().catch((e) => setNotice(String(e)))}>
+          Close
+        </button>
         <button className="settings-nav__item settings-nav__item--danger" onClick={() => backend.quit().catch((e) => setNotice(String(e)))}>
           Quit Task Rail
         </button>
@@ -68,7 +72,41 @@ export default function Settings() {
         {page === 'rail' && <RailPage onNotice={setNotice} />}
         {page === 'model' && <ModelPage onNotice={setNotice} />}
         {page === 'connectors' && <ConnectorsPage onNotice={setNotice} />}
+        {page === 'logs' && <LogsPage onNotice={setNotice} />}
       </main>
+    </div>
+  )
+}
+
+function LogsPage({ onNotice }: { onNotice: (m: string) => void }) {
+  const [text, setText] = useState('')
+  const refresh = useCallback(() => {
+    backend.readLog(400).then(setText).catch((e) => onNotice(String(e)))
+  }, [onNotice])
+  useEffect(() => {
+    refresh()
+    const t = window.setInterval(refresh, 3000)
+    return () => window.clearInterval(t)
+  }, [refresh])
+  return (
+    <div className="settings-form settings-form--wide">
+      <div className="settings-actions">
+        <button type="button" onClick={refresh}>
+          Refresh
+        </button>
+        <button type="button" onClick={() => backend.openLogFolder().catch((e) => onNotice(String(e)))}>
+          Open logs folder
+        </button>
+        <button
+          type="button"
+          onClick={() => navigator.clipboard?.writeText(text).then(() => onNotice('Copied')).catch(() => onNotice('Could not copy'))}
+        >
+          Copy
+        </button>
+      </div>
+      <pre className="log" data-testid="log">
+        {text || 'Nothing logged yet.'}
+      </pre>
     </div>
   )
 }

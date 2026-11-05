@@ -97,7 +97,7 @@ pub fn write_back(app: &AppHandle, origin: Option<Origin>, status: Status) {
 }
 
 fn report(app: &AppHandle, connector: &str, message: &str) {
-    eprintln!("task rail: sync error on {connector}: {message}");
+    log::warn!("sync error on {connector}: {message}");
     let _ = app.emit(
         SYNC_ERROR_EVENT,
         SyncError {

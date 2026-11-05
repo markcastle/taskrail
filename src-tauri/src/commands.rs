@@ -405,6 +405,29 @@ pub fn open_settings(app: AppHandle) -> CommandResult<()> {
     crate::settings_window::open(&app).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn close_settings(app: AppHandle) -> CommandResult<()> {
+    crate::settings_window::close(&app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn read_log(app: AppHandle, lines: Option<usize>) -> String {
+    crate::logs::tail(&app, lines.unwrap_or(400))
+}
+
+#[tauri::command]
+pub fn log_from_ui(window: tauri::Window, level: crate::logs::UiLevel, message: String) {
+    crate::logs::from_ui(window.label(), level, &message);
+}
+
+#[tauri::command]
+pub fn open_log_folder(app: AppHandle) -> CommandResult<()> {
+    let path = crate::logs::file(&app).ok_or("no log directory on this platform")?;
+    let dir = path.parent().ok_or("no log directory")?;
+    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    open::that(dir).map_err(|e| e.to_string())
+}
+
 /// Quit from the UI. The exit handler in `lib.rs` releases the strip.
 #[tauri::command]
 pub fn quit(app: AppHandle) {
@@ -413,6 +436,6 @@ pub fn quit(app: AppHandle) {
 
 fn changed(app: &AppHandle) {
     if let Err(e) = app.emit(CHANGED_EVENT, ()) {
-        eprintln!("task rail: could not emit {CHANGED_EVENT}: {e}");
+        log::warn!("could not emit {CHANGED_EVENT}: {e}");
     }
 }

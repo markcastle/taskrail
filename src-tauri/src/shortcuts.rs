@@ -28,6 +28,6 @@ pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 /// without a hotkey is still a rail.
 pub fn register(app: &AppHandle) {
     if let Err(e) = app.global_shortcut().register(quick_add_shortcut()) {
-        eprintln!("task rail: could not register Ctrl+Shift+Space: {e}");
+        log::warn!("could not register Ctrl+Shift+Space: {e}");
     }
 }

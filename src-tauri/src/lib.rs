@@ -9,6 +9,7 @@
 mod commands;
 mod connectors;
 mod dock;
+mod logs;
 mod model;
 mod rail;
 mod secrets;
@@ -26,6 +27,7 @@ use tauri::{Manager, RunEvent};
 
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(logs::plugin())
         .plugin(shortcuts::plugin())
         .invoke_handler(tauri::generate_handler![
             commands::rail_view,
@@ -50,8 +52,16 @@ pub fn run() {
             commands::test_model,
             commands::discover_connector,
             commands::sign_in,
+            commands::read_log,
+            commands::log_from_ui,
+            commands::open_log_folder,
+            commands::close_settings,
         ])
         .setup(|app| {
+            log::info!("Task Rail {} starting", env!("CARGO_PKG_VERSION"));
+            if let Some(path) = logs::file(app.handle()) {
+                log::info!("log file: {}", path.display());
+            }
             let rail = rail::Rail::open(data_file(app.handle()))?;
             let connectors = connectors::ConnectorRegistry::load(rail.service.repository());
             app.manage(AppState::new(rail, connectors));
@@ -88,7 +98,7 @@ fn release_on_console_signal(app: tauri::AppHandle) {
         dock::release(&app);
         std::process::exit(0);
     }) {
-        eprintln!("task rail: could not install the console signal handler: {e}");
+        log::warn!("could not install the console signal handler: {e}");
     }
 }
 

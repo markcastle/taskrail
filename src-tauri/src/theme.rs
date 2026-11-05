@@ -19,7 +19,7 @@ pub fn apply(app: &AppHandle) {
     let theme = window_theme(app);
     for window in app.webview_windows().values() {
         if let Err(e) = window.set_theme(theme) {
-            eprintln!("task rail: could not set the window theme: {e}");
+            log::warn!("could not set the window theme: {e}");
         }
     }
 }

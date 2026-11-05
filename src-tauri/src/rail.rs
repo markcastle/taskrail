@@ -25,7 +25,7 @@ impl Rail {
         let mut store = match &path {
             Some(path) => SqliteStore::open(path)?,
             None => {
-                eprintln!("task rail: no data directory, running in memory");
+                log::warn!("no data directory, running in memory");
                 SqliteStore::in_memory()?
             }
         };
