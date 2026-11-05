@@ -22,11 +22,15 @@ pub enum ServerSpec {
         env: BTreeMap<String, String>,
     },
     /// Streamable HTTP. `bearer_secret` names an entry in the secret store
-    /// that holds a token to send; sign-in flows fill it in.
+    /// holding a static token to send. `oauth_secret` names the entry
+    /// holding credentials from the MCP sign-in flow. Both are names, never
+    /// the secrets themselves.
     Http {
         url: String,
         #[serde(default)]
         bearer_secret: Option<String>,
+        #[serde(default)]
+        oauth_secret: Option<String>,
     },
 }
 

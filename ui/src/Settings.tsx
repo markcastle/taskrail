@@ -360,6 +360,22 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
       .catch((e) => onNotice(String(e)))
       .finally(() => setBusy(false))
   }
+  const signIn = () => {
+    if (!server || server.transport !== 'http') return
+    setBusy(true)
+    setResult(null)
+    onNotice('Finish signing in in your browser; this window will carry on by itself.')
+    backend
+      .signIn(id, server.url)
+      .then(() => {
+        onNotice('Signed in. Discovering…')
+        discover()
+      })
+      .catch((e) => {
+        onNotice(String(e))
+        setBusy(false)
+      })
+  }
   const add = () => {
     setBusy(true)
     backend
@@ -418,6 +434,16 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
           {busy ? 'Discovering…' : 'Discover'}
         </button>
       </div>
+      {result?.status === 'sign_in_required' && (
+        <div className="callout callout--info" data-testid="sign-in-required">
+          This server wants you to sign in before it will talk. Your browser will open; when you come back, discovery continues on its own.
+          <div className="settings-actions">
+            <button type="button" className="button--primary" disabled={busy} onClick={signIn}>
+              Sign in
+            </button>
+          </div>
+        </div>
+      )}
       {result?.status === 'needs_confirmation' && (
         <div className="callout">
           The model wants to list items with <code>{result.tool}</code>, which the server does not mark as read-only. Discovery will call it once.

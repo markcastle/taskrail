@@ -18,7 +18,7 @@ The plan, with every decision and why, lives in the project doc linked from the 
 | --- | --- |
 | 1. Docking spike: a reserved strip on Windows, a floating edge panel on macOS | Built, awaiting hands-on testing on both platforms |
 | 2. Core and local tasks: sections, cards, active task mode, quick-add | Built: SQLite store, drag to reorder, flick to complete, quick-add with a global shortcut, settings |
-| 3. Generic MCP connector: discovery, profiles, two-way sync | Built: profiles, the MCP client, two-way sync, a demo tracker, and model-assisted discovery. Sign-in for remote servers is next |
+| 3. Generic MCP connector: discovery, profiles, two-way sync | Built: profiles, the MCP client, two-way sync, a demo tracker, model-assisted discovery, and the MCP sign-in flow for remote servers. Awaiting a hands-on run against a real remote server |
 | 4. Rail as an MCP server, tray, settings, release pipeline | Not started |
 
 ## Running it
@@ -73,7 +73,7 @@ Your data lives in `rail.sqlite` in the app's data directory for your user. Dele
 Open the gear and look at the Connectors box.
 
 - **Add demo tracker** connects a small fake issue tracker that ships inside the app. Its tickets appear as cards within a few seconds, marked with their source. Drag one into In Progress and the tracker's ticket moves state too. It's the quickest way to see two-way sync working.
-- **Add server** is the real thing. Give it a name and either a URL or a command, press Discover, and a model reads the server's tool list, writes a Connector Profile, and the app tests that profile against the live server before showing you what it found. You see the first few items it pulled and the profile itself, which you can edit, then save. If the model picks a list tool the server doesn't promise is read-only, discovery stops and asks before calling it. Discovery needs a model: set one up under **Model** in the same panel with your own key for Anthropic, OpenRouter or OpenAI. The key goes in your operating system's credential store, never in a file.
+- **Add server** is the real thing. Give it a name and either a URL or a command, press Discover, and a model reads the server's tool list, writes a Connector Profile, and the app tests that profile against the live server before showing you what it found. You see the first few items it pulled and the profile itself, which you can edit, then save. If the model picks a list tool the server doesn't promise is read-only, discovery stops and asks before calling it. If the server wants you to sign in first, discovery stops with a Sign in button: your browser opens, you sign in there, and when it comes back discovery carries on by itself. The resulting credentials live in your credential store and are refreshed automatically. Discovery needs a model: set one up under **Model** in the same panel with your own key for Anthropic, OpenRouter or OpenAI. The key goes in your operating system's credential store, never in a file.
 - **Paste profile** takes a Connector Profile directly, a JSON document that says how to reach an MCP server, which tool lists your items, how to read each field out of the result, which tool changes a status, and how its status words map onto the rail's sections. The profile for the demo tracker in `crates/connector-mcp/src/profile.rs` is the worked example.
 
 The model is only involved at setup. Once a profile exists, every pull and every write-back is plain code with no model in the loop.

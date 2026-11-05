@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use rmcp::model::{CallToolRequestParams, ClientConfig, Tool};
 use rmcp::service::RunningService;
+use rmcp::transport::auth::AuthClient;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{StreamableHttpClientTransport, TokioChildProcess};
 use rmcp::{RoleClient, ServiceExt};
@@ -12,6 +13,7 @@ use serde_json::Value;
 use taskrail_connector_api::ConnectorError;
 use tokio::process::Command;
 
+use crate::auth::SessionAuth;
 use crate::profile::ServerSpec;
 
 /// What discovery hands to a model: the parts of a tool definition that
@@ -52,10 +54,18 @@ pub struct McpSession {
 }
 
 impl McpSession {
-    /// Connect and complete the MCP handshake. `bearer` is sent as an
-    /// `Authorization` header on HTTP transports when present.
-    pub async fn connect(spec: &ServerSpec, bearer: Option<&str>) -> Result<Self, ConnectorError> {
-        let transport_err = |e: &dyn std::fmt::Display| ConnectorError::Transport(e.to_string());
+    /// Connect and complete the MCP handshake. On HTTP transports a bearer
+    /// token is sent when present, and stored OAuth credentials are used
+    /// when the auth carries a store that has some.
+    pub async fn connect(spec: &ServerSpec, auth: &SessionAuth) -> Result<Self, ConnectorError> {
+        let transport_err = |e: &dyn std::fmt::Display| {
+            let text = e.to_string();
+            if text.contains("Auth required") || text.contains("401") {
+                ConnectorError::Auth("this server needs you to sign in".into())
+            } else {
+                ConnectorError::Transport(text)
+            }
+        };
         let service = match spec {
             ServerSpec::Stdio { command, args, env } => {
                 let mut cmd = Command::new(command);
@@ -71,14 +81,32 @@ impl McpSession {
             }
             ServerSpec::Http { url, .. } => {
                 let mut config = StreamableHttpClientTransportConfig::with_uri(url.clone());
-                if let Some(token) = bearer {
+                if let Some(token) = &auth.bearer {
                     config.auth_header = Some(format!("Bearer {token}"));
                 }
-                let transport = StreamableHttpClientTransport::from_config(config);
-                ClientConfig::default()
-                    .serve(transport)
-                    .await
-                    .map_err(|e| transport_err(&e))?
+                match &auth.oauth {
+                    Some(store) => {
+                        let manager = crate::auth::restore(url, store.clone())
+                            .await
+                            .map_err(|e| ConnectorError::Auth(e.to_string()))?
+                            .ok_or_else(|| {
+                                ConnectorError::Auth("this server needs you to sign in".into())
+                            })?;
+                        let client = AuthClient::new(reqwest::Client::default(), manager);
+                        let transport = StreamableHttpClientTransport::with_client(client, config);
+                        ClientConfig::default()
+                            .serve(transport)
+                            .await
+                            .map_err(|e| transport_err(&e))?
+                    }
+                    None => {
+                        let transport = StreamableHttpClientTransport::from_config(config);
+                        ClientConfig::default()
+                            .serve(transport)
+                            .await
+                            .map_err(|e| transport_err(&e))?
+                    }
+                }
             }
         };
         Ok(Self { service })

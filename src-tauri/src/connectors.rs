@@ -14,7 +14,8 @@ use taskrail_connector_mcp::profile::fake_tracker_profile;
 use taskrail_connector_mcp::{ConnectorProfile, McpConnector, ServerSpec};
 use taskrail_core::ports::{KeyValueStore, SecretStore};
 
-use crate::secrets::OsSecrets;
+use crate::secrets::{KeychainCredentials, OsSecrets};
+use taskrail_connector_mcp::{CredentialPersistence, SessionAuth};
 
 pub const PROFILES_KEY: &str = "connector_profiles";
 
@@ -103,14 +104,8 @@ impl ConnectorRegistry {
             return Some(c.clone());
         }
         let profile = self.profiles.iter().find(|p| p.id == id)?.clone();
-        let bearer = match &profile.server {
-            ServerSpec::Http {
-                bearer_secret: Some(name),
-                ..
-            } => OsSecrets.get(name).ok().flatten(),
-            _ => None,
-        };
-        let connector = Arc::new(McpConnector::new(profile, bearer));
+        let auth = session_auth(&profile.server);
+        let connector = Arc::new(McpConnector::new(profile, auth));
         self.live.insert(id.to_owned(), connector.clone());
         Some(connector)
     }
@@ -185,4 +180,28 @@ pub fn demo_profile() -> Result<ConnectorProfile, String> {
 /// Where a connector's bearer token lives in the credential store.
 pub fn bearer_secret_name(connector_id: &str) -> String {
     format!("connector:{connector_id}:bearer")
+}
+
+/// How to get let in to a server, from the names its spec records.
+pub fn session_auth(server: &ServerSpec) -> SessionAuth {
+    match server {
+        ServerSpec::Http {
+            bearer_secret,
+            oauth_secret,
+            ..
+        } => SessionAuth {
+            bearer: bearer_secret
+                .as_deref()
+                .and_then(|name| OsSecrets.get(name).ok().flatten()),
+            oauth: oauth_secret.as_deref().map(|name| {
+                Arc::new(KeychainCredentials::new(name)) as Arc<dyn CredentialPersistence>
+            }),
+        },
+        ServerSpec::Stdio { .. } => SessionAuth::default(),
+    }
+}
+
+/// Where a connector's sign-in credentials live in the credential store.
+pub fn oauth_secret_name(connector_id: &str) -> String {
+    format!("connector:{connector_id}:oauth")
 }

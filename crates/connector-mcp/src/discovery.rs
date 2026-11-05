@@ -15,6 +15,7 @@ use taskrail_connector_api::RemoteItem;
 use taskrail_core::domain::ItemKind;
 use taskrail_llm::{extract_json, LlmClient, LlmError, LlmRequest};
 
+use crate::auth::SessionAuth;
 use crate::extract::extract_items;
 use crate::profile::{fake_tracker_profile, ConnectorProfile, ServerSpec};
 use crate::session::{McpSession, ToolSummary};
@@ -22,7 +23,7 @@ use crate::session::{McpSession, ToolSummary};
 pub const MAX_ROUNDS: usize = 3;
 const SAMPLE_CHARS: usize = 6_000;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct DiscoveryRequest {
     /// The id the profile will get. Letters, digits and dashes.
     pub id: String,
@@ -36,8 +37,9 @@ pub struct DiscoveryRequest {
     /// Allow validation to call a list tool the server does not mark
     /// read-only. Off by default; the UI asks the user first.
     pub allow_unannotated_list: bool,
-    /// A static token for HTTP servers that want one.
-    pub bearer: Option<String>,
+    /// How to get let in: a static token, stored sign-in credentials, or
+    /// nothing.
+    pub auth: SessionAuth,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +58,8 @@ pub struct DiscoveryOutcome {
 pub enum DiscoveryError {
     #[error("could not reach the server: {0}")]
     Server(String),
+    #[error("sign in required: {0}")]
+    SignInRequired(String),
     #[error("the server has no tools")]
     NoTools,
     #[error("the model could not be used: {0}")]
@@ -74,9 +78,12 @@ pub async fn discover(
     request: &DiscoveryRequest,
     llm: &dyn LlmClient,
 ) -> Result<DiscoveryOutcome, DiscoveryError> {
-    let session = McpSession::connect(&request.server, request.bearer.as_deref())
+    let session = McpSession::connect(&request.server, &request.auth)
         .await
-        .map_err(|e| DiscoveryError::Server(e.to_string()))?;
+        .map_err(|e| match e {
+            taskrail_connector_api::ConnectorError::Auth(m) => DiscoveryError::SignInRequired(m),
+            other => DiscoveryError::Server(other.to_string()),
+        })?;
     let outcome = discover_with(request, llm, &session).await;
     session.close().await;
     outcome

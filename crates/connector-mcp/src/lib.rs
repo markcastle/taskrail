@@ -8,7 +8,8 @@
 //!   the rail's sections. A profile is plain JSON that a person can read and
 //!   edit. Discovery writes one with a model's help; presets ship with the app.
 //! - [`session`] holds the live connection, over a child process or HTTP,
-//!   and turns tool results into JSON values.
+//!   and turns tool results into JSON values. [`auth`] gets it let in when
+//!   the server wants a sign-in.
 //! - [`extract`] applies a profile's JSONPath expressions to those values.
 //! - [`connector`] puts the three together behind the [`Connector`] trait.
 //!
@@ -17,6 +18,7 @@
 //!
 //! [`Connector`]: taskrail_connector_api::Connector
 
+pub mod auth;
 pub mod connector;
 pub mod discovery;
 pub mod extract;
@@ -24,6 +26,7 @@ pub mod fake_server;
 pub mod profile;
 pub mod session;
 
+pub use auth::{CredentialPersistence, SessionAuth};
 pub use connector::McpConnector;
 pub use discovery::{discover, DiscoveryError, DiscoveryOutcome, DiscoveryRequest};
 pub use profile::{ConnectorProfile, FieldPaths, ListSpec, ServerSpec, ToolSpec};

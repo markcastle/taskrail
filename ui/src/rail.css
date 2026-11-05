@@ -804,3 +804,7 @@ button {
   padding-left: 18px;
   line-height: 1.6;
 }
+
+.callout--info {
+  background: color-mix(in srgb, var(--progress) 14%, var(--bg));
+}

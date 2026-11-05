@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use async_trait::async_trait;
 use taskrail_connector_mcp::profile::fake_tracker_profile;
-use taskrail_connector_mcp::{discover, DiscoveryError, DiscoveryRequest, ServerSpec};
+use taskrail_connector_mcp::{discover, DiscoveryError, DiscoveryRequest, ServerSpec, SessionAuth};
 use taskrail_core::domain::ItemKind;
 use taskrail_llm::{LlmClient, LlmError, LlmRequest};
 
@@ -52,7 +52,7 @@ fn request() -> DiscoveryRequest {
         kind: ItemKind::Task,
         hint: String::new(),
         allow_unannotated_list: false,
-        bearer: None,
+        auth: SessionAuth::default(),
     }
 }
 

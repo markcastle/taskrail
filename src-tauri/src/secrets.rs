@@ -48,3 +48,28 @@ pub fn llm_key_name(provider: taskrail_llm::Provider) -> String {
             .unwrap_or_default()
     )
 }
+
+/// Serialized OAuth credentials for one connector, in the credential store.
+pub struct KeychainCredentials {
+    key: String,
+}
+
+impl KeychainCredentials {
+    pub fn new(key: impl Into<String>) -> Self {
+        Self { key: key.into() }
+    }
+}
+
+impl taskrail_connector_mcp::CredentialPersistence for KeychainCredentials {
+    fn load(&self) -> Result<Option<String>, String> {
+        OsSecrets.get(&self.key).map_err(|e| e.to_string())
+    }
+
+    fn save(&self, json: &str) -> Result<(), String> {
+        OsSecrets.set(&self.key, json).map_err(|e| e.to_string())
+    }
+
+    fn clear(&self) -> Result<(), String> {
+        OsSecrets.delete(&self.key).map_err(|e| e.to_string())
+    }
+}

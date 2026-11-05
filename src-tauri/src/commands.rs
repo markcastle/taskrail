@@ -302,6 +302,7 @@ pub enum DiscoveryResult {
         tool: String,
         profile: taskrail_connector_mcp::ConnectorProfile,
     },
+    SignInRequired,
 }
 
 #[derive(Debug, Deserialize)]
@@ -328,15 +329,37 @@ pub async fn discover_connector(
     app: AppHandle,
     request: DiscoverRequest,
 ) -> CommandResult<DiscoveryResult> {
+    use taskrail_core::ports::SecretStore;
     let llm = crate::model::client(&app)?;
+    let mut server = request.server;
+    let mut auth = taskrail_connector_mcp::SessionAuth {
+        bearer: request.bearer.filter(|t| !t.trim().is_empty()),
+        oauth: None,
+    };
+    // A completed sign-in for this id is picked up here and recorded in the
+    // spec, so the saved profile knows where its credentials live.
+    if let taskrail_connector_mcp::ServerSpec::Http { oauth_secret, .. } = &mut server {
+        let name = crate::connectors::oauth_secret_name(&request.id);
+        if crate::secrets::OsSecrets
+            .get(&name)
+            .ok()
+            .flatten()
+            .is_some()
+        {
+            *oauth_secret = Some(name.clone());
+            auth.oauth = Some(std::sync::Arc::new(
+                crate::secrets::KeychainCredentials::new(name),
+            ));
+        }
+    }
     let request = taskrail_connector_mcp::DiscoveryRequest {
         id: request.id,
         name: request.name,
-        server: request.server,
+        server,
         kind: request.kind,
         hint: request.hint,
         allow_unannotated_list: request.allow_unannotated_list,
-        bearer: request.bearer.filter(|t| !t.trim().is_empty()),
+        auth,
     };
     match taskrail_connector_mcp::discover(&request, llm.as_ref()).await {
         Ok(outcome) => Ok(DiscoveryResult::Ok(outcome)),
@@ -346,8 +369,34 @@ pub async fn discover_connector(
                 profile: *profile,
             })
         }
+        Err(taskrail_connector_mcp::DiscoveryError::SignInRequired(_)) => {
+            Ok(DiscoveryResult::SignInRequired)
+        }
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// The MCP sign-in flow for one server: open the browser, wait for it to
+/// come back to a local port, keep the credentials in the credential store.
+/// Blocks until the person finishes or five minutes pass.
+#[tauri::command]
+pub async fn sign_in(id: String, url: String) -> CommandResult<()> {
+    let store = std::sync::Arc::new(crate::secrets::KeychainCredentials::new(
+        crate::connectors::oauth_secret_name(&id),
+    ));
+    let start = taskrail_connector_mcp::auth::begin(&url, store)
+        .await
+        .map_err(|e| format!("could not start the sign-in: {e}"))?;
+    if let Err(e) = open::that(&start.auth_url) {
+        return Err(format!(
+            "could not open your browser ({e}); visit this address yourself: {}",
+            start.auth_url
+        ));
+    }
+    start
+        .finish(std::time::Duration::from_secs(300))
+        .await
+        .map_err(|e| format!("sign-in failed: {e}"))
 }
 
 #[tauri::command]

@@ -48,6 +48,7 @@ pub fn run() {
             commands::save_model_settings,
             commands::test_model,
             commands::discover_connector,
+            commands::sign_in,
         ])
         .setup(|app| {
             let rail = rail::Rail::open(data_file(app.handle()))?;

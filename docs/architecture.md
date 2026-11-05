@@ -70,7 +70,11 @@ A calendar is just a connector whose items carry a time window and no status.
 
 `crates/llm` is the only place a model is called. It has one method, text in and text out, and two wire formats: Anthropic's Messages API spoken natively, and the chat completions shape for OpenAI and OpenRouter. The tests use a mock HTTP server to pin the request shape and the error typing. Keys live in the OS credential store through `src-tauri/src/secrets.rs`; the SQLite file only ever holds the provider and model name.
 
-Still to come: the sign-in flow for remote servers that use the MCP authorization spec, bearer tokens for servers that use a static one, and presets for popular servers so most people never trigger the model at all.
+### Signing in
+
+`connector-mcp/src/auth.rs` wraps the SDK's OAuth state machine. A sign-in binds a loopback port, asks the SDK to discover the server's authorization metadata and register a client (dynamic registration, or a pre-registered id later), opens the authorization URL in the browser via the shell, waits for the redirect on the loopback port, exchanges the code, and lets the SDK write the credentials to a `CredentialStore`. Our store serializes them as JSON into the OS credential store under `connector:<id>:oauth`; the profile records only that name. On every later connection the manager is rebuilt from the store and the SDK refreshes tokens as needed. A server that answers the first request with a 401 surfaces as `ConnectorError::Auth`, which discovery turns into `SignInRequired` so the UI can offer the button.
+
+Still to come: presets for popular servers so most people never trigger the model at all, and pre-registered client ids for servers that refuse dynamic registration.
 
 ## What we have deliberately not done
 

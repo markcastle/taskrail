@@ -3,7 +3,7 @@
 
 use taskrail_connector_api::Connector;
 use taskrail_connector_mcp::profile::fake_tracker_profile;
-use taskrail_connector_mcp::{McpConnector, McpSession, ServerSpec};
+use taskrail_connector_mcp::{McpConnector, McpSession, ServerSpec, SessionAuth};
 use taskrail_core::domain::{Priority, Status};
 
 fn server() -> &'static str {
@@ -17,7 +17,9 @@ async fn the_fake_tracker_describes_its_tools_with_annotations() {
         args: vec![],
         env: Default::default(),
     };
-    let session = McpSession::connect(&spec, None).await.unwrap();
+    let session = McpSession::connect(&spec, &SessionAuth::default())
+        .await
+        .unwrap();
     let tools = session.tools().await.unwrap();
     let mut names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
     names.sort_unstable();
@@ -42,7 +44,7 @@ async fn the_fake_tracker_describes_its_tools_with_annotations() {
 
 #[tokio::test]
 async fn list_then_transition_then_create() {
-    let connector = McpConnector::new(fake_tracker_profile(server()), None);
+    let connector = McpConnector::new(fake_tracker_profile(server()), SessionAuth::default());
     let info = connector.info();
     assert!(info.capabilities.write_status && info.capabilities.create);
 

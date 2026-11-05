@@ -78,7 +78,7 @@ export interface ModelSettings {
 
 export type ServerSpec =
   | { transport: 'stdio'; command: string; args: string[]; env: Record<string, string> }
-  | { transport: 'http'; url: string; bearer_secret: string | null }
+  | { transport: 'http'; url: string; bearer_secret: string | null; oauth_secret?: string | null }
 
 export interface DiscoverRequest {
   id: string
@@ -107,6 +107,7 @@ export interface DiscoveryOutcome {
 export type DiscoveryResult =
   | ({ status: 'ok' } & DiscoveryOutcome)
   | { status: 'needs_confirmation'; tool: string; profile: Record<string, unknown> }
+  | { status: 'sign_in_required' }
 
 export interface RailBackend {
   view(expandTop: boolean): Promise<RailView>
@@ -139,6 +140,8 @@ export interface RailBackend {
   testModel(): Promise<string>
   /** Ask the model to write a profile for a server and validate it live. */
   discoverConnector(request: DiscoverRequest): Promise<DiscoveryResult>
+  /** Run the MCP sign-in flow in the browser for a server. Resolves when the browser comes back. */
+  signIn(id: string, url: string): Promise<void>
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
   onChanged(callback: () => void): () => void
   /** Fires when the global quick-add shortcut was pressed. Returns an unsubscribe. */
@@ -189,6 +192,7 @@ function tauriBackend(): RailBackend {
     saveModelSettings: (config, apiKey) => call('save_model_settings', { config, apiKey: apiKey ?? null }),
     testModel: () => call('test_model'),
     discoverConnector: (request) => call('discover_connector', { request }),
+    signIn: (id, url) => call('sign_in', { id, url }),
   }
 }
 
@@ -207,6 +211,7 @@ interface DevState {
   settings: RailSettings
   connectors: ConnectorSummary[]
   modelSettings: ModelSettings
+  signedIn?: string[]
 }
 
 function browserBackend(): RailBackend {
@@ -251,6 +256,7 @@ function browserBackend(): RailBackend {
   let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60 }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
+  let signedIn: string[] = []
   const changedListeners = new Set<() => void>()
   const quickAddListeners = new Set<() => void>()
   const syncErrorListeners = new Set<(e: SyncError) => void>()
@@ -265,13 +271,14 @@ function browserBackend(): RailBackend {
       settings = state.settings
       connectors = state.connectors
       modelSettings = state.modelSettings
+      signedIn = state.signedIn ?? []
     } catch {
       /* fresh state */
     }
   }
   const persist = () => {
     try {
-      const state: DevState = { items, active, settings, connectors, modelSettings }
+      const state: DevState = { items, active, settings, connectors, modelSettings, signedIn }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {
       /* private mode or blocked storage: keep going in memory */
@@ -464,6 +471,9 @@ function browserBackend(): RailBackend {
           if (request.server.transport === 'stdio' && request.server.command.includes('risky') && !request.allow_unannotated_list) {
             return resolve({ status: 'needs_confirmation', tool: 'transition_ticket', profile: { id: request.id } })
           }
+          if (request.server.transport === 'http' && request.server.url.includes('oauth') && !signedIn.includes(request.id)) {
+            return resolve({ status: 'sign_in_required' })
+          }
           resolve({
             status: 'ok',
             profile: {
@@ -485,6 +495,15 @@ function browserBackend(): RailBackend {
             rounds: 1,
             notes: [],
           })
+        }, 300),
+      ),
+    signIn: (id) =>
+      new Promise((resolve) =>
+        setTimeout(() => {
+          load()
+          signedIn = [...signedIn, id]
+          persist()
+          resolve()
         }, 300),
       ),
     onChanged: (cb) => (changedListeners.add(cb), () => changedListeners.delete(cb)),

@@ -7,22 +7,23 @@ use taskrail_connector_api::{
 use taskrail_core::domain::{ConnectorId, Status};
 use tokio::sync::Mutex;
 
+use crate::auth::SessionAuth;
 use crate::extract::{extract_items, fill_arguments};
 use crate::profile::ConnectorProfile;
 use crate::session::McpSession;
 
 pub struct McpConnector {
     profile: ConnectorProfile,
-    bearer: Option<String>,
+    auth: SessionAuth,
     session: Mutex<Option<McpSession>>,
 }
 
 impl McpConnector {
     /// Nothing is connected until the first call, so building one is free.
-    pub fn new(profile: ConnectorProfile, bearer: Option<String>) -> Self {
+    pub fn new(profile: ConnectorProfile, auth: SessionAuth) -> Self {
         Self {
             profile,
-            bearer,
+            auth,
             session: Mutex::new(None),
         }
     }
@@ -40,13 +41,16 @@ impl McpConnector {
     ) -> ConnectorResult<serde_json::Value> {
         let mut guard = self.session.lock().await;
         if guard.is_none() {
-            *guard = Some(McpSession::connect(&self.profile.server, self.bearer.as_deref()).await?);
+            *guard = Some(McpSession::connect(&self.profile.server, &self.auth).await?);
         }
         let outcome = match guard.as_ref() {
             Some(session) => session.call(tool, arguments).await,
             None => Err(ConnectorError::Transport("no session".into())),
         };
-        if matches!(outcome, Err(ConnectorError::Transport(_))) {
+        if matches!(
+            outcome,
+            Err(ConnectorError::Transport(_) | ConnectorError::Auth(_))
+        ) {
             if let Some(session) = guard.take() {
                 session.close().await;
             }
