@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 
 use crate::auth::SessionAuth;
 use crate::extract::{extract_items, fill_arguments};
+
 use crate::profile::ConnectorProfile;
 use crate::session::McpSession;
 
@@ -79,13 +80,23 @@ impl Connector for McpConnector {
     }
 
     async fn list(&self) -> ConnectorResult<Vec<RemoteItem>> {
-        let result = self
-            .call(
-                &self.profile.list.call.tool,
-                &self.profile.list.call.arguments,
-            )
-            .await?;
-        extract_items(&self.profile, &result).map_err(|e| ConnectorError::Protocol(e.to_string()))
+        let mut guard = self.session.lock().await;
+        if guard.is_none() {
+            *guard = Some(McpSession::connect(&self.profile.server, &self.auth).await?);
+        }
+        let outcome = match guard.as_ref() {
+            Some(session) => crate::extract::fetch_items(session, &self.profile).await,
+            None => Err(ConnectorError::Transport("no session".into())),
+        };
+        if matches!(
+            outcome,
+            Err(ConnectorError::Transport(_) | ConnectorError::Auth(_))
+        ) {
+            if let Some(session) = guard.take() {
+                session.close().await;
+            }
+        }
+        outcome
     }
 
     async fn set_status(&self, external_id: &str, status: Status) -> ConnectorResult<()> {

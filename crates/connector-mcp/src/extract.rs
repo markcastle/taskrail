@@ -168,25 +168,83 @@ fn extract_item(
 /// Fill `{external_id}`, `{status}` and `{title}` placeholders anywhere in
 /// a tool's argument template.
 pub fn fill_arguments(template: &Value, external_id: &str, status: &str, title: &str) -> Value {
+    fill_placeholders(
+        template,
+        &[
+            ("{external_id}", external_id),
+            ("{status}", status),
+            ("{title}", title),
+        ],
+    )
+}
+
+/// Replace every placeholder in every string of a template. A string that
+/// is exactly one placeholder becomes the raw value, so an id stays an id.
+pub fn fill_placeholders(template: &Value, pairs: &[(&str, &str)]) -> Value {
     match template {
-        Value::String(s) => Value::String(
-            s.replace("{external_id}", external_id)
-                .replace("{status}", status)
-                .replace("{title}", title),
-        ),
-        Value::Array(items) => Value::Array(
-            items
-                .iter()
-                .map(|v| fill_arguments(v, external_id, status, title))
-                .collect(),
-        ),
+        Value::String(s) => {
+            let mut out = s.clone();
+            for (from, to) in pairs {
+                out = out.replace(from, to);
+            }
+            Value::String(out)
+        }
+        Value::Array(items) => {
+            Value::Array(items.iter().map(|v| fill_placeholders(v, pairs)).collect())
+        }
         Value::Object(map) => Value::Object(
             map.iter()
-                .map(|(k, v)| (k.clone(), fill_arguments(v, external_id, status, title)))
+                .map(|(k, v)| (k.clone(), fill_placeholders(v, pairs)))
                 .collect(),
         ),
         other => other.clone(),
     }
+}
+
+/// Run a profile's list call against a session, including the `for_each`
+/// fan-out, and return every item. The one place the list pipeline lives;
+/// the connector and discovery both use it.
+pub async fn fetch_items(
+    session: &crate::session::McpSession,
+    profile: &ConnectorProfile,
+) -> Result<Vec<RemoteItem>, taskrail_connector_api::ConnectorError> {
+    use taskrail_connector_api::ConnectorError;
+    let list = &profile.list;
+    let Some(each) = &list.for_each else {
+        let raw = session.call(&list.call.tool, &list.call.arguments).await?;
+        return extract_items(profile, &raw).map_err(|e| ConnectorError::Protocol(e.to_string()));
+    };
+    let parent = session.call(&each.tool, &each.arguments).await?;
+    let elements = path(&each.items)
+        .map_err(|e| ConnectorError::Invalid(e.to_string()))?
+        .query(&parent)
+        .all();
+    let mut ids = Vec::new();
+    for element in elements {
+        if let Some(id) =
+            string_at(element, &each.id).map_err(|e| ConnectorError::Invalid(e.to_string()))?
+        {
+            ids.push(id);
+        }
+    }
+    log::info!(
+        "{}: {} returned {} ids to fan out over",
+        profile.id,
+        each.tool,
+        ids.len()
+    );
+    let mut all = Vec::new();
+    for id in ids {
+        let arguments = fill_placeholders(
+            &list.call.arguments,
+            &[(each.placeholder.as_str(), id.as_str())],
+        );
+        let raw = session.call(&list.call.tool, &arguments).await?;
+        let mut items =
+            extract_items(profile, &raw).map_err(|e| ConnectorError::Protocol(e.to_string()))?;
+        all.append(&mut items);
+    }
+    Ok(all)
 }
 
 #[cfg(test)]
@@ -269,6 +327,15 @@ mod tests {
         );
         assert_eq!(parse_time("1762358400000"), parse_time("1762358400"));
         assert!(parse_time("next tuesday").is_none());
+    }
+
+    #[test]
+    fn any_placeholder_can_be_filled() {
+        let filled = fill_placeholders(
+            &json!({ "board_id": "{board_id}", "x": "{other}" }),
+            &[("{board_id}", "b-1")],
+        );
+        assert_eq!(filled, json!({ "board_id": "b-1", "x": "{other}" }));
     }
 
     #[test]

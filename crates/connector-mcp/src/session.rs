@@ -25,9 +25,25 @@ pub struct ToolSummary {
     pub input_schema: Value,
     #[serde(default)]
     pub output_schema: Option<Value>,
-    /// `true` when the server says the tool changes nothing. Discovery may
-    /// call these freely; anything else needs the user's say-so.
+    /// `true` when the server says the tool changes nothing, or when its
+    /// name says so by convention (`list_`, `get_`, `search_`, `find_`,
+    /// `whoami`). Discovery may call these freely; anything else needs the
+    /// user's say-so.
     pub read_only: bool,
+}
+
+/// Servers often leave annotations off. A name that starts with a reading
+/// verb is treated as read-only; a wrong guess here can only read.
+pub fn looks_read_only(name: &str) -> bool {
+    const READING: [&str; 10] = [
+        "list", "get", "search", "find", "whoami", "read", "fetch", "query", "describe", "preview",
+    ];
+    let lower = name.to_ascii_lowercase();
+    READING.iter().any(|verb| {
+        lower == *verb
+            || lower.starts_with(&format!("{verb}_"))
+            || lower.starts_with(&format!("{verb}-"))
+    })
 }
 
 impl From<&Tool> for ToolSummary {
@@ -44,7 +60,7 @@ impl From<&Tool> for ToolSummary {
                 .annotations
                 .as_ref()
                 .and_then(|a| a.read_only_hint)
-                .unwrap_or(false),
+                .unwrap_or_else(|| looks_read_only(&tool.name)),
         }
     }
 }

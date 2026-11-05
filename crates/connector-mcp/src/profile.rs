@@ -70,6 +70,21 @@ pub struct FieldPaths {
     pub updated_at: Option<String>,
 }
 
+/// A parent call whose results feed the list call: "for each board, list
+/// its tasks". The parent is called once; `items` selects its elements and
+/// `id` reads the value that replaces `placeholder` in the list call's
+/// arguments, which then runs once per element. Results are concatenated.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForEach {
+    pub tool: String,
+    #[serde(default = "empty_object")]
+    pub arguments: serde_json::Value,
+    pub items: String,
+    pub id: String,
+    /// The placeholder in the list call's arguments, such as `{board_id}`.
+    pub placeholder: String,
+}
+
 /// The list call and how to read its result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListSpec {
@@ -78,6 +93,8 @@ pub struct ListSpec {
     /// JSONPath to the array of items in the result, such as `$.tickets[*]`.
     pub items: String,
     pub fields: FieldPaths,
+    #[serde(default)]
+    pub for_each: Option<ForEach>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,6 +204,7 @@ pub fn fake_tracker_profile(command: impl Into<String>) -> ConnectorProfile {
                 url: Some("$.link".into()),
                 ..FieldPaths::default()
             },
+            for_each: None,
         },
         set_status: Some(ToolSpec {
             tool: "transition_ticket".into(),

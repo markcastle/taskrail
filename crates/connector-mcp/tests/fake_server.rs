@@ -27,7 +27,9 @@ async fn the_fake_tracker_describes_its_tools_with_annotations() {
         names,
         [
             "create_ticket",
+            "get_board",
             "get_ticket",
+            "list_boards",
             "list_tickets",
             "transition_ticket"
         ]
@@ -79,4 +81,26 @@ async fn list_then_transition_then_create() {
             .section_for(moved.status.as_deref().unwrap()),
         Some(Status::InProgress)
     );
+}
+
+#[tokio::test]
+async fn a_profile_can_fan_out_over_boards() {
+    use taskrail_connector_mcp::ForEach;
+    let mut profile = fake_tracker_profile(server());
+    profile.list.call.tool = "get_board".into();
+    profile.list.call.arguments = serde_json::json!({ "board_id": "{board_id}" });
+    profile.list.items = "$.tasks[*]".into();
+    profile.list.for_each = Some(ForEach {
+        tool: "list_boards".into(),
+        arguments: serde_json::json!({}),
+        items: "$.boards[*]".into(),
+        id: "$.board_id".into(),
+        placeholder: "{board_id}".into(),
+    });
+    assert!(profile.validate().is_empty());
+    let connector = McpConnector::new(profile, SessionAuth::default());
+    let items = connector.list().await.unwrap();
+    assert_eq!(items.len(), 7, "every ticket across both boards");
+    assert!(items.iter().any(|i| i.external_id == "T-101"));
+    assert!(items.iter().any(|i| i.external_id == "T-107"));
 }

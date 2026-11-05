@@ -3,6 +3,7 @@
 use std::sync::Mutex;
 
 use async_trait::async_trait;
+use taskrail_connector_mcp::discovery::MAX_ROUNDS;
 use taskrail_connector_mcp::profile::fake_tracker_profile;
 use taskrail_connector_mcp::{discover, DiscoveryError, DiscoveryRequest, ServerSpec, SessionAuth};
 use taskrail_core::domain::ItemKind;
@@ -111,11 +112,74 @@ async fn a_list_tool_that_writes_stops_for_confirmation() {
 }
 
 #[tokio::test]
-async fn nonsense_three_times_gives_up_with_the_last_problem() {
-    let llm = Scripted::new(&["not json", "{\"list\": 5}", "{}"]);
+async fn nonsense_every_round_gives_up_with_the_last_problem() {
+    let answers: Vec<&str> = (0..MAX_ROUNDS)
+        .map(|i| {
+            if i % 2 == 0 {
+                "not json"
+            } else {
+                "{\"list\": 5}"
+            }
+        })
+        .collect();
+    let llm = Scripted::new(&answers);
     let err = discover(&request(), &llm).await.unwrap_err();
     assert!(
-        matches!(err, DiscoveryError::GaveUp { rounds: 3, .. }),
+        matches!(err, DiscoveryError::GaveUp { rounds, .. } if rounds == MAX_ROUNDS),
         "{err}"
+    );
+}
+
+/// A profile that reads tickets board by board, the way a real tracker
+/// without a global list would need.
+fn board_profile_answer() -> String {
+    let mut value = serde_json::to_value(fake_tracker_profile("x")).unwrap();
+    for key in ["id", "name", "server", "kind", "version"] {
+        value.as_object_mut().unwrap().remove(key);
+    }
+    value["list"]["tool"] = serde_json::json!("get_board");
+    value["list"]["arguments"] = serde_json::json!({ "board_id": "{board_id}" });
+    value["list"]["items"] = serde_json::json!("$.tasks[*]");
+    value["list"]["for_each"] = serde_json::json!({
+        "tool": "list_boards", "arguments": {}, "items": "$.boards[*]", "id": "$.board_id", "placeholder": "{board_id}"
+    });
+    value.to_string()
+}
+
+#[tokio::test]
+async fn the_model_can_explore_before_writing_and_fan_out_over_boards() {
+    let explore = r#"{"explore": [{"tool": "list_boards", "arguments": {}}, {"tool": "transition_ticket", "arguments": {"ticket_id": "T-101", "state": "Done"}}]}"#;
+    let llm = Scripted::new(&[explore, &board_profile_answer()]);
+    let outcome = discover(&request(), &llm).await.unwrap();
+    assert_eq!(outcome.rounds, 2);
+    assert_eq!(outcome.sample.len(), 7, "tickets from both boards");
+    assert!(outcome.profile.list.for_each.is_some());
+    let prompts = llm.prompts.lock().unwrap();
+    assert!(
+        prompts[1].contains("b-1111"),
+        "exploration results reach the model"
+    );
+    assert!(
+        prompts[1].contains("refused"),
+        "a write tool is refused during exploration"
+    );
+    assert!(outcome
+        .notes
+        .iter()
+        .any(|n| n.contains("looked at list_boards")));
+}
+
+#[tokio::test]
+async fn an_invented_board_id_gets_the_real_boards_back_as_a_sample() {
+    let bad = board_profile_answer().replace(r#""items":"$.tasks[*]""#, r#""items":"$.cards[*]""#);
+    let llm = Scripted::new(&[&bad, &board_profile_answer()]);
+    let outcome = discover(&request(), &llm).await.unwrap();
+    assert_eq!(outcome.rounds, 2);
+    let prompts = llm.prompts.lock().unwrap();
+    assert!(prompts[1].contains("matched nothing"), "{}", prompts[1]);
+    assert!(
+        prompts[1].contains("\"boards\""),
+        "the parent call's result is the sample for a fan-out: {}",
+        prompts[1]
     );
 }

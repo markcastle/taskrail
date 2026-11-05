@@ -20,6 +20,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct Ticket {
     ticket_id: String,
+    /// The board this ticket sits on.
+    board_id: String,
     summary: String,
     /// One of Backlog, Selected, In Progress, Done.
     state: String,
@@ -48,6 +50,32 @@ struct GetParams {
     ticket_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+struct Board {
+    board_id: String,
+    name: String,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct BoardList {
+    boards: Vec<Board>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+struct BoardParams {
+    /// A board id from list_boards.
+    board_id: String,
+}
+
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct BoardView {
+    board: Board,
+    tasks: Vec<Ticket>,
+}
+
+const BOARD_WORK: &str = "b-1111";
+const BOARD_HOME: &str = "b-2222";
+
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 struct TransitionParams {
     ticket_id: String,
@@ -71,6 +99,11 @@ impl FakeTracker {
         let seed =
             |id: &str, summary: &str, state: &str, priority: &str, due: Option<&str>| Ticket {
                 ticket_id: id.into(),
+                board_id: if id < "T-105" {
+                    BOARD_WORK.into()
+                } else {
+                    BOARD_HOME.into()
+                },
                 summary: summary.into(),
                 state: state.into(),
                 priority: priority.into(),
@@ -126,6 +159,53 @@ impl FakeTracker {
     }
 
     #[tool(
+        description = "List the boards tickets are organised on.",
+        annotations(read_only_hint = true)
+    )]
+    fn list_boards(&self) -> Json<BoardList> {
+        Json(BoardList {
+            boards: vec![
+                Board {
+                    board_id: BOARD_WORK.into(),
+                    name: "Work".into(),
+                },
+                Board {
+                    board_id: BOARD_HOME.into(),
+                    name: "Home".into(),
+                },
+            ],
+        })
+    }
+
+    #[tool(
+        description = "A board and every ticket on it.",
+        annotations(read_only_hint = true)
+    )]
+    fn get_board(
+        &self,
+        Parameters(params): Parameters<BoardParams>,
+    ) -> Result<Json<BoardView>, String> {
+        let name = match params.board_id.as_str() {
+            BOARD_WORK => "Work",
+            BOARD_HOME => "Home",
+            other => return Err(format!("no board {other}")),
+        };
+        let tasks = self
+            .lock()
+            .iter()
+            .filter(|t| t.board_id == params.board_id)
+            .cloned()
+            .collect();
+        Ok(Json(BoardView {
+            board: Board {
+                board_id: params.board_id,
+                name: name.into(),
+            },
+            tasks,
+        }))
+    }
+
+    #[tool(
         description = "Fetch one ticket by id.",
         annotations(read_only_hint = true)
     )]
@@ -171,6 +251,7 @@ impl FakeTracker {
         let id = format!("T-{}", 101 + tickets.len());
         let ticket = Ticket {
             ticket_id: id.clone(),
+            board_id: BOARD_WORK.into(),
             summary: params.summary,
             state: "Backlog".into(),
             priority: "P3".into(),
