@@ -95,6 +95,7 @@ pub fn client(app: &AppHandle) -> Result<Box<dyn LlmClient>, String> {
 /// One cheap round trip to prove the key and model work.
 pub async fn test(app: &AppHandle) -> Result<String, String> {
     let client = client(app)?;
+    log::info!("testing {}", client.describe());
     let reply = client
         .complete(&LlmRequest {
             system: "Answer in five words or fewer.".into(),

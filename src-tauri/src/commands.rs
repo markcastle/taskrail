@@ -365,7 +365,15 @@ pub async fn discover_connector(
         auth,
     };
     match taskrail_connector_mcp::discover(&request, llm.as_ref()).await {
-        Ok(outcome) => Ok(DiscoveryResult::Ok(outcome)),
+        Ok(outcome) => {
+            log::info!(
+                "discovery for {:?} done in {} rounds with {} sample items",
+                outcome.profile.name,
+                outcome.rounds,
+                outcome.sample.len()
+            );
+            Ok(DiscoveryResult::Ok(outcome))
+        }
         Err(taskrail_connector_mcp::DiscoveryError::NeedsConfirmation { tool, profile }) => {
             Ok(DiscoveryResult::NeedsConfirmation {
                 tool,
@@ -387,9 +395,11 @@ pub async fn sign_in(id: String, url: String) -> CommandResult<()> {
     let store = std::sync::Arc::new(crate::secrets::KeychainCredentials::new(
         crate::connectors::oauth_secret_name(&id),
     ));
+    log::info!("sign-in for {id} starting at {url}");
     let start = taskrail_connector_mcp::auth::begin(&url, store)
         .await
         .map_err(|e| format!("could not start the sign-in: {e}"))?;
+    log::info!("sign-in for {id}: opening the browser");
     if let Err(e) = open::that(&start.auth_url) {
         return Err(format!(
             "could not open your browser ({e}); visit this address yourself: {}",
@@ -399,7 +409,9 @@ pub async fn sign_in(id: String, url: String) -> CommandResult<()> {
     start
         .finish(std::time::Duration::from_secs(300))
         .await
-        .map_err(|e| format!("sign-in failed: {e}"))
+        .map_err(|e| format!("sign-in failed: {e}"))?;
+    log::info!("sign-in for {id} complete");
+    Ok(())
 }
 
 /// Settings live inside the rail. Opening them widens the strip; closing

@@ -64,6 +64,14 @@ async fn pull_with(app: &AppHandle, connector: Arc<McpConnector>) -> Result<usiz
         )
         .map_err(|e| e.to_string())?
     };
+    log::info!(
+        "pulled {count} items from {}: {} added, {} updated, {} removed, {} unchanged",
+        connector.info().id.as_str(),
+        report.added,
+        report.updated,
+        report.removed,
+        report.unchanged
+    );
     if report.added + report.updated + report.removed > 0 {
         let _ = app.emit(crate::commands::CHANGED_EVENT, ());
     }

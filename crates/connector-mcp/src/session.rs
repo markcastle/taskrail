@@ -109,7 +109,15 @@ impl McpSession {
                 }
             }
         };
-        Ok(Self { service })
+        let session = Self { service };
+        log::info!(
+            "connected to {} ({})",
+            session
+                .server_name()
+                .unwrap_or_else(|| "unnamed server".into()),
+            describe(spec)
+        );
+        Ok(session)
     }
 
     pub fn server_name(&self) -> Option<String> {
@@ -124,6 +132,8 @@ impl McpSession {
             .list_all_tools()
             .await
             .map_err(|e| ConnectorError::Protocol(e.to_string()))?;
+        let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
+        log::info!("server offers {} tools: {}", tools.len(), names.join(", "));
         Ok(tools.iter().map(ToolSummary::from).collect())
     }
 
@@ -139,12 +149,19 @@ impl McpSession {
                 )))
             }
         };
+        log::debug!("calling {tool}");
         let result = self
             .service
             .call_tool(CallToolRequestParams::new(tool.to_owned()).with_arguments(arguments))
             .await
-            .map_err(|e| ConnectorError::Protocol(e.to_string()))?;
-        crate::extract::result_to_json(&result).map_err(|e| ConnectorError::Protocol(e.to_string()))
+            .map_err(|e| {
+                log::warn!("{tool} failed: {e}");
+                ConnectorError::Protocol(e.to_string())
+            })?;
+        crate::extract::result_to_json(&result).map_err(|e| {
+            log::warn!("{tool} answered in a way the connector could not read: {e}");
+            ConnectorError::Protocol(e.to_string())
+        })
     }
 
     pub async fn close(self) {

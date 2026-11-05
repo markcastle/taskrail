@@ -107,18 +107,30 @@ async fn discover_with(
     let mut notes = Vec::new();
     let mut last = String::new();
 
+    log::info!(
+        "discovery for {:?} starting with {} tools and {}",
+        request.name,
+        tools.len(),
+        llm.describe()
+    );
     for round in 1..=MAX_ROUNDS {
+        log::info!("discovery round {round}: asking the model");
         let answer = llm
             .complete(&LlmRequest {
                 system: system.clone(),
                 user: user.clone(),
                 max_tokens: 8_000,
             })
-            .await?;
+            .await
+            .map_err(|e| {
+                log::warn!("discovery round {round}: the model call failed: {e}");
+                e
+            })?;
 
         let profile = match parse_profile(&answer, request) {
             Ok(profile) => profile,
             Err(problem) => {
+                log::warn!("discovery round {round}: {problem}");
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
                 user = retry_prompt(&answer, &problem, None);
@@ -163,6 +175,12 @@ async fn discover_with(
 
         match extract_items(&profile, &raw) {
             Ok(items) if !items.is_empty() => {
+                log::info!(
+                    "discovery round {round}: {} items through {} with items path {:?}",
+                    items.len(),
+                    profile.list.call.tool,
+                    profile.list.items
+                );
                 return Ok(DiscoveryOutcome {
                     profile,
                     sample: items,
@@ -176,12 +194,14 @@ async fn discover_with(
                     "the items path {:?} matched nothing in the response",
                     profile.list.items
                 );
+                log::warn!("discovery round {round}: {problem}");
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
                 user = retry_prompt(&answer, &problem, Some(&raw));
             }
             Err(e) => {
                 let problem = e.to_string();
+                log::warn!("discovery round {round}: {problem}");
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
                 user = retry_prompt(&answer, &problem, Some(&raw));
@@ -189,6 +209,7 @@ async fn discover_with(
         }
     }
 
+    log::warn!("discovery gave up after {MAX_ROUNDS} rounds: {last}");
     Err(DiscoveryError::GaveUp {
         rounds: MAX_ROUNDS,
         last,
