@@ -87,6 +87,7 @@ export interface DiscoverRequest {
   kind: ItemKind
   hint: string
   allow_unannotated_list: boolean
+  bearer?: string | null
 }
 
 export interface ToolSummary {
@@ -121,8 +122,8 @@ export interface RailBackend {
   /** Close the app. Does nothing in a plain browser. */
   quit(): Promise<void>
   listConnectors(): Promise<ConnectorSummary[]>
-  /** Add a connector from a pasted Connector Profile, then pull from it. */
-  addConnectorProfile(profileJson: string): Promise<ConnectorSummary>
+  /** Add a connector from a Connector Profile, then pull from it. A bearer token, if given, goes to the keychain. */
+  addConnectorProfile(profileJson: string, bearer?: string): Promise<ConnectorSummary>
   /** Add the built-in demo tracker, then pull from it. */
   addDemoConnector(): Promise<ConnectorSummary>
   removeConnector(id: string): Promise<void>
@@ -174,7 +175,7 @@ function tauriBackend(): RailBackend {
     updateSettings: (settings) => call('update_settings', { settings }),
     quit: () => call('quit'),
     listConnectors: () => call('list_connectors'),
-    addConnectorProfile: (profileJson) => call('add_connector_profile', { profileJson }),
+    addConnectorProfile: (profileJson, bearer) => call('add_connector_profile', { profileJson, bearer: bearer ?? null }),
     addDemoConnector: () => call('add_demo_connector'),
     removeConnector: (id) => call('remove_connector', { id }),
     syncConnector: (id) => call('sync_connector', { id }),

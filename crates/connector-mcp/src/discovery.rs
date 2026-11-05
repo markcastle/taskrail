@@ -36,6 +36,8 @@ pub struct DiscoveryRequest {
     /// Allow validation to call a list tool the server does not mark
     /// read-only. Off by default; the UI asks the user first.
     pub allow_unannotated_list: bool,
+    /// A static token for HTTP servers that want one.
+    pub bearer: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -72,7 +74,7 @@ pub async fn discover(
     request: &DiscoveryRequest,
     llm: &dyn LlmClient,
 ) -> Result<DiscoveryOutcome, DiscoveryError> {
-    let session = McpSession::connect(&request.server, None)
+    let session = McpSession::connect(&request.server, request.bearer.as_deref())
         .await
         .map_err(|e| DiscoveryError::Server(e.to_string()))?;
     let outcome = discover_with(request, llm, &session).await;

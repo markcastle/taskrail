@@ -12,7 +12,9 @@ use serde::Serialize;
 use taskrail_connector_api::{Capabilities, Connector};
 use taskrail_connector_mcp::profile::fake_tracker_profile;
 use taskrail_connector_mcp::{ConnectorProfile, McpConnector, ServerSpec};
-use taskrail_core::ports::KeyValueStore;
+use taskrail_core::ports::{KeyValueStore, SecretStore};
+
+use crate::secrets::OsSecrets;
 
 pub const PROFILES_KEY: &str = "connector_profiles";
 
@@ -101,8 +103,14 @@ impl ConnectorRegistry {
             return Some(c.clone());
         }
         let profile = self.profiles.iter().find(|p| p.id == id)?.clone();
-        // Bearer tokens for HTTP servers arrive with the sign-in work.
-        let connector = Arc::new(McpConnector::new(profile, None));
+        let bearer = match &profile.server {
+            ServerSpec::Http {
+                bearer_secret: Some(name),
+                ..
+            } => OsSecrets.get(name).ok().flatten(),
+            _ => None,
+        };
+        let connector = Arc::new(McpConnector::new(profile, bearer));
         self.live.insert(id.to_owned(), connector.clone());
         Some(connector)
     }
@@ -172,4 +180,9 @@ pub fn demo_profile() -> Result<ConnectorProfile, String> {
     profile.name = "Demo tracker".into();
     profile.poll_seconds = 30;
     Ok(profile)
+}
+
+/// Where a connector's bearer token lives in the credential store.
+pub fn bearer_secret_name(connector_id: &str) -> String {
+    format!("connector:{connector_id}:bearer")
 }

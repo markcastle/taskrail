@@ -52,6 +52,7 @@ fn request() -> DiscoveryRequest {
         kind: ItemKind::Task,
         hint: String::new(),
         allow_unannotated_list: false,
+        bearer: None,
     }
 }
 

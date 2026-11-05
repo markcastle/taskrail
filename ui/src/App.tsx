@@ -539,6 +539,7 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
   const [command, setCommand] = useState('')
   const [kind, setKind] = useState<ItemKind>('task')
   const [hint, setHint] = useState('')
+  const [bearer, setBearer] = useState('')
   const [allowUnannotated, setAllowUnannotated] = useState(false)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<DiscoveryResult | null>(null)
@@ -567,7 +568,7 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
     setBusy(true)
     setResult(null)
     backend
-      .discoverConnector({ id, name: name.trim(), server, kind, hint, allow_unannotated_list: allow })
+      .discoverConnector({ id, name: name.trim(), server, kind, hint, allow_unannotated_list: allow, bearer: bearer.trim() || null })
       .then((r) => {
         setResult(r)
         if (r.status === 'ok') setProfileJson(JSON.stringify(r.profile, null, 2))
@@ -578,7 +579,7 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
   const add = () => {
     setBusy(true)
     backend
-      .addConnectorProfile(profileJson)
+      .addConnectorProfile(profileJson, bearer.trim() || undefined)
       .then(() => {
         onNotice(`Connected ${name.trim()}`)
         onAdded()
@@ -603,7 +604,17 @@ function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void;
         </label>
       </fieldset>
       {transport === 'http' ? (
-        <input type="url" aria-label="Server URL" placeholder="https://example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <>
+          <input type="url" aria-label="Server URL" placeholder="https://example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
+          <input
+            type="password"
+            aria-label="Bearer token"
+            placeholder="Bearer token, if the server wants one (optional)"
+            value={bearer}
+            onChange={(e) => setBearer(e.target.value)}
+            autoComplete="off"
+          />
+        </>
       ) : (
         <input type="text" aria-label="Server command" placeholder="npx some-mcp-server --flag" value={command} onChange={(e) => setCommand(e.target.value)} />
       )}

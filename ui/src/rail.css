@@ -659,7 +659,8 @@ button {
 .settings__row input[type='text'],
 .settings__row input[type='password'],
 .connectors__add input[type='text'],
-.connectors__add input[type='url'] {
+.connectors__add input[type='url'],
+.connectors__add input[type='password'] {
   min-width: 0;
   padding: 4px 6px;
   border: 1px solid var(--line);
@@ -677,7 +678,8 @@ button {
 }
 
 .connectors__add input[type='text'],
-.connectors__add input[type='url'] {
+.connectors__add input[type='url'],
+.connectors__add input[type='password'] {
   width: 100%;
 }
 

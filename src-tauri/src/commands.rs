@@ -169,10 +169,32 @@ pub async fn add_connector_profile(
     app: AppHandle,
     state: State<'_, AppState>,
     profile_json: String,
+    bearer: Option<String>,
 ) -> CommandResult<ConnectorSummary> {
-    let profile: taskrail_connector_mcp::ConnectorProfile =
+    let mut profile: taskrail_connector_mcp::ConnectorProfile =
         serde_json::from_str(&profile_json).map_err(|e| format!("not a valid profile: {e}"))?;
+    store_bearer(&mut profile, bearer)?;
     add_and_pull(&app, &state, profile).await
+}
+
+/// A pasted token goes to the credential store and the profile only keeps
+/// the name it was stored under.
+fn store_bearer(
+    profile: &mut taskrail_connector_mcp::ConnectorProfile,
+    bearer: Option<String>,
+) -> CommandResult<()> {
+    use taskrail_core::ports::SecretStore;
+    let Some(token) = bearer.filter(|t| !t.trim().is_empty()) else {
+        return Ok(());
+    };
+    if let taskrail_connector_mcp::ServerSpec::Http { bearer_secret, .. } = &mut profile.server {
+        let name = crate::connectors::bearer_secret_name(&profile.id);
+        crate::secrets::OsSecrets
+            .set(&name, token.trim())
+            .map_err(|e| e.to_string())?;
+        *bearer_secret = Some(name);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -293,6 +315,8 @@ pub struct DiscoverRequest {
     pub hint: String,
     #[serde(default)]
     pub allow_unannotated_list: bool,
+    #[serde(default)]
+    pub bearer: Option<String>,
 }
 
 fn task_kind() -> taskrail_core::domain::ItemKind {
@@ -312,6 +336,7 @@ pub async fn discover_connector(
         kind: request.kind,
         hint: request.hint,
         allow_unannotated_list: request.allow_unannotated_list,
+        bearer: request.bearer.filter(|t| !t.trim().is_empty()),
     };
     match taskrail_connector_mcp::discover(&request, llm.as_ref()).await {
         Ok(outcome) => Ok(DiscoveryResult::Ok(outcome)),
