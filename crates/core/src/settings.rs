@@ -14,6 +14,16 @@ pub enum Edge {
     Right,
 }
 
+/// Light, dark, or whatever the operating system says.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 /// How many Top Priorities show before the fold, unless the user changes it.
 pub const TOP_LIMIT_DEFAULT: u8 = 5;
 
@@ -31,6 +41,8 @@ pub struct RailSettings {
     pub top_limit: u8,
     /// An event this close to starting is pulled into Top Priorities.
     pub event_lead_minutes: u32,
+    #[serde(default)]
+    pub theme: Theme,
 }
 
 impl Default for RailSettings {
@@ -40,6 +52,7 @@ impl Default for RailSettings {
             width_px: 320,
             top_limit: TOP_LIMIT_DEFAULT,
             event_lead_minutes: 60,
+            theme: Theme::System,
         }
     }
 }
@@ -47,5 +60,20 @@ impl Default for RailSettings {
 impl RailSettings {
     pub fn effective_top_limit(&self) -> usize {
         self.top_limit.clamp(1, TOP_LIMIT_MAX) as usize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn settings_saved_before_themes_existed_still_load() {
+        let old = r#"{"edge":"left","width_px":300,"top_limit":7,"event_lead_minutes":30}"#;
+        let settings: RailSettings = serde_json::from_str(old).unwrap();
+        assert_eq!(settings.theme, Theme::System);
+        assert_eq!(settings.width_px, 300);
+        let json = serde_json::to_string(&settings).unwrap();
+        assert!(json.contains("\"theme\":\"system\""));
     }
 }

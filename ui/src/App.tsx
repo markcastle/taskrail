@@ -13,6 +13,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from '@dnd-kit/utilities'
 import { createBackend, type Item, type RailBackend, type RailView, type Status, type SyncError } from './backend'
 import { dueLabel, formatTime, relativeStart } from './format'
+import { followTheme } from './theme'
 import { useSwipe } from './useSwipe'
 
 const backend: RailBackend = createBackend()
@@ -39,6 +40,7 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => backend.onChanged(refresh), [refresh])
+  useEffect(() => followTheme(backend), [])
   useEffect(
     () =>
       backend.onSyncError((e: SyncError) => {

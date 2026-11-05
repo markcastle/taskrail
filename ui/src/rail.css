@@ -1,4 +1,20 @@
 :root {
+  color-scheme: light;
+  --bg: #f3f4f7;
+  --bg-raised: #ffffff;
+  --bg-hover: #e9ebf0;
+  --text: #1b1d22;
+  --text-muted: #5f6673;
+  --line: #d9dce3;
+  --priority: #d93a3f;
+  --progress: #2f6fe4;
+  --done: #1f9d55;
+  --event: #8e44d6;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+}
+
+:root[data-theme='dark'] {
   color-scheme: dark;
   --bg: #1b1d22;
   --bg-raised: #24272e;
@@ -10,8 +26,22 @@
   --progress: #3b82f6;
   --done: #22c55e;
   --event: #a855f7;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #1b1d22;
+    --bg-raised: #24272e;
+    --bg-hover: #2c3038;
+    --text: #e8eaef;
+    --text-muted: #9aa0ab;
+    --line: #32363f;
+    --priority: #e5484d;
+    --progress: #3b82f6;
+    --done: #22c55e;
+    --event: #a855f7;
+  }
 }
 
 * {
@@ -437,7 +467,7 @@ button {
 
 .card--dragging {
   opacity: 0.85;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 25%, transparent);
   z-index: 2;
   position: relative;
 }

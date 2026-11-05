@@ -17,6 +17,7 @@ mod settings_window;
 mod shortcuts;
 mod state;
 mod sync;
+mod theme;
 mod tray;
 
 pub use state::AppState;
@@ -55,6 +56,7 @@ pub fn run() {
             let connectors = connectors::ConnectorRegistry::load(rail.service.repository());
             app.manage(AppState::new(rail, connectors));
             dock::attach(app.handle())?;
+            theme::apply(app.handle());
             shortcuts::register(app.handle());
             tray::install(app.handle())?;
             release_on_console_signal(app.handle().clone());

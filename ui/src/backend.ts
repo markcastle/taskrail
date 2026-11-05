@@ -44,11 +44,14 @@ export interface RailView {
   done_today: Item[]
 }
 
+export type Theme = 'system' | 'light' | 'dark'
+
 export interface RailSettings {
   edge: Edge
   width_px: number
   top_limit: number
   event_lead_minutes: number
+  theme: Theme
 }
 
 export interface ConnectorSummary {
@@ -149,6 +152,16 @@ export interface RailBackend {
 }
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+
+/** Which window this page is: the Tauri label in the app, the URL hash in a browser. */
+export async function windowRole(): Promise<'rail' | 'settings'> {
+  if (window.location.hash === '#settings') return 'settings'
+  if (inTauri) {
+    const { getCurrentWindow } = await import('@tauri-apps/api/window')
+    return getCurrentWindow().label === 'settings' ? 'settings' : 'rail'
+  }
+  return 'rail'
+}
 
 export function createBackend(): RailBackend {
   return inTauri ? tauriBackend() : browserBackend()
@@ -253,7 +266,7 @@ function browserBackend(): RailBackend {
     task('update-project-plan', 'Update project plan', 'done'),
   ]
   let active: string | null = 'design-dashboard'
-  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60 }
+  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system' }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
@@ -268,7 +281,7 @@ function browserBackend(): RailBackend {
       const state = JSON.parse(raw) as DevState
       items = state.items
       active = state.active
-      settings = state.settings
+      settings = { ...state.settings, theme: state.settings.theme ?? 'system' }
       connectors = state.connectors
       modelSettings = state.modelSettings
       signedIn = state.signedIn ?? []

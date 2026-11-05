@@ -31,7 +31,7 @@ pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
             SHOW => show_rail(app),
             SETTINGS => {
                 if let Err(e) = crate::settings_window::open(app) {
-                    eprintln!("task rail: could not open settings: {e}");
+                    eprintln!("task rail: could not queue the settings window: {e}");
                 }
             }
             QUIT => app.exit(0),

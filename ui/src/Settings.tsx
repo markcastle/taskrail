@@ -9,7 +9,9 @@ import {
   type RailBackend,
   type RailSettings,
   type ServerSpec,
+  type Theme,
 } from './backend'
+import { followTheme } from './theme'
 
 const backend: RailBackend = createBackend()
 
@@ -24,6 +26,7 @@ const PAGES: { id: Page; label: string; blurb: string }[] = [
 export default function Settings() {
   const [page, setPage] = useState<Page>('rail')
   const [notice, setNotice] = useState<string | null>(null)
+  useEffect(() => followTheme(backend), [])
 
   useEffect(() => {
     if (!notice) return
@@ -107,6 +110,16 @@ function RailPage({ onNotice }: { onNotice: (m: string) => void }) {
         save()
       }}
     >
+      <fieldset className="field">
+        <legend className="field__label">Appearance</legend>
+        <div className="field__choices">
+          {(['system', 'light', 'dark'] as Theme[]).map((t) => (
+            <label key={t}>
+              <input type="radio" name="theme" checked={draft.theme === t} onChange={() => set('theme', t)} /> {t === 'system' ? 'Match system' : t === 'light' ? 'Light' : 'Dark'}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <fieldset className="field">
         <legend className="field__label">Dock to</legend>
         <div className="field__choices">

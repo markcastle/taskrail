@@ -153,6 +153,7 @@ pub fn update_settings(
     if needs_redock {
         crate::dock::redock(&app).map_err(|e| e.to_string())?;
     }
+    crate::theme::apply(&app);
     changed(&app);
     Ok(lock(&state.rail).settings.clone())
 }
