@@ -633,6 +633,7 @@ button {
 .settings-window {
   display: grid;
   grid-template-columns: 184px 1fr;
+  grid-template-rows: minmax(0, 1fr);
   height: 100%;
   font-size: 14px;
 }
@@ -640,7 +641,7 @@ button {
 @media (max-width: 600px) {
   .settings-window {
     grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .settings-nav {
@@ -713,12 +714,19 @@ button {
 
 .settings-main {
   position: relative;
+  min-height: 0;
   user-select: text;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 28px 36px 48px;
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+/* Sections keep their natural height; the pane scrolls rather than squashing them. */
+.settings-main > * {
+  flex-shrink: 0;
 }
 
 .settings-main__header h1 {

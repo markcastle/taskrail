@@ -191,6 +191,17 @@ await settings.getByTestId('discovery-result').waitFor()
 assert.match(await settings.locator('.discovery .result--success').textContent(), /Found 2 items in 1 round/)
 assert.match(await settings.getByLabel('Discovered profile JSON').inputValue(), /"id": "tuesday"/)
 if (shots) await settings.screenshot({ path: `${shots}/07-settings-discovery.png` })
+// A long page scrolls inside the main pane: the window itself never grows past the screen.
+await settings.setViewportSize({ width: 760, height: 420 })
+const scroll = await settings.locator('.settings-main').evaluate((el) => ({
+  canScroll: el.scrollHeight > el.clientHeight,
+  fits: el.getBoundingClientRect().bottom <= window.innerHeight + 1,
+}))
+assert.ok(scroll.canScroll, 'the settings pane has more content than fits, so it must scroll')
+assert.ok(scroll.fits, 'the settings pane ends at the bottom of the window instead of running past it')
+await settings.locator('.settings-main').evaluate((el) => el.scrollTo(0, el.scrollHeight))
+await settings.getByRole('button', { name: 'Add connector', exact: true }).waitFor({ state: 'visible' })
+await settings.setViewportSize({ width: 820, height: 680 })
 await settings.getByRole('button', { name: 'Add connector', exact: true }).click()
 await settings.getByTestId('connector-tuesday').waitFor()
 await settings.getByTestId('connector-tuesday').getByRole('button', { name: 'Remove', exact: true }).click()
