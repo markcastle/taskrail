@@ -158,8 +158,10 @@ export default function App() {
   if (!view) return <div className="rail rail--empty">Loading…</div>
   if (settingsOpen) return <Settings onClose={closeSettings} />
 
+  const connectorNames = new Map(connectors.map((c) => [c.id, c.name]))
   const rowProps = (item: Item) => ({
     item,
+    names: connectorNames,
     open: openCard === item.id,
     active: view.active === item.id,
     onToggle: () => setOpenCard((cur) => (cur === item.id ? null : item.id)),
@@ -256,6 +258,7 @@ export default function App() {
         <UpNext
           item={upNext}
           focused={activeItem?.id === upNext.id}
+          names={connectorNames}
           onFocus={() =>
             act(async () => {
               if (upNext.status === 'todo') await backend.start(upNext.id)
@@ -392,24 +395,24 @@ function SyncStatus({ connectors }: { connectors: ConnectorSummary[] }) {
   )
 }
 
-function UpNext({ item, focused, onFocus }: { item: Item; focused: boolean; onFocus: () => void }) {
+function UpNext({ item, focused, names, onFocus }: { item: Item; focused: boolean; names: Map<string, string>; onFocus: () => void }) {
   const isEvent = item.kind === 'event'
   return (
     <section className="upnext" data-testid="upnext">
       <h3 className="section__title section__title--bar">Up next</h3>
       <div className={`upnext__card${focused ? ' upnext__card--focused' : ''}`}>
-        <div className="upnext__main">
-          <span className="upnext__title">{item.title}</span>
-          <span className="upnext__meta">{metaLine(item, true) ?? statusWord(item)}</span>
+        <span className="upnext__title">{item.title}</span>
+        <div className="upnext__foot">
+          <span className="upnext__meta">{metaLine(item, names) ?? statusWord(item)}</span>
+          {isEvent ? (
+            <span className="upnext__when">{item.window ? relativeStart(item.window.start) : ''}</span>
+          ) : (
+            <button className={`focus-button${focused ? ' focus-button--on' : ''}`} onClick={onFocus}>
+              {focused ? <PauseIcon /> : <PlayIcon />}
+              {focused ? 'Focusing' : 'Start focus'}
+            </button>
+          )}
         </div>
-        {isEvent ? (
-          <span className="upnext__when">{item.window ? relativeStart(item.window.start) : ''}</span>
-        ) : (
-          <button className={`focus-button${focused ? ' focus-button--on' : ''}`} onClick={onFocus}>
-            {focused ? <PauseIcon /> : <PlayIcon />}
-            {focused ? 'Focusing' : 'Start focus'}
-          </button>
-        )}
       </div>
     </section>
   )
@@ -456,12 +459,12 @@ function statusWord(item: Item): string {
 }
 
 /** "Totum · Due today", "Today, 14:30", "Tuesday · Overdue". */
-function metaLine(item: Item, withSource: boolean): ReactNode {
+function metaLine(item: Item, names: Map<string, string>): ReactNode {
   const parts: ReactNode[] = []
-  if (withSource && item.origin)
+  if (item.origin)
     parts.push(
       <span key="src" className="card__source">
-        {item.origin.connector}
+        {names.get(item.origin.connector) ?? item.origin.connector}
       </span>,
     )
   if (item.window) parts.push(<span key="when">{whenWord(item.window.start)}</span>)
@@ -486,6 +489,8 @@ function metaLine(item: Item, withSource: boolean): ReactNode {
 
 interface RowProps {
   item: Item
+  /** Connector id to display name, so a row says "Tuesday" rather than "tuesday". */
+  names: Map<string, string>
   open: boolean
   active: boolean
   onToggle: () => void
@@ -522,7 +527,7 @@ function Row(props: RowProps) {
   if (isDragging) classes.push('card--dragging')
   if (Math.abs(swipe.dx) > 60 || swipe.leaving) classes.push('card--will-complete')
 
-  const meta = metaLine(item, true)
+  const meta = metaLine(item, props.names)
 
   return (
     <div
@@ -565,7 +570,7 @@ function Row(props: RowProps) {
 
 function RowDetails(props: RowProps) {
   const { item, active } = props
-  const source = item.origin ? item.origin.connector : 'Local'
+  const source = item.origin ? (props.names.get(item.origin.connector) ?? item.origin.connector) : 'Local'
   return (
     <div className="card__details" onPointerDown={(e) => e.stopPropagation()}>
       <dl className="card__facts">
