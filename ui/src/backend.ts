@@ -153,14 +153,15 @@ export interface RailBackend {
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-/** Which window this page is: the Tauri label in the app, the URL hash in a browser. */
-export async function windowRole(): Promise<'rail' | 'settings'> {
+/**
+ * Which window this page is: the Tauri window label in the app, the URL
+ * hash in a browser. Read synchronously from what the shell injects, so a
+ * failed import can never leave the page blank.
+ */
+export function windowRole(): 'rail' | 'settings' {
   if (window.location.hash === '#settings') return 'settings'
-  if (inTauri) {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    return getCurrentWindow().label === 'settings' ? 'settings' : 'rail'
-  }
-  return 'rail'
+  const internals = (window as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__
+  return internals?.metadata?.currentWindow?.label === 'settings' ? 'settings' : 'rail'
 }
 
 export function createBackend(): RailBackend {

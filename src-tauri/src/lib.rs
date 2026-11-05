@@ -61,6 +61,11 @@ pub fn run() {
             tray::install(app.handle())?;
             release_on_console_signal(app.handle().clone());
             sync::start(app.handle().clone());
+            // Debugging aid: `TASKRAIL_OPEN_SETTINGS=1` opens the settings
+            // window straight away, for looking at it under a test display.
+            if std::env::var_os("TASKRAIL_OPEN_SETTINGS").is_some() {
+                settings_window::open(app.handle())?;
+            }
             Ok(())
         })
         .build(tauri::generate_context!())
