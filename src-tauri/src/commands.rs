@@ -350,6 +350,11 @@ pub async fn discover_connector(
     }
 }
 
+#[tauri::command]
+pub fn open_settings(app: AppHandle) -> CommandResult<()> {
+    crate::settings_window::open(&app).map_err(|e| e.to_string())
+}
+
 /// Quit from the UI. The exit handler in `lib.rs` releases the strip.
 #[tauri::command]
 pub fn quit(app: AppHandle) {

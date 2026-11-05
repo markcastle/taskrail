@@ -13,6 +13,7 @@ mod model;
 mod rail;
 mod secrets;
 mod seed;
+mod settings_window;
 mod shortcuts;
 mod state;
 mod sync;
@@ -37,6 +38,7 @@ pub fn run() {
             commands::get_settings,
             commands::update_settings,
             commands::quit,
+            commands::open_settings,
             commands::list_connectors,
             commands::add_connector_profile,
             commands::add_demo_connector,

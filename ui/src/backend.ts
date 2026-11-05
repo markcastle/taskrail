@@ -121,6 +121,8 @@ export interface RailBackend {
   updateSettings(settings: RailSettings): Promise<RailSettings>
   /** Close the app. Does nothing in a plain browser. */
   quit(): Promise<void>
+  /** Open (or focus) the settings window. In a plain browser, opens the settings route in a new tab. */
+  openSettings(): Promise<void>
   listConnectors(): Promise<ConnectorSummary[]>
   /** Add a connector from a Connector Profile, then pull from it. A bearer token, if given, goes to the keychain. */
   addConnectorProfile(profileJson: string, bearer?: string): Promise<ConnectorSummary>
@@ -174,6 +176,7 @@ function tauriBackend(): RailBackend {
     getSettings: () => call('get_settings'),
     updateSettings: (settings) => call('update_settings', { settings }),
     quit: () => call('quit'),
+    openSettings: () => call('open_settings'),
     listConnectors: () => call('list_connectors'),
     addConnectorProfile: (profileJson, bearer) => call('add_connector_profile', { profileJson, bearer: bearer ?? null }),
     addDemoConnector: () => call('add_demo_connector'),
@@ -190,9 +193,21 @@ function tauriBackend(): RailBackend {
 }
 
 // ---------------------------------------------------------------------------
-// Browser stand-in. Same rules as the core, written small.
+// Browser stand-in. Same rules as the core, written small. State lives in
+// localStorage so the rail tab and the settings tab see the same data, the
+// way the two windows do in the real app.
 
 const TOP_LIMIT_MAX = 10
+const STORAGE_KEY = 'taskrail-dev-state'
+const CHANNEL = 'taskrail-dev'
+
+interface DevState {
+  items: Item[]
+  active: string | null
+  settings: RailSettings
+  connectors: ConnectorSummary[]
+  modelSettings: ModelSettings
+}
 
 function browserBackend(): RailBackend {
   const now = Date.now()
@@ -234,12 +249,46 @@ function browserBackend(): RailBackend {
   ]
   let active: string | null = 'design-dashboard'
   let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60 }
+  let connectors: ConnectorSummary[] = []
+  let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   const changedListeners = new Set<() => void>()
   const quickAddListeners = new Set<() => void>()
   const syncErrorListeners = new Set<(e: SyncError) => void>()
-  const notify = () => changedListeners.forEach((cb) => cb())
-  let connectors: ConnectorSummary[] = []
-  let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
+
+  const load = () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (!raw) return
+      const state = JSON.parse(raw) as DevState
+      items = state.items
+      active = state.active
+      settings = state.settings
+      connectors = state.connectors
+      modelSettings = state.modelSettings
+    } catch {
+      /* fresh state */
+    }
+  }
+  const persist = () => {
+    try {
+      const state: DevState = { items, active, settings, connectors, modelSettings }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    } catch {
+      /* private mode or blocked storage: keep going in memory */
+    }
+  }
+  const channel = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANNEL) : null
+  const notify = () => {
+    persist()
+    changedListeners.forEach((cb) => cb())
+    channel?.postMessage('changed')
+  }
+  channel?.addEventListener('message', () => {
+    load()
+    changedListeners.forEach((cb) => cb())
+  })
+  load()
+  persist()
   const demoSummary = (): ConnectorSummary => ({
     id: 'demo-tracker',
     name: 'Demo tracker',
@@ -282,7 +331,11 @@ function browserBackend(): RailBackend {
     })
   }
 
-  const async = <T>(fn: () => T): Promise<T> => Promise.resolve().then(fn)
+  const async = <T>(fn: () => T): Promise<T> =>
+    Promise.resolve().then(() => {
+      load()
+      return fn()
+    })
 
   return {
     view: (expandTop) =>
@@ -347,6 +400,10 @@ function browserBackend(): RailBackend {
     getSettings: () => async(() => settings),
     updateSettings: (next) => async(() => ((settings = { ...next }), notify(), settings)),
     quit: () => async(() => undefined),
+    openSettings: () =>
+      async(() => {
+        window.open('/#settings', 'taskrail-settings')
+      }),
     listConnectors: () => async(() => connectors),
     addConnectorProfile: (profileJson) =>
       async(() => {
@@ -391,6 +448,7 @@ function browserBackend(): RailBackend {
       async(() => {
         const has_key = apiKey === undefined ? modelSettings.has_key : apiKey.trim().length > 0
         modelSettings = { ...config, has_key }
+        notify()
         return modelSettings
       }),
     testModel: () =>
@@ -401,6 +459,7 @@ function browserBackend(): RailBackend {
     discoverConnector: (request) =>
       new Promise((resolve, reject) =>
         setTimeout(() => {
+          load()
           if (!modelSettings.has_key) return reject(new Error('no API key saved; add one under Model in settings'))
           if (request.server.transport === 'stdio' && request.server.command.includes('risky') && !request.allow_unannotated_list) {
             return resolve({ status: 'needs_confirmation', tool: 'transition_ticket', profile: { id: request.id } })

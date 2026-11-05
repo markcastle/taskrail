@@ -6,12 +6,22 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, Tray
 use tauri::{AppHandle, Manager};
 
 const SHOW: &str = "show";
+const SETTINGS: &str = "settings";
 const QUIT: &str = "quit";
 
 pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
     let show = MenuItem::with_id(app, SHOW, "Show Task Rail", true, None::<&str>)?;
+    let settings = MenuItem::with_id(app, SETTINGS, "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, QUIT, "Quit Task Rail", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&show, &PredefinedMenuItem::separator(app)?, &quit])?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &show,
+            &settings,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )?;
 
     let mut builder = TrayIconBuilder::with_id("main")
         .menu(&menu)
@@ -19,6 +29,11 @@ pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .tooltip("Task Rail")
         .on_menu_event(|app, event| match event.id().as_ref() {
             SHOW => show_rail(app),
+            SETTINGS => {
+                if let Err(e) = crate::settings_window::open(app) {
+                    eprintln!("task rail: could not open settings: {e}");
+                }
+            }
             QUIT => app.exit(0),
             _ => {}
         })
