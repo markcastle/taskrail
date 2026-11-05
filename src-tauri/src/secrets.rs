@@ -2,20 +2,22 @@
 //! Credential Manager on Windows, the Keychain on macOS, the kernel keyring
 //! on Linux (which does not survive a reboot; fine for development).
 //!
-//! Windows caps one credential at 2560 UTF-16 characters, and an OAuth
-//! credential bundle (access token, refresh token, client id, all as JSON)
-//! is routinely bigger. So a long value is split into numbered pieces under
-//! `key#0`, `key#1`, ... and the entry under `key` itself records how many.
-//! Reading reassembles them; deleting removes them all. Short values are
-//! stored as they are.
+//! Windows caps one credential blob at 2560 bytes, which is 1280 UTF-16
+//! code units (the keyring crate's error message says "2560 chars", which
+//! is the byte count). An OAuth credential bundle (access token, refresh
+//! token, client id, all as JSON) is routinely bigger. So a long value is
+//! split into numbered pieces under `key#0`, `key#1`, ... and the entry
+//! under `key` itself records how many. Reading reassembles them; deleting
+//! removes them all. Short values are stored as they are.
 //!
 //! Nothing here ever writes a secret to the SQLite file.
 
 use taskrail_core::ports::{SecretError, SecretStore};
 
 const SERVICE: &str = "taskrail";
-/// Comfortably under the Windows limit, counted in characters.
-const CHUNK_CHARS: usize = 2000;
+/// Comfortably under the Windows limit of 1280, counted in UTF-16 code
+/// units because that is what Windows counts.
+const CHUNK_UNITS: usize = 1000;
 const CHUNKED_MARKER: &str = "taskrail-chunks:";
 
 /// The raw store underneath: one value per key, with whatever limits the
@@ -71,12 +73,30 @@ fn chunk_key(key: &str, index: usize) -> String {
 }
 
 /// Split by characters, never inside one, so every piece is valid text.
+/// How long a value is the way Windows measures it.
+fn utf16_units(value: &str) -> usize {
+    value.encode_utf16().count()
+}
+
+/// Split into pieces of at most `CHUNK_UNITS` UTF-16 units, never inside a
+/// character, so every piece is valid text.
 pub(crate) fn split_into_chunks(value: &str) -> Vec<String> {
-    let chars: Vec<char> = value.chars().collect();
-    chars
-        .chunks(CHUNK_CHARS)
-        .map(|c| c.iter().collect())
-        .collect()
+    let mut pieces = Vec::new();
+    let mut piece = String::new();
+    let mut units = 0;
+    for c in value.chars() {
+        let len = c.len_utf16();
+        if units + len > CHUNK_UNITS {
+            pieces.push(std::mem::take(&mut piece));
+            units = 0;
+        }
+        piece.push(c);
+        units += len;
+    }
+    if !piece.is_empty() || pieces.is_empty() {
+        pieces.push(piece);
+    }
+    pieces
 }
 
 pub(crate) fn chunk_count(marker: &str) -> Option<usize> {
@@ -114,15 +134,15 @@ impl<B: Backend> SecretStore for Chunked<B> {
     }
 
     fn set(&self, key: &str, value: &str) -> Result<(), SecretError> {
-        if value.chars().count() <= CHUNK_CHARS {
+        if utf16_units(value) <= CHUNK_UNITS {
             self.0.write(key, value)?;
             return self.remove_chunks_from(key, 0);
         }
         let pieces = split_into_chunks(value);
         log::info!(
-            "storing {key} as {} pieces ({} chars)",
+            "storing {key} as {} pieces ({} UTF-16 units)",
             pieces.len(),
-            value.chars().count()
+            utf16_units(value)
         );
         for (index, piece) in pieces.iter().enumerate() {
             self.0.write(&chunk_key(key, index), piece)?;
@@ -233,11 +253,18 @@ mod tests {
 
     #[test]
     fn long_values_split_on_character_boundaries_and_rejoin() {
-        let value: String = "é".repeat(CHUNK_CHARS * 2 + 7);
+        let value: String = "é".repeat(CHUNK_UNITS * 2 + 7);
         let pieces = split_into_chunks(&value);
         assert_eq!(pieces.len(), 3);
-        assert!(pieces.iter().all(|p| p.chars().count() <= CHUNK_CHARS));
+        assert!(pieces.iter().all(|p| utf16_units(p) <= CHUNK_UNITS));
         assert_eq!(pieces.concat(), value);
+
+        // Characters outside the BMP take two units and are never split.
+        let wide: String = "😀".repeat(CHUNK_UNITS);
+        let pieces = split_into_chunks(&wide);
+        assert_eq!(pieces.len(), 2);
+        assert!(pieces.iter().all(|p| utf16_units(p) <= CHUNK_UNITS));
+        assert_eq!(pieces.concat(), wide);
     }
 
     #[test]
