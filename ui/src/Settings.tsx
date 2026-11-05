@@ -58,7 +58,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
     <div className="settings-window">
       <nav className="settings-nav">
         <div className="settings-nav__brand">
-          <span className="rail__mark" aria-hidden="true" />
+          <img className="rail__mark" src="/icon.png" alt="" width={24} height={24} />
           <span>Task Rail</span>
         </div>
         {PAGES.map((p) => (

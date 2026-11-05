@@ -1,46 +1,63 @@
 :root {
   color-scheme: light;
-  --bg: #f3f4f7;
+  --bg: #eef3fb;
+  --bg-deep: #e3ebf9;
   --bg-raised: #ffffff;
-  --bg-hover: #e9ebf0;
-  --text: #1b1d22;
-  --text-muted: #5f6673;
-  --line: #d9dce3;
-  --priority: #d93a3f;
+  --bg-hover: #e4ebf7;
+  --text: #0f1b33;
+  --text-muted: #5a6680;
+  --line: #d3dcec;
+  --priority: #e5484d;
   --progress: #2f6fe4;
-  --done: #1f9d55;
-  --event: #8e44d6;
+  --done: #22b573;
+  --event: #8b5cf6;
+  --accent-red: #ef4444;
+  --accent-orange: #f59e0b;
+  --accent-blue: #3b82f6;
+  --accent-green: #22c55e;
+  --accent-purple: #8b5cf6;
+  --accent-slate: #94a3b8;
+  --card-shadow: 0 1px 2px rgba(15, 27, 51, 0.08), 0 4px 14px rgba(15, 27, 51, 0.06);
+  --rail-gradient: linear-gradient(170deg, #f3f6fd 0%, #e6edfb 55%, #dde7fa 100%);
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #1b1d22;
-  --bg-raised: #24272e;
-  --bg-hover: #2c3038;
-  --text: #e8eaef;
-  --text-muted: #9aa0ab;
-  --line: #32363f;
-  --priority: #e5484d;
+  --bg: #0b1d3f;
+  --bg-deep: #071533;
+  --bg-raised: #1a2440;
+  --bg-hover: #233052;
+  --text: #eef2fb;
+  --text-muted: #9aa8c7;
+  --line: #2a365a;
+  --priority: #ef4444;
   --progress: #3b82f6;
   --done: #22c55e;
-  --event: #a855f7;
+  --event: #a78bfa;
+  --accent-slate: #64748b;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.25);
+  --rail-gradient: linear-gradient(170deg, #0e2a63 0%, #091d48 50%, #0a2459 100%);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #1b1d22;
-    --bg-raised: #24272e;
-    --bg-hover: #2c3038;
-    --text: #e8eaef;
-    --text-muted: #9aa0ab;
-    --line: #32363f;
-    --priority: #e5484d;
+    --bg: #0b1d3f;
+    --bg-deep: #071533;
+    --bg-raised: #1a2440;
+    --bg-hover: #233052;
+    --text: #eef2fb;
+    --text-muted: #9aa8c7;
+    --line: #2a365a;
+    --priority: #ef4444;
     --progress: #3b82f6;
     --done: #22c55e;
-    --event: #a855f7;
+    --event: #a78bfa;
+    --accent-slate: #64748b;
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.25);
+    --rail-gradient: linear-gradient(170deg, #0e2a63 0%, #091d48 50%, #0a2459 100%);
   }
 }
 
@@ -57,6 +74,11 @@ body,
   color: var(--text);
   overflow: hidden;
   user-select: none;
+}
+
+body {
+  background: var(--rail-gradient);
+  background-attachment: fixed;
 }
 
 .rail {
@@ -88,10 +110,11 @@ body,
 }
 
 .rail__mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  object-fit: cover;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .rail__add {
@@ -115,10 +138,11 @@ body,
   grid-template-columns: auto 1fr auto;
   gap: 8px;
   align-items: baseline;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--event) 14%, var(--bg-raised));
-  border-left: 3px solid var(--event);
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent-purple) 16%, var(--bg-raised));
+  border: 1px solid color-mix(in srgb, var(--accent-purple) 40%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--accent-purple) 25%, transparent);
 }
 
 .upnext__label {
@@ -148,15 +172,15 @@ body,
 }
 
 .section--priority {
-  --tone: var(--priority);
+  --tone: var(--accent-red);
 }
 
 .section--progress {
-  --tone: var(--progress);
+  --tone: var(--accent-blue);
 }
 
 .section--done {
-  --tone: var(--done);
+  --tone: var(--accent-green);
 }
 
 .section__header {
@@ -223,13 +247,13 @@ body,
   width: 16px;
   height: 16px;
   flex: none;
-  border: 2px solid var(--tone);
+  border: 2px solid color-mix(in srgb, var(--text) 70%, transparent);
   border-radius: 4px;
 }
 
 .card--in_progress .card__mark {
   border-radius: 50%;
-  border-color: var(--progress);
+  border-color: var(--accent-blue);
 }
 
 .card--done .card__mark {
@@ -256,13 +280,14 @@ body,
 }
 
 .card--active {
-  background: color-mix(in srgb, var(--progress) 18%, var(--bg-raised));
-  outline: 1px solid color-mix(in srgb, var(--progress) 60%, transparent);
+  background: color-mix(in srgb, var(--accent-blue) 16%, var(--bg-raised));
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-blue) 35%, transparent), 0 8px 22px color-mix(in srgb, var(--accent-blue) 25%, transparent);
   transform: scale(1.02);
 }
 
 .card--faded {
-  mask-image: linear-gradient(to bottom, black 20%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 15%, transparent 100%);
 }
 
 .card__meta {
@@ -419,16 +444,53 @@ button {
 }
 
 .card {
+  position: relative;
   display: block;
   padding: 0;
   touch-action: pan-y;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--accent, var(--accent-slate));
+}
+
+.card--accent-red {
+  --accent: var(--accent-red);
+}
+
+.card--accent-orange {
+  --accent: var(--accent-orange);
+}
+
+.card--accent-blue {
+  --accent: var(--accent-blue);
+}
+
+.card--accent-green {
+  --accent: var(--accent-green);
+}
+
+.card--accent-purple {
+  --accent: var(--accent-purple);
+}
+
+.card--accent-slate {
+  --accent: var(--accent-slate);
 }
 
 .card__body {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 9px 10px;
+  padding: 10px 10px 10px 14px;
   cursor: grab;
 }
 
@@ -499,7 +561,7 @@ button {
 }
 
 .card__details {
-  padding: 2px 10px 10px 36px;
+  padding: 2px 10px 12px 40px;
   cursor: default;
 }
 
@@ -603,8 +665,9 @@ button {
   flex-direction: column;
   gap: 2px;
   padding: 18px 12px;
-  background: var(--bg-raised);
+  background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
   border-right: 1px solid var(--line);
+  backdrop-filter: blur(8px);
 }
 
 .settings-nav__brand {
@@ -683,6 +746,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: var(--bg-raised);
+  box-shadow: var(--card-shadow);
   overflow: hidden;
 }
 

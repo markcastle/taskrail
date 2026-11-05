@@ -145,7 +145,7 @@ export default function App() {
   return (
     <div className="rail">
       <header className="rail__header">
-        <span className="rail__mark" aria-hidden="true" />
+        <img className="rail__mark" src="/icon.png" alt="" width={26} height={26} />
         <h1>Task Rail</h1>
         <button
           className="icon-button"
@@ -323,7 +323,7 @@ function Card(props: CardProps) {
       ? { transform: `translateX(${swipe.dx}px)`, transition: 'none' }
       : {}
 
-  const classes = ['card', `card--${item.status}`, `card--${item.kind}`]
+  const classes = ['card', `card--${item.status}`, `card--${item.kind}`, `card--accent-${accentFor(item)}`]
   if (active) classes.push('card--active')
   if (faded) classes.push('card--faded')
   if (open) classes.push('card--open')
@@ -407,4 +407,15 @@ function CardDetails(props: CardProps) {
       )}
     </div>
   )
+}
+
+/** The colour of a card's left bar: what it is, then how urgent it is. */
+function accentFor(item: Item): 'red' | 'orange' | 'blue' | 'green' | 'purple' | 'slate' {
+  if (item.kind === 'event') return 'purple'
+  if (item.status === 'done') return 'green'
+  if (item.status === 'in_progress') return 'blue'
+  if (item.priority === 'highest') return 'red'
+  if (item.priority === 'high') return 'orange'
+  if (item.priority === 'normal') return 'blue'
+  return 'slate'
 }
