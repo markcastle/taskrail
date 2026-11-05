@@ -67,6 +67,46 @@ export interface SyncError {
   message: string
 }
 
+export type Provider = 'anthropic' | 'open_ai' | 'open_router'
+
+export interface ModelSettings {
+  provider: Provider
+  model: string | null
+  base_url: string | null
+  has_key: boolean
+}
+
+export type ServerSpec =
+  | { transport: 'stdio'; command: string; args: string[]; env: Record<string, string> }
+  | { transport: 'http'; url: string; bearer_secret: string | null }
+
+export interface DiscoverRequest {
+  id: string
+  name: string
+  server: ServerSpec
+  kind: ItemKind
+  hint: string
+  allow_unannotated_list: boolean
+}
+
+export interface ToolSummary {
+  name: string
+  description: string
+  read_only: boolean
+}
+
+export interface DiscoveryOutcome {
+  profile: Record<string, unknown>
+  sample: { external_id: string; title: string; status: string | null }[]
+  tools: ToolSummary[]
+  rounds: number
+  notes: string[]
+}
+
+export type DiscoveryResult =
+  | ({ status: 'ok' } & DiscoveryOutcome)
+  | { status: 'needs_confirmation'; tool: string; profile: Record<string, unknown> }
+
 export interface RailBackend {
   view(expandTop: boolean): Promise<RailView>
   addTask(title: string): Promise<Item>
@@ -89,6 +129,13 @@ export interface RailBackend {
   syncConnector(id: string): Promise<number>
   /** Fires when a pull or a write-back failed. Returns an unsubscribe. */
   onSyncError(callback: (error: SyncError) => void): () => void
+  getModelSettings(): Promise<ModelSettings>
+  /** `apiKey` undefined leaves the stored key alone; empty string removes it. */
+  saveModelSettings(config: { provider: Provider; model: string | null; base_url: string | null }, apiKey?: string): Promise<ModelSettings>
+  /** One cheap round trip; resolves to a line describing who replied. */
+  testModel(): Promise<string>
+  /** Ask the model to write a profile for a server and validate it live. */
+  discoverConnector(request: DiscoverRequest): Promise<DiscoveryResult>
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
   onChanged(callback: () => void): () => void
   /** Fires when the global quick-add shortcut was pressed. Returns an unsubscribe. */
@@ -134,6 +181,10 @@ function tauriBackend(): RailBackend {
     onChanged: (cb) => listen('rail:changed', cb),
     onQuickAdd: (cb) => listen('rail:quick-add', cb),
     onSyncError: (cb) => listen<SyncError>('rail:sync-error', cb),
+    getModelSettings: () => call('get_model_settings'),
+    saveModelSettings: (config, apiKey) => call('save_model_settings', { config, apiKey: apiKey ?? null }),
+    testModel: () => call('test_model'),
+    discoverConnector: (request) => call('discover_connector', { request }),
   }
 }
 
@@ -187,6 +238,7 @@ function browserBackend(): RailBackend {
   const syncErrorListeners = new Set<(e: SyncError) => void>()
   const notify = () => changedListeners.forEach((cb) => cb())
   let connectors: ConnectorSummary[] = []
+  let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   const demoSummary = (): ConnectorSummary => ({
     id: 'demo-tracker',
     name: 'Demo tracker',
@@ -333,6 +385,48 @@ function browserBackend(): RailBackend {
       }),
     syncConnector: (id) => async(() => items.filter((i) => i.origin?.connector === id).length),
     onSyncError: (cb) => (syncErrorListeners.add(cb), () => syncErrorListeners.delete(cb)),
+    getModelSettings: () => async(() => modelSettings),
+    saveModelSettings: (config, apiKey) =>
+      async(() => {
+        const has_key = apiKey === undefined ? modelSettings.has_key : apiKey.trim().length > 0
+        modelSettings = { ...config, has_key }
+        return modelSettings
+      }),
+    testModel: () =>
+      async(() => {
+        if (!modelSettings.has_key) throw new Error('no API key saved; add one under Model in settings')
+        return `${modelSettings.provider} · ${modelSettings.model ?? 'default model'} replied: Hello, Task Rail.`
+      }),
+    discoverConnector: (request) =>
+      new Promise((resolve, reject) =>
+        setTimeout(() => {
+          if (!modelSettings.has_key) return reject(new Error('no API key saved; add one under Model in settings'))
+          if (request.server.transport === 'stdio' && request.server.command.includes('risky') && !request.allow_unannotated_list) {
+            return resolve({ status: 'needs_confirmation', tool: 'transition_ticket', profile: { id: request.id } })
+          }
+          resolve({
+            status: 'ok',
+            profile: {
+              id: request.id,
+              name: request.name,
+              server: request.server,
+              kind: request.kind,
+              list: { tool: 'list_tickets', arguments: { assignee: 'me' }, items: '$.tickets[*]', fields: { external_id: '$.ticket_id', title: '$.summary', status: '$.state' } },
+              status_map: { to_section: { Open: 'todo', Doing: 'in_progress', Closed: 'done' }, canonical: { todo: 'Open', in_progress: 'Doing', done: 'Closed' } },
+            },
+            sample: [
+              { external_id: 'T-1', title: 'Fix login timeout', status: 'Open' },
+              { external_id: 'T-2', title: 'Write release notes', status: 'Doing' },
+            ],
+            tools: [
+              { name: 'list_tickets', description: 'List tickets', read_only: true },
+              { name: 'transition_ticket', description: 'Move a ticket', read_only: false },
+            ],
+            rounds: 1,
+            notes: [],
+          })
+        }, 300),
+      ),
     onChanged: (cb) => (changedListeners.add(cb), () => changedListeners.delete(cb)),
     onQuickAdd: (cb) => (quickAddListeners.add(cb), () => quickAddListeners.delete(cb)),
   }

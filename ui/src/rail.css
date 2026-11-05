@@ -654,3 +654,49 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.settings__row select,
+.settings__row input[type='text'],
+.settings__row input[type='password'],
+.connectors__add input[type='text'],
+.connectors__add input[type='url'] {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.settings__row select,
+.settings__row input[type='text'],
+.settings__row input[type='password'] {
+  width: 150px;
+}
+
+.connectors__add input[type='text'],
+.connectors__add input[type='url'] {
+  width: 100%;
+}
+
+.discovery,
+.discovery__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12px;
+}
+
+.discovery__confirm code {
+  color: var(--priority);
+}
+
+.discovery__sample {
+  margin: 0;
+  padding-left: 16px;
+}

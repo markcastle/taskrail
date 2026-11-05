@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/platform", "crates/store-sqlite", "crates/connector-api", "crates/connector-mcp", "crates/sync", "src-tauri"]
+members = ["crates/core", "crates/platform", "crates/store-sqlite", "crates/connector-api", "crates/connector-mcp", "crates/sync", "crates/llm", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

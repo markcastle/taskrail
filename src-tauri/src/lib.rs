@@ -9,7 +9,9 @@
 mod commands;
 mod connectors;
 mod dock;
+mod model;
 mod rail;
+mod secrets;
 mod seed;
 mod shortcuts;
 mod state;
@@ -40,6 +42,10 @@ pub fn run() {
             commands::add_demo_connector,
             commands::remove_connector,
             commands::sync_connector,
+            commands::get_model_settings,
+            commands::save_model_settings,
+            commands::test_model,
+            commands::discover_connector,
         ])
         .setup(|app| {
             let rail = rail::Rail::open(data_file(app.handle()))?;

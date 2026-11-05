@@ -64,7 +64,13 @@ After setup the model is out of the loop. Sync is deterministic: poll, apply the
 
 A calendar is just a connector whose items carry a time window and no status.
 
-What exists today: the profile format, the session over stdio and streamable HTTP, extraction with JSONPath that prefers structured content and falls back to JSON in text, status write-back and create with placeholder arguments, and the pull loop. What does not exist yet: discovery itself, the sign-in flow for remote servers, and the connectors page beyond adding the demo tracker or pasting a profile.
+### Discovery, as built
+
+`connector-mcp/src/discovery.rs` runs up to three rounds. Each round: ask the model for a profile, parse it, overwrite the parts the model must not decide (transport, id, name, kind), validate the shape, check that the list tool exists, call it, run the extractors on the result. A failure at any step becomes the next round's prompt, with the real response trimmed to a few thousand characters so the model can see what the server actually said. A list tool the server does not mark read-only stops discovery with `NeedsConfirmation` so the UI can ask the person first. The tests in `tests/discovery.rs` drive this with a scripted model against the fake tracker, including a wrong JSONPath that the second round corrects.
+
+`crates/llm` is the only place a model is called. It has one method, text in and text out, and two wire formats: Anthropic's Messages API spoken natively, and the chat completions shape for OpenAI and OpenRouter. The tests use a mock HTTP server to pin the request shape and the error typing. Keys live in the OS credential store through `src-tauri/src/secrets.rs`; the SQLite file only ever holds the provider and model name.
+
+Still to come: the sign-in flow for remote servers that use the MCP authorization spec, bearer tokens for servers that use a static one, and presets for popular servers so most people never trigger the model at all.
 
 ## What we have deliberately not done
 

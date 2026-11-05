@@ -11,7 +11,21 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { createBackend, type ConnectorSummary, type Item, type RailBackend, type RailSettings, type RailView, type Status, type SyncError } from './backend'
+import {
+  createBackend,
+  type ConnectorSummary,
+  type DiscoveryResult,
+  type Item,
+  type ItemKind,
+  type ModelSettings,
+  type Provider,
+  type RailBackend,
+  type RailSettings,
+  type RailView,
+  type ServerSpec,
+  type Status,
+  type SyncError,
+} from './backend'
 import { dueLabel, formatTime, relativeStart } from './format'
 import { useSwipe } from './useSwipe'
 
@@ -287,6 +301,7 @@ function SettingsPanel({
         onSave(draft)
       }}
     >
+      <ModelPanel onNotice={onNotice} />
       <ConnectorsPanel onNotice={onNotice} />
       <fieldset className="settings__row">
         <legend>Dock to</legend>
@@ -331,9 +346,96 @@ function SettingsPanel({
   )
 }
 
+const PROVIDERS: { value: Provider; label: string; modelHint: string }[] = [
+  { value: 'anthropic', label: 'Anthropic', modelHint: 'claude-opus-5-5 (default)' },
+  { value: 'open_router', label: 'OpenRouter', modelHint: 'e.g. anthropic/claude-opus-5.5' },
+  { value: 'open_ai', label: 'OpenAI', modelHint: 'e.g. gpt-5' },
+]
+
+function ModelPanel({ onNotice }: { onNotice: (message: string) => void }) {
+  const [settings, setSettings] = useState<ModelSettings | null>(null)
+  const [provider, setProvider] = useState<Provider>('anthropic')
+  const [model, setModel] = useState('')
+  const [apiKey, setApiKey] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    backend
+      .getModelSettings()
+      .then((s) => {
+        setSettings(s)
+        setProvider(s.provider)
+        setModel(s.model ?? '')
+      })
+      .catch((e) => onNotice(String(e)))
+  }, [onNotice])
+
+  const save = () => {
+    setBusy(true)
+    backend
+      .saveModelSettings({ provider, model: model.trim() || null, base_url: null }, apiKey.trim() ? apiKey.trim() : undefined)
+      .then((s) => {
+        setSettings(s)
+        setApiKey('')
+        onNotice(s.has_key ? 'Model settings saved' : 'Model settings saved, but no API key yet')
+      })
+      .catch((e) => onNotice(String(e)))
+      .finally(() => setBusy(false))
+  }
+  const test = () => {
+    setBusy(true)
+    backend
+      .testModel()
+      .then(onNotice)
+      .catch((e) => onNotice(String(e)))
+      .finally(() => setBusy(false))
+  }
+  const hint = PROVIDERS.find((p) => p.value === provider)?.modelHint ?? ''
+
+  return (
+    <fieldset className="connectors model">
+      <legend>Model</legend>
+      <div className="connectors__empty">Used once per connector, to work out what a server is. Bring your own key.</div>
+      <label className="settings__row">
+        <span>Provider</span>
+        <select aria-label="Provider" value={provider} onChange={(e) => setProvider(e.target.value as Provider)}>
+          {PROVIDERS.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="settings__row">
+        <span>Model</span>
+        <input type="text" aria-label="Model name" placeholder={hint} value={model} onChange={(e) => setModel(e.target.value)} />
+      </label>
+      <label className="settings__row">
+        <span>API key</span>
+        <input
+          type="password"
+          aria-label="API key"
+          placeholder={settings?.has_key ? 'saved in your keychain' : 'paste a key'}
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          autoComplete="off"
+        />
+      </label>
+      <div className="connectors__actions">
+        <button type="button" disabled={busy} onClick={save}>
+          Save model
+        </button>
+        <button type="button" disabled={busy || !settings?.has_key} onClick={test}>
+          Test
+        </button>
+      </div>
+    </fieldset>
+  )
+}
+
 function ConnectorsPanel({ onNotice }: { onNotice: (message: string) => void }) {
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
-  const [adding, setAdding] = useState(false)
+  const [adding, setAdding] = useState<'none' | 'profile' | 'server'>('none')
   const [profileJson, setProfileJson] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -381,11 +483,23 @@ function ConnectorsPanel({ onNotice }: { onNotice: (message: string) => void }) 
         <button type="button" disabled={busy} onClick={() => run(() => backend.addDemoConnector())}>
           Add demo tracker
         </button>
-        <button type="button" disabled={busy} onClick={() => setAdding((a) => !a)} aria-expanded={adding}>
-          Add from profile
+        <button type="button" disabled={busy} onClick={() => setAdding((a) => (a === 'server' ? 'none' : 'server'))} aria-expanded={adding === 'server'}>
+          Add server
+        </button>
+        <button type="button" disabled={busy} onClick={() => setAdding((a) => (a === 'profile' ? 'none' : 'profile'))} aria-expanded={adding === 'profile'}>
+          Paste profile
         </button>
       </div>
-      {adding && (
+      {adding === 'server' && (
+        <AddServer
+          onNotice={onNotice}
+          onAdded={() => {
+            setAdding('none')
+            reload()
+          }}
+        />
+      )}
+      {adding === 'profile' && (
         <div className="connectors__add">
           <textarea
             aria-label="Connector profile JSON"
@@ -403,7 +517,7 @@ function ConnectorsPanel({ onNotice }: { onNotice: (message: string) => void }) 
                 () => backend.addConnectorProfile(profileJson),
                 () => {
                   setProfileJson('')
-                  setAdding(false)
+                  setAdding('none')
                 },
               )
             }
@@ -413,6 +527,140 @@ function ConnectorsPanel({ onNotice }: { onNotice: (message: string) => void }) 
         </div>
       )}
     </fieldset>
+  )
+}
+
+/// The discovery flow: describe a server, let the model write a profile,
+/// check the sample it pulled, then save.
+function AddServer({ onNotice, onAdded }: { onNotice: (message: string) => void; onAdded: () => void }) {
+  const [name, setName] = useState('')
+  const [transport, setTransport] = useState<'stdio' | 'http'>('http')
+  const [url, setUrl] = useState('')
+  const [command, setCommand] = useState('')
+  const [kind, setKind] = useState<ItemKind>('task')
+  const [hint, setHint] = useState('')
+  const [allowUnannotated, setAllowUnannotated] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<DiscoveryResult | null>(null)
+  const [profileJson, setProfileJson] = useState('')
+
+  const id = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+  const server: ServerSpec | null =
+    transport === 'http'
+      ? url.trim()
+        ? { transport: 'http', url: url.trim(), bearer_secret: null }
+        : null
+      : command.trim()
+        ? (() => {
+            const parts = command.trim().split(/\s+/)
+            return { transport: 'stdio', command: parts[0], args: parts.slice(1), env: {} }
+          })()
+        : null
+  const ready = id.length > 0 && server !== null
+
+  const discover = (allow = allowUnannotated) => {
+    if (!server) return
+    setBusy(true)
+    setResult(null)
+    backend
+      .discoverConnector({ id, name: name.trim(), server, kind, hint, allow_unannotated_list: allow })
+      .then((r) => {
+        setResult(r)
+        if (r.status === 'ok') setProfileJson(JSON.stringify(r.profile, null, 2))
+      })
+      .catch((e) => onNotice(String(e)))
+      .finally(() => setBusy(false))
+  }
+  const add = () => {
+    setBusy(true)
+    backend
+      .addConnectorProfile(profileJson)
+      .then(() => {
+        onNotice(`Connected ${name.trim()}`)
+        onAdded()
+      })
+      .catch((e) => onNotice(String(e)))
+      .finally(() => setBusy(false))
+  }
+
+  return (
+    <div className="connectors__add" data-testid="add-server">
+      <label className="settings__row">
+        <span>Name</span>
+        <input type="text" aria-label="Server name" placeholder="Tuesday" value={name} onChange={(e) => setName(e.target.value)} />
+      </label>
+      <fieldset className="settings__row">
+        <legend>Reach it by</legend>
+        <label>
+          <input type="radio" name="transport" checked={transport === 'http'} onChange={() => setTransport('http')} /> URL
+        </label>
+        <label>
+          <input type="radio" name="transport" checked={transport === 'stdio'} onChange={() => setTransport('stdio')} /> Command
+        </label>
+      </fieldset>
+      {transport === 'http' ? (
+        <input type="url" aria-label="Server URL" placeholder="https://example.com/mcp" value={url} onChange={(e) => setUrl(e.target.value)} />
+      ) : (
+        <input type="text" aria-label="Server command" placeholder="npx some-mcp-server --flag" value={command} onChange={(e) => setCommand(e.target.value)} />
+      )}
+      <label className="settings__row">
+        <span>It holds</span>
+        <select aria-label="Item kind" value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
+          <option value="task">Tasks</option>
+          <option value="event">Calendar events</option>
+        </select>
+      </label>
+      <input type="text" aria-label="Hint for the model" placeholder="Anything the model should know (optional)" value={hint} onChange={(e) => setHint(e.target.value)} />
+      <div className="connectors__actions">
+        <button type="button" className="button--primary" disabled={busy || !ready} onClick={() => discover()}>
+          {busy ? 'Discovering…' : 'Discover'}
+        </button>
+      </div>
+      {result?.status === 'needs_confirmation' && (
+        <div className="discovery__confirm">
+          The model wants to list items with <code>{result.tool}</code>, which the server does not mark as read-only. Discovery will call it once.
+          <div className="connectors__actions">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setAllowUnannotated(true)
+                discover(true)
+              }}
+            >
+              Allow and continue
+            </button>
+          </div>
+        </div>
+      )}
+      {result?.status === 'ok' && (
+        <div className="discovery" data-testid="discovery-result">
+          <div className="discovery__summary">
+            Found {result.sample.length} items in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
+            {result.notes.length > 0 && <span className="connector__meta"> Earlier tries: {result.notes.join('; ')}</span>}
+          </div>
+          <ul className="discovery__sample">
+            {result.sample.slice(0, 5).map((item) => (
+              <li key={item.external_id}>
+                <span>{item.title}</span>
+                {item.status && <span className="connector__meta"> · {item.status}</span>}
+              </li>
+            ))}
+            {result.sample.length > 5 && <li className="connector__meta">and {result.sample.length - 5} more</li>}
+          </ul>
+          <textarea aria-label="Discovered profile JSON" rows={6} value={profileJson} onChange={(e) => setProfileJson(e.target.value)} />
+          <div className="connectors__actions">
+            <button type="button" className="button--primary" disabled={busy || !profileJson.trim()} onClick={add}>
+              Add connector
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 

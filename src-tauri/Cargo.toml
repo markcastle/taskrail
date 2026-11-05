@@ -28,7 +28,17 @@ tauri-plugin-global-shortcut = "2"
 taskrail-connector-api = { path = "../crates/connector-api" }
 taskrail-connector-mcp = { path = "../crates/connector-mcp" }
 taskrail-core = { path = "../crates/core" }
+taskrail-llm = { path = "../crates/llm" }
 taskrail-platform = { path = "../crates/platform" }
 taskrail-store-sqlite = { path = "../crates/store-sqlite" }
 taskrail-sync = { path = "../crates/sync" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3", features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["linux-native"] }

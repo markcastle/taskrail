@@ -28,5 +28,9 @@ serde_json = { workspace = true }
 serde_json_path = "0.7"
 taskrail-connector-api = { path = "../connector-api" }
 taskrail-core = { path = "../core" }
+taskrail-llm = { path = "../llm" }
 thiserror = { workspace = true }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "time", "io-std", "sync"] }
+
+[dev-dependencies]
+async-trait = "0.1"

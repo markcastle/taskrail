@@ -2,7 +2,7 @@
 //! from the webview's JSON world into a call on the core, followed by a
 //! `rail:changed` event so every view refreshes.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use taskrail_core::domain::{Item, ItemId, Status};
 use taskrail_core::ports::ItemRepository;
 use taskrail_core::settings::RailSettings;
@@ -249,6 +249,80 @@ pub fn remove_connector(
 #[tauri::command]
 pub async fn sync_connector(app: AppHandle, id: String) -> CommandResult<usize> {
     crate::sync::pull(&app, &id).await
+}
+
+#[tauri::command]
+pub fn get_model_settings(app: AppHandle) -> crate::model::ModelSettings {
+    crate::model::settings(&app)
+}
+
+#[tauri::command]
+pub fn save_model_settings(
+    app: AppHandle,
+    config: taskrail_llm::LlmConfig,
+    api_key: Option<String>,
+) -> CommandResult<crate::model::ModelSettings> {
+    crate::model::save(&app, config, api_key)
+}
+
+#[tauri::command]
+pub async fn test_model(app: AppHandle) -> CommandResult<String> {
+    crate::model::test(&app).await
+}
+
+/// What discovery hands back: a profile to review, or a pause because the
+/// model picked a list tool the server does not promise is read-only.
+#[derive(Debug, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum DiscoveryResult {
+    Ok(taskrail_connector_mcp::DiscoveryOutcome),
+    NeedsConfirmation {
+        tool: String,
+        profile: taskrail_connector_mcp::ConnectorProfile,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DiscoverRequest {
+    pub id: String,
+    pub name: String,
+    pub server: taskrail_connector_mcp::ServerSpec,
+    #[serde(default = "task_kind")]
+    pub kind: taskrail_core::domain::ItemKind,
+    #[serde(default)]
+    pub hint: String,
+    #[serde(default)]
+    pub allow_unannotated_list: bool,
+}
+
+fn task_kind() -> taskrail_core::domain::ItemKind {
+    taskrail_core::domain::ItemKind::Task
+}
+
+#[tauri::command]
+pub async fn discover_connector(
+    app: AppHandle,
+    request: DiscoverRequest,
+) -> CommandResult<DiscoveryResult> {
+    let llm = crate::model::client(&app)?;
+    let request = taskrail_connector_mcp::DiscoveryRequest {
+        id: request.id,
+        name: request.name,
+        server: request.server,
+        kind: request.kind,
+        hint: request.hint,
+        allow_unannotated_list: request.allow_unannotated_list,
+    };
+    match taskrail_connector_mcp::discover(&request, llm.as_ref()).await {
+        Ok(outcome) => Ok(DiscoveryResult::Ok(outcome)),
+        Err(taskrail_connector_mcp::DiscoveryError::NeedsConfirmation { tool, profile }) => {
+            Ok(DiscoveryResult::NeedsConfirmation {
+                tool,
+                profile: *profile,
+            })
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// Quit from the UI. The exit handler in `lib.rs` releases the strip.

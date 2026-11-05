@@ -18,11 +18,13 @@
 //! [`Connector`]: taskrail_connector_api::Connector
 
 pub mod connector;
+pub mod discovery;
 pub mod extract;
 pub mod fake_server;
 pub mod profile;
 pub mod session;
 
 pub use connector::McpConnector;
+pub use discovery::{discover, DiscoveryError, DiscoveryOutcome, DiscoveryRequest};
 pub use profile::{ConnectorProfile, FieldPaths, ListSpec, ServerSpec, ToolSpec};
 pub use session::{McpSession, ToolSummary};
