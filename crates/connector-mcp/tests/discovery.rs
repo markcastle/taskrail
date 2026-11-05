@@ -77,7 +77,7 @@ async fn a_correct_first_answer_is_validated_against_the_live_server() {
     let llm = Scripted::new(&[&good_answer()]);
     let outcome = discover(&request(), &llm).await.unwrap();
     assert_eq!(outcome.rounds, 1);
-    assert_eq!(outcome.sample.len(), 7);
+    assert_eq!(outcome.sample.len(), 5, "the demo profile asks for \"me\", so Sam's tickets stay out");
     assert_eq!(outcome.profile.id, "fake");
     assert!(matches!(outcome.profile.server, ServerSpec::Stdio { .. }));
     assert!(outcome.notes.is_empty());
@@ -173,6 +173,28 @@ async fn the_model_can_explore_before_writing_and_fan_out_over_boards() {
         .notes
         .iter()
         .any(|n| n.contains("looked at list_boards")));
+}
+
+#[tokio::test]
+async fn the_model_can_narrow_with_where_clauses() {
+    let mut value: serde_json::Value = serde_json::from_str(&board_profile_answer()).unwrap();
+    value["list"]["where"] = serde_json::json!([{ "path": "$.assignee", "equals": "mark" }]);
+    value["list"]["for_each"]["where"] =
+        serde_json::json!([{ "path": "$.name", "contains": "Home" }]);
+    let llm = Scripted::new(&[&value.to_string()]);
+    let outcome = discover(&request(), &llm).await.unwrap();
+    assert_eq!(outcome.rounds, 1);
+    let ids: Vec<&str> = outcome
+        .sample
+        .iter()
+        .map(|i| i.external_id.as_str())
+        .collect();
+    assert_eq!(ids, ["T-105", "T-107"], "Home board, Mark's tickets only");
+    assert_eq!(
+        outcome.profile.list.filter.len(),
+        1,
+        "the filter survives the round trip"
+    );
 }
 
 #[tokio::test]

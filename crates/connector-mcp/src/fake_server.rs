@@ -29,6 +29,8 @@ struct Ticket {
     priority: String,
     due_date: Option<String>,
     link: String,
+    /// The person this ticket is assigned to. The signed-in user is "mark".
+    assignee: String,
 }
 
 #[derive(Debug, Serialize, schemars::JsonSchema)]
@@ -109,6 +111,13 @@ impl FakeTracker {
                 priority: priority.into(),
                 due_date: due.map(str::to_owned),
                 link: format!("https://tracker.example/tickets/{id}"),
+                // Two tickets belong to someone else, so filters have
+                // something to leave out.
+                assignee: if id == "T-103" || id == "T-106" {
+                    "sam".into()
+                } else {
+                    "mark".into()
+                },
             };
         Self {
             tickets: Arc::new(Mutex::new(vec![
@@ -148,11 +157,15 @@ impl FakeTracker {
         annotations(read_only_hint = true)
     )]
     fn list_tickets(&self, Parameters(params): Parameters<ListParams>) -> Json<TicketList> {
-        let _ = params.assignee;
+        let wanted = params
+            .assignee
+            .as_deref()
+            .map(|a| if a == "me" { "mark" } else { a });
         let tickets = self
             .lock()
             .iter()
             .filter(|t| !params.open_only || t.state != "Done")
+            .filter(|t| wanted.map_or(true, |w| t.assignee == w))
             .cloned()
             .collect();
         Json(TicketList { tickets })
@@ -257,6 +270,7 @@ impl FakeTracker {
             priority: "P3".into(),
             due_date: None,
             link: format!("https://tracker.example/tickets/{id}"),
+            assignee: "mark".into(),
         };
         tickets.push(ticket.clone());
         Json(ticket)

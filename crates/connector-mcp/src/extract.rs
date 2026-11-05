@@ -7,7 +7,7 @@ use serde_json_path::JsonPath;
 use taskrail_connector_api::RemoteItem;
 use taskrail_core::domain::{ItemKind, TimeWindow};
 
-use crate::profile::{ConnectorProfile, FieldPaths};
+use crate::profile::{Condition, ConnectorProfile, FieldPaths};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExtractError {
@@ -106,17 +106,61 @@ pub fn parse_time(text: &str) -> Option<DateTime<Utc>> {
     None
 }
 
-/// Every item in the list result, as the profile describes them.
+/// The text a JSON value is compared by: strings as they are, everything
+/// else as its JSON text, so `7` and `"7"` are the same id.
+fn comparable(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// Does `element` pass every condition? See [`Condition`] for the rules.
+pub fn passes(element: &Value, conditions: &[Condition]) -> Result<bool, ExtractError> {
+    for condition in conditions {
+        let values: Vec<&Value> = path(&condition.path)?
+            .query(element)
+            .all()
+            .into_iter()
+            .filter(|v| !v.is_null())
+            .collect();
+        let hit = match (&condition.equals, &condition.contains) {
+            (Some(wanted), _) => {
+                let wanted = comparable(wanted);
+                values
+                    .iter()
+                    .any(|v| comparable(v).eq_ignore_ascii_case(&wanted))
+            }
+            (None, Some(needle)) => {
+                let needle = needle.to_lowercase();
+                values.iter().any(|v| {
+                    v.as_str()
+                        .is_some_and(|s| s.to_lowercase().contains(&needle))
+                })
+            }
+            (None, None) => !values.is_empty(),
+        };
+        if hit == condition.not {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Every item in the list result that passes the profile's `where`
+/// conditions, as the profile describes them.
 pub fn extract_items(
     profile: &ConnectorProfile,
     result: &Value,
 ) -> Result<Vec<RemoteItem>, ExtractError> {
     let items = path(&profile.list.items)?.query(result).all();
-    items
-        .into_iter()
-        .enumerate()
-        .map(|(index, item)| extract_item(profile, &profile.list.fields, item, index))
-        .collect()
+    let mut out = Vec::new();
+    for (index, item) in items.into_iter().enumerate() {
+        if passes(item, &profile.list.filter)? {
+            out.push(extract_item(profile, &profile.list.fields, item, index)?);
+        }
+    }
+    Ok(out)
 }
 
 fn extract_item(
@@ -220,7 +264,12 @@ pub async fn fetch_items(
         .query(&parent)
         .all();
     let mut ids = Vec::new();
+    let mut skipped = 0;
     for element in elements {
+        if !passes(element, &each.filter).map_err(|e| ConnectorError::Invalid(e.to_string()))? {
+            skipped += 1;
+            continue;
+        }
         if let Some(id) =
             string_at(element, &each.id).map_err(|e| ConnectorError::Invalid(e.to_string()))?
         {
@@ -228,10 +277,15 @@ pub async fn fetch_items(
         }
     }
     log::info!(
-        "{}: {} returned {} ids to fan out over",
+        "{}: {} returned {} ids to fan out over{}",
         profile.id,
         each.tool,
-        ids.len()
+        ids.len(),
+        if skipped > 0 {
+            format!(" ({skipped} left out by the where clause)")
+        } else {
+            String::new()
+        }
     );
     let mut all = Vec::new();
     for id in ids {
@@ -279,6 +333,59 @@ mod tests {
             "unknown priorities are dropped, not guessed"
         );
         assert_eq!(items[1].due, None);
+    }
+
+    #[test]
+    fn where_conditions_keep_only_matching_items() {
+        let mut profile = fake_tracker_profile("fake");
+        let board = json!({ "tickets": [
+            { "ticket_id": "A", "summary": "mine", "assignees": [{ "id": "u-1" }, { "id": "u-2" }] },
+            { "ticket_id": "B", "summary": "theirs", "assignees": [{ "id": "u-3" }] },
+            { "ticket_id": "C", "summary": "nobody's", "assignees": [] },
+            { "ticket_id": "D", "summary": "mine but archived", "assignees": [{ "id": "u-1" }], "archived": true }
+        ]});
+        profile.list.filter = vec![
+            Condition {
+                path: "$.assignees[*].id".into(),
+                equals: Some(json!("U-1")),
+                ..Default::default()
+            },
+            Condition {
+                path: "$.archived".into(),
+                not: true,
+                ..Default::default()
+            },
+        ];
+        let items = extract_items(&profile, &board).unwrap();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].external_id, "A");
+
+        profile.list.filter = vec![Condition {
+            path: "$.summary".into(),
+            contains: Some("MINE".into()),
+            ..Default::default()
+        }];
+        let items = extract_items(&profile, &board).unwrap();
+        assert_eq!(items.len(), 2, "contains ignores case");
+
+        profile.list.filter = vec![Condition {
+            path: "$.assignees[*].id".into(),
+            equals: Some(json!(7)),
+            ..Default::default()
+        }];
+        assert!(extract_items(&profile, &board).unwrap().is_empty());
+        assert!(
+            passes(
+                &json!({ "n": "7" }),
+                &[Condition {
+                    path: "$.n".into(),
+                    equals: Some(json!(7)),
+                    ..Default::default()
+                }]
+            )
+            .unwrap(),
+            "numbers and their text compare equal"
+        );
     }
 
     #[test]

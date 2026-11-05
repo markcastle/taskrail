@@ -219,6 +219,11 @@ async fn add_and_pull(
         registry.add(profile)?;
         let mut rail = lock(&state.rail);
         registry.save(rail.service.repository_mut())?;
+        // Real work is arriving, so the welcome cards have done their job.
+        let retired = crate::seed::retire(&mut rail.service).map_err(|e| e.to_string())?;
+        if retired > 0 {
+            log::info!("took {retired} welcome cards off the rail now that a connector is set up");
+        }
     }
     crate::sync::pull(app, &id).await?;
     changed(app);

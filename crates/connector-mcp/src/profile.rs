@@ -70,10 +70,32 @@ pub struct FieldPaths {
     pub updated_at: Option<String>,
 }
 
+/// One test an element must pass to be kept. `path` is JSONPath evaluated
+/// against the element; the test passes when any value it selects
+/// satisfies it, so `$.assignees[*].id` works for a list of people.
+///
+/// - `equals`: the value matches (strings compared without regard to case,
+///   numbers and booleans by their text).
+/// - `contains`: the value is a string containing this text, any case.
+/// - neither: the path selects something that is not null.
+/// - `not`: inverts the result.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Condition {
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub equals: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contains: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub not: bool,
+}
+
 /// A parent call whose results feed the list call: "for each board, list
 /// its tasks". The parent is called once; `items` selects its elements and
 /// `id` reads the value that replaces `placeholder` in the list call's
 /// arguments, which then runs once per element. Results are concatenated.
+/// `where` keeps only the elements that pass every condition, so a profile
+/// can fan out over the boards whose name contains "Platform" and no others.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ForEach {
     pub tool: String,
@@ -83,6 +105,8 @@ pub struct ForEach {
     pub id: String,
     /// The placeholder in the list call's arguments, such as `{board_id}`.
     pub placeholder: String,
+    #[serde(default, rename = "where", skip_serializing_if = "Vec::is_empty")]
+    pub filter: Vec<Condition>,
 }
 
 /// The list call and how to read its result.
@@ -95,6 +119,10 @@ pub struct ListSpec {
     pub fields: FieldPaths,
     #[serde(default)]
     pub for_each: Option<ForEach>,
+    /// Keep only the items that pass every condition. This is how a profile
+    /// narrows a list to one person's work when the tool itself cannot.
+    #[serde(default, rename = "where", skip_serializing_if = "Vec::is_empty")]
+    pub filter: Vec<Condition>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,6 +199,23 @@ impl ConnectorProfile {
         {
             problems.push("a calendar profile needs list.fields.start and list.fields.end".into());
         }
+        let conditions = self.list.filter.iter().chain(
+            self.list
+                .for_each
+                .iter()
+                .flat_map(|each| each.filter.iter()),
+        );
+        for condition in conditions {
+            if condition.path.trim().is_empty() {
+                problems.push("every \"where\" condition needs a path".into());
+            }
+            if condition.equals.is_some() && condition.contains.is_some() {
+                problems.push(format!(
+                    "the condition on {:?} must use equals or contains, not both",
+                    condition.path
+                ));
+            }
+        }
         problems
     }
 }
@@ -205,6 +250,7 @@ pub fn fake_tracker_profile(command: impl Into<String>) -> ConnectorProfile {
                 ..FieldPaths::default()
             },
             for_each: None,
+            filter: vec![],
         },
         set_status: Some(ToolSpec {
             tool: "transition_ticket".into(),
@@ -263,6 +309,44 @@ mod tests {
         assert_eq!(profile.poll_seconds, 60);
         assert!(profile.set_status.is_none());
         assert!(profile.validate().is_empty());
+    }
+
+    #[test]
+    fn where_clauses_parse_and_stay_out_of_the_json_when_empty() {
+        let json = r#"{
+            "id": "x", "name": "X",
+            "server": { "transport": "http", "url": "https://example.test/mcp" },
+            "list": {
+                "tool": "get_board", "arguments": { "board_id": "{board_id}" }, "items": "$.tasks[*]",
+                "fields": { "external_id": "$.id", "title": "$.name" },
+                "where": [ { "path": "$.assignees[*].id", "equals": "u-1" }, { "path": "$.archived", "not": true } ],
+                "for_each": {
+                    "tool": "list_boards", "arguments": {}, "items": "$.boards[*]", "id": "$.id", "placeholder": "{board_id}",
+                    "where": [ { "path": "$.name", "contains": "platform" } ]
+                }
+            }
+        }"#;
+        let profile: ConnectorProfile = serde_json::from_str(json).unwrap();
+        assert_eq!(profile.list.filter.len(), 2);
+        assert!(profile.list.filter[1].not);
+        assert_eq!(
+            profile.list.for_each.as_ref().unwrap().filter[0]
+                .contains
+                .as_deref(),
+            Some("platform")
+        );
+        assert!(profile.validate().is_empty());
+
+        let plain = serde_json::to_string(&fake_tracker_profile("fake")).unwrap();
+        assert!(
+            !plain.contains("\"where\""),
+            "an empty filter is not written out"
+        );
+
+        let mut bad = profile.clone();
+        bad.list.filter[0].contains = Some("x".into());
+        bad.list.filter[1].path = String::new();
+        assert_eq!(bad.validate().len(), 2, "{:?}", bad.validate());
     }
 
     #[test]

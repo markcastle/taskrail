@@ -51,7 +51,7 @@ async fn list_then_transition_then_create() {
     assert!(info.capabilities.write_status && info.capabilities.create);
 
     let items = connector.list().await.unwrap();
-    assert_eq!(items.len(), 7);
+    assert_eq!(items.len(), 5, "the demo profile asks for \"me\"");
     let first = &items[0];
     assert_eq!(first.external_id, "T-101");
     assert_eq!(first.title, "Prepare board deck");
@@ -64,7 +64,7 @@ async fn list_then_transition_then_create() {
     );
 
     connector
-        .set_status("T-103", Status::InProgress)
+        .set_status("T-104", Status::InProgress)
         .await
         .unwrap();
     let created = connector.create("Write the connector").await.unwrap();
@@ -72,8 +72,8 @@ async fn list_then_transition_then_create() {
     assert_eq!(created.status.as_deref(), Some("Backlog"));
 
     let again = connector.list().await.unwrap();
-    assert_eq!(again.len(), 8);
-    let moved = again.iter().find(|i| i.external_id == "T-103").unwrap();
+    assert_eq!(again.len(), 6, "the new ticket is Mark's too");
+    let moved = again.iter().find(|i| i.external_id == "T-104").unwrap();
     assert_eq!(moved.status.as_deref(), Some("In Progress"));
     assert_eq!(
         connector
@@ -96,6 +96,7 @@ async fn a_profile_can_fan_out_over_boards() {
         items: "$.boards[*]".into(),
         id: "$.board_id".into(),
         placeholder: "{board_id}".into(),
+        filter: vec![],
     });
     assert!(profile.validate().is_empty());
     let connector = McpConnector::new(profile, SessionAuth::default());
@@ -103,4 +104,50 @@ async fn a_profile_can_fan_out_over_boards() {
     assert_eq!(items.len(), 7, "every ticket across both boards");
     assert!(items.iter().any(|i| i.external_id == "T-101"));
     assert!(items.iter().any(|i| i.external_id == "T-107"));
+}
+
+#[tokio::test]
+async fn where_clauses_narrow_a_fan_out_to_one_board_and_one_person() {
+    use taskrail_connector_mcp::{Condition, ForEach};
+    let mut profile = fake_tracker_profile(server());
+    profile.list.call.tool = "get_board".into();
+    profile.list.call.arguments = serde_json::json!({ "board_id": "{board_id}" });
+    profile.list.items = "$.tasks[*]".into();
+    profile.list.filter = vec![Condition {
+        path: "$.assignee".into(),
+        equals: Some(serde_json::json!("Mark")),
+        ..Default::default()
+    }];
+    profile.list.for_each = Some(ForEach {
+        tool: "list_boards".into(),
+        arguments: serde_json::json!({}),
+        items: "$.boards[*]".into(),
+        id: "$.board_id".into(),
+        placeholder: "{board_id}".into(),
+        filter: vec![Condition {
+            path: "$.name".into(),
+            contains: Some("work".into()),
+            ..Default::default()
+        }],
+    });
+    assert!(profile.validate().is_empty());
+    let connector = McpConnector::new(profile, SessionAuth::default());
+    let items = connector.list().await.unwrap();
+    let ids: Vec<&str> = items.iter().map(|i| i.external_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["T-101", "T-102", "T-104"],
+        "the Work board only, without Sam's T-103"
+    );
+}
+
+#[tokio::test]
+async fn list_tickets_honours_the_assignee_argument() {
+    let profile = fake_tracker_profile(server());
+    let connector = McpConnector::new(profile, SessionAuth::default());
+    let items = connector.list().await.unwrap();
+    assert_eq!(items.len(), 5, "\"me\" leaves out Sam's two tickets");
+    assert!(items
+        .iter()
+        .all(|i| i.external_id != "T-103" && i.external_id != "T-106"));
 }

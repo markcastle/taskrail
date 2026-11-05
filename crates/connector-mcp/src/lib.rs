@@ -29,5 +29,7 @@ pub mod session;
 pub use auth::{CredentialPersistence, SessionAuth};
 pub use connector::McpConnector;
 pub use discovery::{discover, DiscoveryError, DiscoveryOutcome, DiscoveryRequest};
-pub use profile::{ConnectorProfile, FieldPaths, ForEach, ListSpec, ServerSpec, ToolSpec};
+pub use profile::{
+    Condition, ConnectorProfile, FieldPaths, ForEach, ListSpec, ServerSpec, ToolSpec,
+};
 pub use session::{McpSession, ToolSummary};
