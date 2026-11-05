@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use taskrail_connector_api::{ConnectorError, RemoteItem};
 use taskrail_core::domain::ItemKind;
-use taskrail_llm::{extract_json, LlmClient, LlmError, LlmRequest};
+use taskrail_llm::{extract_json, LlmClient, LlmError, LlmMessage, LlmRequest, Role};
 
 use crate::auth::SessionAuth;
 use crate::extract::fetch_items;
@@ -122,7 +122,12 @@ async fn discover_with(
     );
 
     let system = system_prompt();
-    let mut user = first_prompt(request, &tools);
+    // The whole exchange so far, so the tool list and the format given at
+    // the start stay in front of the model through explorations and retries.
+    let mut messages = vec![LlmMessage {
+        role: Role::User,
+        content: first_prompt(request, &tools),
+    }];
     let mut notes = Vec::new();
     let mut last = String::new();
     let mut explorations = 0;
@@ -132,7 +137,7 @@ async fn discover_with(
         let answer = llm
             .complete(&LlmRequest {
                 system: system.clone(),
-                user: user.clone(),
+                messages: messages.clone(),
                 max_tokens: 8_000,
             })
             .await
@@ -140,15 +145,33 @@ async fn discover_with(
                 log::warn!("discovery round {round}: the model call failed: {e}");
                 e
             })?;
+        messages.push(LlmMessage {
+            role: Role::Assistant,
+            content: answer.clone(),
+        });
+        let mut reply = |content: String| {
+            messages.push(LlmMessage {
+                role: Role::User,
+                content,
+            });
+        };
 
         let value = match extract_json(&answer) {
             Ok(value) => value,
             Err(e) => {
                 let problem = e.to_string();
                 log::warn!("discovery round {round}: {problem}");
+                log::info!(
+                    "discovery round {round}: the answer began: {}",
+                    answer
+                        .chars()
+                        .take(300)
+                        .collect::<String>()
+                        .replace('\n', " ")
+                );
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
-                user = retry_prompt(&answer, &problem, None);
+                reply(retry_prompt(&problem, None));
                 continue;
             }
         };
@@ -161,7 +184,7 @@ async fn discover_with(
                 log::info!("discovery round {round}: {problem}");
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
-                user = retry_prompt(&answer, &problem, None);
+                reply(retry_prompt(&problem, None));
                 continue;
             }
             explorations += 1;
@@ -192,17 +215,24 @@ async fn discover_with(
                 notes.push(format!("round {round}: looked at {}", call.tool));
                 results.push((call.tool, result));
             }
-            user = explore_prompt(&results, MAX_EXPLORATIONS - explorations);
+            reply(explore_prompt(&results, MAX_EXPLORATIONS - explorations));
             continue;
         }
 
-        let profile = match parse_profile(value, request) {
+        let profile = match parse_profile(value.clone(), request) {
             Ok(profile) => profile,
             Err(problem) => {
                 log::warn!("discovery round {round}: {problem}");
+                log::info!(
+                    "discovery round {round}: the answer's top-level keys were {:?}",
+                    value
+                        .as_object()
+                        .map(|o| o.keys().cloned().collect::<Vec<_>>())
+                        .unwrap_or_default()
+                );
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
-                user = retry_prompt(&answer, &problem, None);
+                reply(retry_prompt(&problem, None));
                 continue;
             }
         };
@@ -232,7 +262,7 @@ async fn discover_with(
                 log::warn!("discovery round {round}: {problem}");
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
-                user = retry_prompt(&answer, &problem, None);
+                reply(retry_prompt(&problem, None));
                 continue;
             }
             Some(Ok(tool)) => {
@@ -285,7 +315,7 @@ async fn discover_with(
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
                 let raw = session.call(&sample_call.0, &sample_call.1).await.ok();
-                user = retry_prompt(&answer, &problem, raw.as_ref());
+                reply(retry_prompt(&problem, raw.as_ref()));
             }
             Err(e) => {
                 let problem = e.to_string();
@@ -293,7 +323,7 @@ async fn discover_with(
                 notes.push(format!("round {round}: {problem}"));
                 last = problem.clone();
                 let raw = session.call(&sample_call.0, &sample_call.1).await.ok();
-                user = retry_prompt(&answer, &problem, raw.as_ref());
+                reply(retry_prompt(&problem, raw.as_ref()));
             }
         }
     }
@@ -403,10 +433,8 @@ fn explore_prompt(results: &[(String, String)], remaining: usize) -> String {
     prompt
 }
 
-fn retry_prompt(previous_answer: &str, problem: &str, sample: Option<&Value>) -> String {
-    let mut prompt = format!(
-        "Your previous answer did not work.\n\nProblem: {problem}\n\nYour previous answer:\n{previous_answer}\n"
-    );
+fn retry_prompt(problem: &str, sample: Option<&Value>) -> String {
+    let mut prompt = format!("Your previous answer did not work.\n\nProblem: {problem}\n");
     if let Some(sample) = sample {
         let text = serde_json::to_string_pretty(sample).unwrap_or_default();
         prompt.push_str(&format!(

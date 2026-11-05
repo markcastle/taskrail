@@ -14,6 +14,7 @@ use taskrail_llm::{LlmClient, LlmError, LlmRequest};
 struct Scripted {
     answers: Mutex<Vec<String>>,
     prompts: Mutex<Vec<String>>,
+    histories: Mutex<Vec<usize>>,
 }
 
 impl Scripted {
@@ -21,6 +22,7 @@ impl Scripted {
         Self {
             answers: Mutex::new(answers.iter().rev().map(|s| s.to_string()).collect()),
             prompts: Mutex::new(Vec::new()),
+            histories: Mutex::new(Vec::new()),
         }
     }
 }
@@ -28,7 +30,11 @@ impl Scripted {
 #[async_trait]
 impl LlmClient for Scripted {
     async fn complete(&self, request: &LlmRequest) -> Result<String, LlmError> {
-        self.prompts.lock().unwrap().push(request.user.clone());
+        self.prompts
+            .lock()
+            .unwrap()
+            .push(request.last_user().to_owned());
+        self.histories.lock().unwrap().push(request.messages.len());
         self.answers
             .lock()
             .unwrap()

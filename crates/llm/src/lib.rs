@@ -74,11 +74,64 @@ impl LlmConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LlmMessage {
+    pub role: Role,
+    pub content: String,
+}
+
+/// A system prompt and the turns so far, oldest first, ending with the
+/// user. Discovery keeps the whole exchange so the model never loses what
+/// it was told at the start.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LlmRequest {
     pub system: String,
-    pub user: String,
+    pub messages: Vec<LlmMessage>,
     pub max_tokens: u32,
+}
+
+impl LlmRequest {
+    /// One question, no history.
+    pub fn single(system: impl Into<String>, user: impl Into<String>, max_tokens: u32) -> Self {
+        Self {
+            system: system.into(),
+            messages: vec![LlmMessage {
+                role: Role::User,
+                content: user.into(),
+            }],
+            max_tokens,
+        }
+    }
+
+    /// The most recent user turn, for logs and tests.
+    pub fn last_user(&self) -> &str {
+        self.messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::User)
+            .map(|m| m.content.as_str())
+            .unwrap_or_default()
+    }
+}
+
+fn wire_messages(request: &LlmRequest) -> Vec<Value> {
+    request
+        .messages
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "role": match m.role { Role::User => "user", Role::Assistant => "assistant" },
+                "content": m.content,
+            })
+        })
+        .collect()
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -211,7 +264,7 @@ impl LlmClient for AnthropicClient {
             "model": self.model,
             "max_tokens": request.max_tokens,
             "system": request.system,
-            "messages": [{ "role": "user", "content": request.user }],
+            "messages": wire_messages(request),
         });
         let value = post(
             &self.http,
@@ -263,13 +316,12 @@ struct OpenAiCompatibleClient {
 #[async_trait]
 impl LlmClient for OpenAiCompatibleClient {
     async fn complete(&self, request: &LlmRequest) -> Result<String, LlmError> {
+        let mut messages = vec![serde_json::json!({ "role": "system", "content": request.system })];
+        messages.extend(wire_messages(request));
         let body = serde_json::json!({
             "model": self.model,
             "max_tokens": request.max_tokens,
-            "messages": [
-                { "role": "system", "content": request.system },
-                { "role": "user", "content": request.user }
-            ],
+            "messages": messages,
         });
         let mut builder = self
             .http
@@ -305,11 +357,7 @@ mod tests {
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
     fn request() -> LlmRequest {
-        LlmRequest {
-            system: "You write JSON.".into(),
-            user: "Describe a cat.".into(),
-            max_tokens: 500,
-        }
+        LlmRequest::single("You write JSON.", "Describe a cat.", 500)
     }
 
     #[tokio::test]
@@ -407,6 +455,79 @@ mod tests {
         let client = client_for(&config, "or-key").unwrap();
         let text = client.complete(&request()).await.unwrap();
         assert_eq!(extract_json(&text).unwrap()["animal"], "cat");
+    }
+
+    #[tokio::test]
+    async fn a_conversation_is_sent_in_order_on_both_wires() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path("/messages"))
+            .and(body_partial_json(serde_json::json!({
+                "messages": [
+                    { "role": "user", "content": "first" },
+                    { "role": "assistant", "content": "reply" },
+                    { "role": "user", "content": "second" }
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "content": [{ "type": "text", "text": "ok" }], "stop_reason": "end_turn"
+            })))
+            .mount(&server)
+            .await;
+        Mock::given(method("POST"))
+            .and(path("/chat/completions"))
+            .and(body_partial_json(serde_json::json!({
+                "messages": [
+                    { "role": "system", "content": "sys" },
+                    { "role": "user", "content": "first" },
+                    { "role": "assistant", "content": "reply" },
+                    { "role": "user", "content": "second" }
+                ]
+            })))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "choices": [{ "message": { "role": "assistant", "content": "ok" } }]
+            })))
+            .mount(&server)
+            .await;
+        let request = LlmRequest {
+            system: "sys".into(),
+            messages: vec![
+                LlmMessage {
+                    role: Role::User,
+                    content: "first".into(),
+                },
+                LlmMessage {
+                    role: Role::Assistant,
+                    content: "reply".into(),
+                },
+                LlmMessage {
+                    role: Role::User,
+                    content: "second".into(),
+                },
+            ],
+            max_tokens: 100,
+        };
+        assert_eq!(request.last_user(), "second");
+        let anthropic = client_for(
+            &LlmConfig {
+                provider: Provider::Anthropic,
+                model: None,
+                base_url: Some(server.uri()),
+            },
+            "k",
+        )
+        .unwrap();
+        assert_eq!(anthropic.complete(&request).await.unwrap(), "ok");
+        let openai = client_for(
+            &LlmConfig {
+                provider: Provider::OpenAi,
+                model: Some("gpt-5".into()),
+                base_url: Some(server.uri()),
+            },
+            "k",
+        )
+        .unwrap();
+        assert_eq!(openai.complete(&request).await.unwrap(), "ok");
     }
 
     #[test]

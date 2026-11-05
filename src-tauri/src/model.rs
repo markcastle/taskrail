@@ -97,11 +97,11 @@ pub async fn test(app: &AppHandle) -> Result<String, String> {
     let client = client(app)?;
     log::info!("testing {}", client.describe());
     let reply = client
-        .complete(&LlmRequest {
-            system: "Answer in five words or fewer.".into(),
-            user: "Say hello to Task Rail.".into(),
-            max_tokens: 64,
-        })
+        .complete(&LlmRequest::single(
+            "Answer in five words or fewer.",
+            "Say hello to Task Rail.",
+            64,
+        ))
         .await
         .map_err(|e| e.to_string())?;
     Ok(format!("{} replied: {}", client.describe(), reply.trim()))
