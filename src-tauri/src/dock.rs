@@ -35,10 +35,16 @@ pub fn attach(app: &AppHandle) -> tauri::Result<()> {
 /// AppKit will not have that, so the work hops over.
 pub fn redock(app: &AppHandle) -> tauri::Result<()> {
     let handle = app.clone();
-    app.run_on_main_thread(move || {
-        if let Err(e) = apply(&handle) {
-            log::warn!("re-dock failed: {e}");
+    app.run_on_main_thread(move || match apply(&handle) {
+        Ok(()) => {}
+        Err(DockError::NotDocked) => {
+            if let Ok(window) = rail_window(&handle) {
+                if let Err(e) = park(&window, &handle) {
+                    log::warn!("re-park failed: {e}");
+                }
+            }
         }
+        Err(e) => log::warn!("re-dock failed: {e}"),
     })
 }
 
@@ -56,11 +62,14 @@ pub fn release(app: &AppHandle) {
 fn apply(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();
-    let settings = lock(&state.rail).settings.clone();
+    let (edge, width_px) = {
+        let rail = lock(&state.rail);
+        (rail.settings.edge, rail.current_width_px())
+    };
     let scale = window.scale_factor().unwrap_or(1.0);
     let request = DockRequest {
-        edge: settings.edge,
-        width_px: (f64::from(settings.width_px) * scale).round() as u32,
+        edge,
+        width_px: (f64::from(width_px) * scale).round() as u32,
     };
     let mut guard = lock(&state.dock);
     let dock = guard.as_mut().ok_or(DockError::NotDocked)?;
@@ -72,15 +81,19 @@ fn apply(app: &AppHandle) -> Result<(), DockError> {
 /// The no-docking fallback: an always-on-top window at the chosen edge of the
 /// primary monitor.
 fn park(window: &WebviewWindow, app: &AppHandle) -> tauri::Result<()> {
-    let settings = lock(&app.state::<AppState>().rail).settings.clone();
+    let (edge, width_px) = {
+        let state = app.state::<AppState>();
+        let rail = lock(&state.rail);
+        (rail.settings.edge, rail.current_width_px())
+    };
     let Some(monitor) = window.primary_monitor()? else {
         return Ok(());
     };
     let scale = monitor.scale_factor();
-    let width = (f64::from(settings.width_px) * scale).round() as u32;
+    let width = (f64::from(width_px) * scale).round() as u32;
     let size = monitor.size();
     let origin = monitor.position();
-    let x = match settings.edge {
+    let x = match edge {
         Edge::Right => origin.x + size.width as i32 - width as i32,
         Edge::Left => origin.x,
     };

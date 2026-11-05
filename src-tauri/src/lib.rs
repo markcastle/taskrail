@@ -14,7 +14,6 @@ mod model;
 mod rail;
 mod secrets;
 mod seed;
-mod settings_window;
 mod shortcuts;
 mod state;
 mod sync;
@@ -42,6 +41,7 @@ pub fn run() {
             commands::update_settings,
             commands::quit,
             commands::open_settings,
+            commands::expand_rail,
             commands::list_connectors,
             commands::add_connector_profile,
             commands::add_demo_connector,
@@ -55,7 +55,6 @@ pub fn run() {
             commands::read_log,
             commands::log_from_ui,
             commands::open_log_folder,
-            commands::close_settings,
         ])
         .setup(|app| {
             log::info!("Task Rail {} starting", env!("CARGO_PKG_VERSION"));
@@ -71,11 +70,6 @@ pub fn run() {
             tray::install(app.handle())?;
             release_on_console_signal(app.handle().clone());
             sync::start(app.handle().clone());
-            // Debugging aid: `TASKRAIL_OPEN_SETTINGS=1` opens the settings
-            // window straight away, for looking at it under a test display.
-            if std::env::var_os("TASKRAIL_OPEN_SETTINGS").is_some() {
-                settings_window::open(app.handle())?;
-            }
             Ok(())
         })
         .build(tauri::generate_context!())

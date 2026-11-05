@@ -38,7 +38,9 @@ One SQLite file, two tables. `items` keeps each item as JSON in a `data` column 
 
 ### `src-tauri`
 
-The shell. It opens the store, builds a `RailService` over it in `rail.rs`, turns UI calls into service calls through `commands.rs`, emits a `rail:changed` event after every write so the UI refreshes, registers the global quick-add shortcut in `shortcuts.rs`, and hands the native window handle to the platform crate in `dock.rs`. On first run `seed.rs` adds three cards that teach the gestures.
+The shell. It opens the store, builds a `RailService` over it in `rail.rs`, turns UI calls into service calls through `commands.rs`, emits a `rail:changed` event after every write so the UI refreshes, registers the global quick-add shortcut in `shortcuts.rs`, and hands the native window handle to the platform crate in `dock.rs`. On first run `seed.rs` adds three cards that teach the gestures. `logs.rs` writes a log file next to the data and the UI tails it.
+
+There is exactly one window. A second webview window created next to a docked AppBar hung on Windows every time, so settings open inside the rail instead: the page swaps to the settings component and asks the shell to widen the strip with the same docking call used at startup, then gives the width back on close. Anything that needs more than a strip of screen should follow that pattern rather than opening a window.
 
 ### `ui`
 

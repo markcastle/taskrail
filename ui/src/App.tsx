@@ -13,6 +13,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from '@dnd-kit/utilities'
 import { createBackend, type Item, type RailBackend, type RailView, type Status, type SyncError } from './backend'
 import { dueLabel, formatTime, relativeStart } from './format'
+import Settings from './Settings'
 import { followTheme } from './theme'
 import { useSwipe } from './useSwipe'
 
@@ -26,6 +27,7 @@ export default function App() {
   const [expandedTop, setExpandedTop] = useState(false)
   const [openCard, setOpenCard] = useState<string | null>(null)
   const [quickAddOpen, setQuickAddOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   const refresh = useCallback(() => {
@@ -54,6 +56,20 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [notice])
   useEffect(() => backend.onQuickAdd(() => setQuickAddOpen(true)), [])
+  useEffect(() => backend.onOpenSettings(() => setSettingsOpen(true)), [])
+
+  // Settings live inside the rail, which widens while they are open.
+  const openSettings = () => {
+    setSettingsOpen(true)
+    backend.expandRail(true).catch((e) => setNotice(String(e)))
+  }
+  const closeSettings = () => {
+    setSettingsOpen(false)
+    backend.expandRail(false).catch((e) => setNotice(String(e)))
+  }
+  useEffect(() => {
+    if (settingsOpen) backend.expandRail(true).catch((e) => setNotice(String(e)))
+  }, [settingsOpen])
 
   // Every action collapses the open card: the card has usually just moved,
   // and a details panel following it around reads as a glitch.
@@ -111,6 +127,7 @@ export default function App() {
     )
   }
   if (!view) return <div className="rail rail--empty">Loading…</div>
+  if (settingsOpen) return <Settings onClose={closeSettings} />
 
   const cardProps = (item: Item) => ({
     item,
@@ -134,7 +151,7 @@ export default function App() {
           className="icon-button"
           title="Settings"
           aria-label="Settings"
-          onClick={() => backend.openSettings().catch((e) => setNotice(String(e)))}
+          onClick={openSettings}
         >
           ⚙
         </button>

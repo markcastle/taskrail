@@ -1,13 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the rail and settings windows may do. Only the core defaults for now.",
+  "description": "What the rail window may do. Only the core defaults for now.",
   "windows": [
-    "rail",
-    "settings"
+    "rail"
   ],
   "permissions": [
-    "core:default",
-    "core:window:allow-close"
+    "core:default"
   ]
 }

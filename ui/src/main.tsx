@@ -25,8 +25,10 @@ function showFatal(message: string) {
   root.innerHTML = `<pre style="padding:16px;white-space:pre-wrap;font:12px monospace;color:#d93a3f">Task Rail could not start this window:\n${message}</pre>`
 }
 
-// One bundle, two windows. The rail is the default; the settings window is
-// told apart by its label in the app and by #settings in a browser.
+// One window. Settings open inside the rail; #settings in a browser shows
+// them on their own for development.
 const role = windowRole()
 backend.logFromUi('info', `page loaded as ${role}`)
-createRoot(document.getElementById('root')!).render(<StrictMode>{role === 'settings' ? <Settings /> : <App />}</StrictMode>)
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>{role === 'settings' ? <Settings onClose={() => window.close()} /> : <App />}</StrictMode>,
+)

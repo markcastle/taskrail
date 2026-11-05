@@ -575,6 +575,31 @@ button {
   font-size: 14px;
 }
 
+/* Below about 600px (the rail before it has widened, or a narrow browser)
+   the nav stacks above the content instead of beside it. */
+@media (max-width: 600px) {
+  .settings-window {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settings-nav__brand {
+    width: 100%;
+    padding-bottom: 8px;
+  }
+
+  .settings-nav__spacer {
+    display: none;
+  }
+}
+
 .settings-nav {
   display: flex;
   flex-direction: column;
@@ -618,6 +643,10 @@ button {
 
 .settings-nav__item--danger {
   color: var(--priority);
+}
+
+.settings-nav__item--close {
+  font-weight: 600;
 }
 
 .settings-main {

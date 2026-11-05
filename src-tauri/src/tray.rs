@@ -31,8 +31,8 @@ pub fn install(app: &AppHandle) -> tauri::Result<TrayIcon> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             SHOW => show_rail(app),
             SETTINGS => {
-                if let Err(e) = crate::settings_window::open(app) {
-                    log::warn!("could not queue the settings window: {e}");
+                if let Err(e) = crate::commands::open_settings(app.clone()) {
+                    log::warn!("could not open settings: {e}");
                 }
             }
             LOGS => {

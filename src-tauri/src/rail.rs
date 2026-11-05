@@ -18,7 +18,12 @@ pub struct Rail {
     pub service: RailService<SqliteStore, SystemClock>,
     pub settings: RailSettings,
     pub active: Option<ItemId>,
+    /// While settings are open the rail widens to make room. Not persisted.
+    pub expanded: bool,
 }
+
+/// Logical width of the rail while settings are open.
+pub const EXPANDED_WIDTH_PX: u32 = 760;
 
 impl Rail {
     pub fn open(path: Option<PathBuf>) -> Result<Self, Box<dyn std::error::Error>> {
@@ -42,6 +47,7 @@ impl Rail {
                 service: RailService::new(store, SystemClock),
                 settings,
                 active,
+                expanded: false,
             };
             crate::seed::welcome(&mut rail.service)?;
             return Ok(rail);
@@ -51,7 +57,17 @@ impl Rail {
             service: RailService::new(store, SystemClock),
             settings,
             active,
+            expanded: false,
         })
+    }
+
+    /// The width the dock should use right now.
+    pub fn current_width_px(&self) -> u32 {
+        if self.expanded {
+            self.settings.width_px.max(EXPANDED_WIDTH_PX)
+        } else {
+            self.settings.width_px
+        }
     }
 
     pub fn view(&self, expand_top: bool) -> Result<RailView, String> {

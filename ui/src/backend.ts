@@ -125,10 +125,10 @@ export interface RailBackend {
   updateSettings(settings: RailSettings): Promise<RailSettings>
   /** Close the app. Does nothing in a plain browser. */
   quit(): Promise<void>
-  /** Open (or focus) the settings window. In a plain browser, opens the settings route in a new tab. */
-  openSettings(): Promise<void>
-  /** Close the settings window. */
-  closeSettings(): Promise<void>
+  /** Widen the rail for settings, or give the width back. */
+  expandRail(expanded: boolean): Promise<void>
+  /** Fires when the tray asks the rail to show settings. Returns an unsubscribe. */
+  onOpenSettings(callback: () => void): () => void
   /** The tail of the app's log file. */
   readLog(lines?: number): Promise<string>
   /** Reveal the log folder in the file manager. */
@@ -161,15 +161,9 @@ export interface RailBackend {
 
 export const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 
-/**
- * Which window this page is: the Tauri window label in the app, the URL
- * hash in a browser. Read synchronously from what the shell injects, so a
- * failed import can never leave the page blank.
- */
+/** In a browser, `#settings` shows the settings page on its own for development. */
 export function windowRole(): 'rail' | 'settings' {
-  if (window.location.hash === '#settings') return 'settings'
-  const internals = (window as unknown as { __TAURI_INTERNALS__?: { metadata?: { currentWindow?: { label?: string } } } }).__TAURI_INTERNALS__
-  return internals?.metadata?.currentWindow?.label === 'settings' ? 'settings' : 'rail'
+  return window.location.hash === '#settings' ? 'settings' : 'rail'
 }
 
 export function createBackend(): RailBackend {
@@ -201,8 +195,8 @@ function tauriBackend(): RailBackend {
     getSettings: () => call('get_settings'),
     updateSettings: (settings) => call('update_settings', { settings }),
     quit: () => call('quit'),
-    openSettings: () => call('open_settings'),
-    closeSettings: () => call('close_settings'),
+    expandRail: (expanded) => call('expand_rail', { expanded }),
+    onOpenSettings: (cb) => listen('rail:open-settings', cb),
     readLog: (lines) => call('read_log', { lines: lines ?? null }),
     openLogFolder: () => call('open_log_folder'),
     logFromUi: (level, message) => call<void>('log_from_ui', { level, message }).catch(() => undefined),
@@ -434,11 +428,8 @@ function browserBackend(): RailBackend {
     getSettings: () => async(() => settings),
     updateSettings: (next) => async(() => ((settings = { ...next }), notify(), settings)),
     quit: () => async(() => undefined),
-    openSettings: () =>
-      async(() => {
-        window.open('/#settings', 'taskrail-settings')
-      }),
-    closeSettings: () => async(() => window.close()),
+    expandRail: () => async(() => undefined),
+    onOpenSettings: () => () => undefined,
     readLog: () => async(() => devLog.join('\n')),
     openLogFolder: () => async(() => undefined),
     logFromUi: (level, message) =>

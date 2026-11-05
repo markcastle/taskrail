@@ -111,7 +111,17 @@ if (shots) await page.screenshot({ path: `${shots}/03-reordered.png` })
   })
 }
 
-// 8. Settings live in their own window. In the browser that is a second tab on #settings
+// 8a. Settings also open inside the rail itself: the gear shows them, Back returns.
+await page.getByRole('button', { name: 'Settings', exact: true }).click()
+await page.getByRole('heading', { name: 'Rail' }).waitFor()
+await page.getByRole('button', { name: '← Back to the rail', exact: true }).click()
+await page.getByTestId('section-priority').waitFor()
+await page.getByRole('button', { name: 'Settings', exact: true }).click()
+await page.getByRole('heading', { name: 'Rail' }).waitFor()
+await page.keyboard.press('Escape')
+await page.getByTestId('section-priority').waitFor()
+
+// 8. Settings on their own page for development. In the browser that is a second tab on #settings
 // sharing state through localStorage, the way the two windows share the backend in the app.
 const settings = await context.newPage()
 await settings.setViewportSize({ width: 820, height: 680 })

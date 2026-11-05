@@ -63,7 +63,7 @@ npm run ui:test
 - **Flick** a card sideways to complete it.
 - **Tap** a card to open it. From there you can start it, make it the active one, send it back, or delete it.
 - **Ctrl+Shift+Space** anywhere on the desktop opens quick-add. Enter saves, Escape closes.
-- **The gear** sets the edge, the width, how many Top Priorities show, and how soon an upcoming event is pulled into the list. It also has the Quit button.
+- **The gear** opens settings inside the rail, which widens to make room and narrows again when you go back. Appearance, edge, width, the fold, the event window, the model, connectors and the log all live there, along with Quit.
 - **The tray icon** brings the rail forward and has Quit too. Always quit through one of those rather than killing the process: on Windows the reserved strip is only given back when the app exits cleanly. If the desktop is ever left shrunk, start the rail again and quit it properly, or restart Windows Explorer from Task Manager.
 
 Your data lives in `rail.sqlite` in the app's data directory for your user. Delete that file for a fresh start.

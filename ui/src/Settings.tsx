@@ -24,10 +24,17 @@ const PAGES: { id: Page; label: string; blurb: string }[] = [
   { id: 'logs', label: 'Logs', blurb: 'What the app has been doing, for when something is wrong.' },
 ]
 
-export default function Settings() {
+export default function Settings({ onClose }: { onClose: () => void }) {
   const [page, setPage] = useState<Page>('rail')
   const [notice, setNotice] = useState<string | null>(null)
   useEffect(() => followTheme(backend), [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   useEffect(() => {
     if (!notice) return
@@ -49,8 +56,8 @@ export default function Settings() {
           </button>
         ))}
         <div className="settings-nav__spacer" />
-        <button className="settings-nav__item" onClick={() => backend.closeSettings().catch((e) => setNotice(String(e)))}>
-          Close
+        <button className="settings-nav__item settings-nav__item--close" onClick={onClose}>
+          ← Back to the rail
         </button>
         <button className="settings-nav__item settings-nav__item--danger" onClick={() => backend.quit().catch((e) => setNotice(String(e)))}>
           Quit Task Rail

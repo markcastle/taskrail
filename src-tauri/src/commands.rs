@@ -7,7 +7,7 @@ use taskrail_core::domain::{Item, ItemId, Status};
 use taskrail_core::ports::ItemRepository;
 use taskrail_core::settings::RailSettings;
 use taskrail_core::usecases::RailView;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::connectors::{demo_profile, ConnectorSummary};
 use crate::state::{lock, AppState};
@@ -400,14 +400,42 @@ pub async fn sign_in(id: String, url: String) -> CommandResult<()> {
         .map_err(|e| format!("sign-in failed: {e}"))
 }
 
+/// Settings live inside the rail. Opening them widens the strip; closing
+/// them gives the width back. The tray uses the event to ask the page to
+/// open them.
+pub const OPEN_SETTINGS_EVENT: &str = "rail:open-settings";
+
 #[tauri::command]
 pub fn open_settings(app: AppHandle) -> CommandResult<()> {
-    crate::settings_window::open(&app).map_err(|e| e.to_string())
+    if let Some(window) = app.get_webview_window(crate::dock::RAIL_WINDOW) {
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    app.emit(OPEN_SETTINGS_EVENT, ()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn close_settings(app: AppHandle) -> CommandResult<()> {
-    crate::settings_window::close(&app).map_err(|e| e.to_string())
+pub fn expand_rail(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    expanded: bool,
+) -> CommandResult<()> {
+    {
+        let mut rail = lock(&state.rail);
+        if rail.expanded == expanded {
+            return Ok(());
+        }
+        rail.expanded = expanded;
+    }
+    log::info!(
+        "rail {}",
+        if expanded {
+            "widened for settings"
+        } else {
+            "back to normal width"
+        }
+    );
+    crate::dock::redock(&app).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
