@@ -1015,9 +1015,10 @@ button {
 }
 
 .toast {
-  position: sticky;
-  bottom: 12px;
-  align-self: flex-start;
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 5;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -1041,7 +1042,6 @@ button {
 
 .toast--inline {
   position: static;
-  align-self: stretch;
   display: flex;
 }
 
@@ -1067,25 +1067,105 @@ button {
 }
 
 /* connectors */
-.connector-list {
-  display: flex;
-  flex-direction: column;
+.settings-subhead {
+  margin: 8px 0 -8px;
+  font-size: 15px;
+  font-weight: 650;
 }
 
-.connector-list .settings-muted {
-  padding: 16px 18px;
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 22px 18px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.empty strong {
+  color: var(--text);
 }
 
 .connector {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   padding: 14px 18px;
   border-top: 1px solid var(--line);
 }
 
 .connector:first-child {
   border-top: 0;
+}
+
+.connector__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--done);
+}
+
+.connector__dot--error {
+  background: var(--priority);
+}
+
+.connector__meta--quiet {
+  opacity: 0.8;
+  font-size: 12px;
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  max-width: 640px;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.choice:hover {
+  background: var(--bg-hover);
+}
+
+.choice--on {
+  border-color: var(--progress);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--progress) 30%, transparent);
+}
+
+.choice:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.choice__title {
+  font-weight: 650;
+}
+
+.choice__text {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+@media (max-width: 600px) {
+  .choices {
+    grid-template-columns: 1fr;
+  }
 }
 
 .connector__main {
@@ -1116,8 +1196,15 @@ button {
   flex-direction: column;
   gap: 12px;
   padding: 16px 18px 18px;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
+}
+
+.panel--form {
+  gap: 6px;
+}
+
+.settings-actions--end {
+  justify-content: flex-end;
+  padding-top: 8px;
 }
 
 .panel .row {
@@ -1140,7 +1227,11 @@ button {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 16px;
-  align-items: end;
+  align-items: start;
+}
+
+.segmented__option {
+  line-height: 20px;
 }
 
 .panel textarea,

@@ -9,6 +9,7 @@
 //! Every method here must run on the main thread. AppKit insists, and the
 //! `MainThreadMarker` check turns a mistake into an error instead of a crash.
 
+use objc2::rc::Retained;
 use objc2::MainThreadMarker;
 use objc2_app_kit::{NSScreen, NSWindow, NSWindowCollectionBehavior, NSWindowLevel};
 use objc2_foundation::{NSPoint, NSRect, NSSize};
@@ -61,9 +62,8 @@ impl FloatingPanelDock {
         );
         window.setHidesOnDeactivate(false);
 
-        let screen = window
-            .screen()
-            .or_else(|| NSScreen::mainScreen(mtm))
+        let screen = screen_for(mtm, request.monitor.as_deref())
+            .or_else(|| window.screen())
             .ok_or_else(|| DockError::Os("no screen to dock to".into()))?;
         let scale = screen.backingScaleFactor();
         let width = f64::from(request.width_px) / scale;
@@ -90,14 +90,29 @@ impl FloatingPanelDock {
     }
 }
 
+/// The display to dock to: the one whose name matches, else the main one.
+/// Names are what `NSScreen.localizedName` reports, which is also what the
+/// shell lists.
+fn screen_for(mtm: MainThreadMarker, monitor: Option<&str>) -> Option<Retained<NSScreen>> {
+    if let Some(name) = monitor {
+        let screens = NSScreen::screens(mtm);
+        for screen in screens.iter() {
+            if screen.localizedName().to_string() == name {
+                return Some(screen);
+            }
+        }
+    }
+    NSScreen::mainScreen(mtm)
+}
+
 impl DesktopDock for FloatingPanelDock {
     fn dock(&mut self, request: DockRequest) -> Result<DockedRect, DockError> {
-        self.last = Some(request);
+        self.last = Some(request.clone());
         self.apply(request)
     }
 
     fn relayout(&mut self) -> Result<DockedRect, DockError> {
-        let request = self.last.ok_or(DockError::NotDocked)?;
+        let request = self.last.clone().ok_or(DockError::NotDocked)?;
         self.apply(request)
     }
 

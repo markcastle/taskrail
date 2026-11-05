@@ -62,14 +62,19 @@ pub fn release(app: &AppHandle) {
 fn apply(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();
-    let (edge, width_px) = {
+    let (edge, width_px, monitor) = {
         let rail = lock(&state.rail);
-        (rail.settings.edge, rail.current_width_px())
+        (
+            rail.settings.edge,
+            rail.current_width_px(),
+            rail.settings.monitor.clone(),
+        )
     };
-    let scale = window.scale_factor().unwrap_or(1.0);
+    let scale = monitor_scale(&window, monitor.as_deref());
     let request = DockRequest {
         edge,
         width_px: (f64::from(width_px) * scale).round() as u32,
+        monitor,
     };
     let mut guard = lock(&state.dock);
     let dock = guard.as_mut().ok_or(DockError::NotDocked)?;
@@ -78,15 +83,81 @@ fn apply(app: &AppHandle) -> Result<(), DockError> {
     Ok(())
 }
 
+/// The scale factor of the chosen monitor, so the width in logical pixels
+/// comes out right on a mixed-DPI desk.
+fn monitor_scale(window: &WebviewWindow, monitor: Option<&str>) -> f64 {
+    chosen_monitor(window, monitor)
+        .map(|m| m.scale_factor())
+        .unwrap_or_else(|| window.scale_factor().unwrap_or(1.0))
+}
+
+/// The monitor the settings name, or the primary one.
+fn chosen_monitor(window: &WebviewWindow, monitor: Option<&str>) -> Option<tauri::Monitor> {
+    if let Some(name) = monitor {
+        if let Ok(all) = window.available_monitors() {
+            if let Some(m) = all
+                .into_iter()
+                .find(|m| m.name().map(String::as_str) == Some(name))
+            {
+                return Some(m);
+            }
+        }
+    }
+    window.primary_monitor().ok().flatten()
+}
+
+/// What the settings page lists.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MonitorInfo {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub x: i32,
+    pub y: i32,
+    pub scale: f64,
+    pub primary: bool,
+}
+
+pub fn monitors(app: &AppHandle) -> Vec<MonitorInfo> {
+    let Ok(window) = rail_window(app) else {
+        return Vec::new();
+    };
+    let primary = window
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .and_then(|m| m.name().cloned());
+    window
+        .available_monitors()
+        .map(|all| {
+            all.into_iter()
+                .map(|m| MonitorInfo {
+                    name: m.name().cloned().unwrap_or_else(|| "Display".into()),
+                    width: m.size().width,
+                    height: m.size().height,
+                    x: m.position().x,
+                    y: m.position().y,
+                    scale: m.scale_factor(),
+                    primary: m.name().cloned() == primary,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The no-docking fallback: an always-on-top window at the chosen edge of the
-/// primary monitor.
+/// chosen monitor.
 fn park(window: &WebviewWindow, app: &AppHandle) -> tauri::Result<()> {
-    let (edge, width_px) = {
+    let (edge, width_px, monitor) = {
         let state = app.state::<AppState>();
         let rail = lock(&state.rail);
-        (rail.settings.edge, rail.current_width_px())
+        (
+            rail.settings.edge,
+            rail.current_width_px(),
+            rail.settings.monitor.clone(),
+        )
     };
-    let Some(monitor) = window.primary_monitor()? else {
+    let Some(monitor) = chosen_monitor(window, monitor.as_deref()) else {
         return Ok(());
     };
     let scale = monitor.scale_factor();

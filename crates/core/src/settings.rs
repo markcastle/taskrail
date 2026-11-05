@@ -43,6 +43,11 @@ pub struct RailSettings {
     pub event_lead_minutes: u32,
     #[serde(default)]
     pub theme: Theme,
+    /// The monitor to dock to, by the name the platform reports. `None`
+    /// means the primary monitor, and a name that no longer exists falls
+    /// back to it too.
+    #[serde(default)]
+    pub monitor: Option<String>,
 }
 
 impl Default for RailSettings {
@@ -53,6 +58,7 @@ impl Default for RailSettings {
             top_limit: TOP_LIMIT_DEFAULT,
             event_lead_minutes: 60,
             theme: Theme::System,
+            monitor: None,
         }
     }
 }
@@ -72,6 +78,7 @@ mod tests {
         let old = r#"{"edge":"left","width_px":300,"top_limit":7,"event_lead_minutes":30}"#;
         let settings: RailSettings = serde_json::from_str(old).unwrap();
         assert_eq!(settings.theme, Theme::System);
+        assert_eq!(settings.monitor, None);
         assert_eq!(settings.width_px, 300);
         let json = serde_json::to_string(&settings).unwrap();
         assert!(json.contains("\"theme\":\"system\""));

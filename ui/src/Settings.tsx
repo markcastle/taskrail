@@ -5,6 +5,7 @@ import {
   type DiscoveryResult,
   type ItemKind,
   type ModelSettings,
+  type MonitorInfo,
   type Provider,
   type RailBackend,
   type RailSettings,
@@ -112,11 +113,18 @@ function Row({ label, help, children, trailing }: { label: string; help?: string
 
 /* ------------------------------------------------------------------ rail */
 
+function monitorLabel(m: MonitorInfo, index: number) {
+  const which = m.primary ? 'Main display' : `Display ${index + 1}`
+  return `${which} · ${m.width}×${m.height}`
+}
+
 function RailPage({ fail }: { fail: (e: unknown) => void }) {
   const [draft, setDraft] = useState<RailSettings | null>(null)
+  const [monitors, setMonitors] = useState<MonitorInfo[]>([])
   const [savedAt, setSavedAt] = useState<number | null>(null)
   useEffect(() => {
     backend.getSettings().then(setDraft).catch(fail)
+    backend.listMonitors().then(setMonitors).catch(() => setMonitors([]))
   }, [fail])
   useDebouncedSave(draft, (value) => {
     backend
@@ -144,6 +152,26 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
           ]}
         />
       </Row>
+      {monitors.length > 1 && (
+        <Row label="Monitor" help="Which display the rail lives on. Unplug it and the rail moves to the main display until it is back.">
+          {monitors.length <= 3 ? (
+            <Segmented<string>
+              label="Monitor"
+              value={draft.monitor ?? monitors.find((m) => m.primary)?.name ?? monitors[0].name}
+              onChange={(v) => set('monitor', monitors.find((m) => m.name === v)?.primary ? null : v)}
+              options={monitors.map((m, i) => ({ value: m.name, label: monitorLabel(m, i) }))}
+            />
+          ) : (
+            <select aria-label="Monitor" value={draft.monitor ?? ''} onChange={(e) => set('monitor', e.target.value || null)}>
+              {monitors.map((m, i) => (
+                <option key={m.name} value={m.primary ? '' : m.name}>
+                  {monitorLabel(m, i)}
+                </option>
+              ))}
+            </select>
+          )}
+        </Row>
+      )}
       <Row label="Dock to" help="Windows shrinks the desktop work area to make room.">
         <Segmented
           label="Dock to"
@@ -308,7 +336,7 @@ function ModelPage({ notify, fail }: { notify: (tone: Tone, text: string) => voi
 
 function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
-  const [mode, setMode] = useState<'list' | 'server' | 'profile'>('list')
+  const [mode, setMode] = useState<'none' | 'server' | 'profile'>('none')
   const [profileJson, setProfileJson] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -332,16 +360,23 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
   }
 
   return (
-    <section className="group">
-      <div className="connector-list">
-        {connectors.length === 0 && <p className="settings-muted">No connectors yet. Your cards are local only.</p>}
+    <>
+      <section className="group">
+        {connectors.length === 0 && (
+          <div className="empty">
+            <strong>Nothing connected yet.</strong>
+            <span>Your cards are local to this machine. Connect a system below and its tasks join the rail.</span>
+          </div>
+        )}
         {connectors.map((c) => (
           <div className="connector" key={c.id} data-testid={`connector-${c.id}`}>
+            <span className={`connector__dot${c.last_error ? ' connector__dot--error' : ''}`} aria-hidden="true" />
             <div className="connector__main">
               <span className="connector__name">{c.name}</span>
               <span className="connector__meta">
-                {c.server} · {c.item_count} items · {c.capabilities.write_status ? 'two-way' : 'read-only'} · every {c.poll_seconds}s
+                {c.item_count} {c.item_count === 1 ? 'item' : 'items'} · {c.capabilities.write_status ? 'changes sync back' : 'read-only'} · refreshes every {c.poll_seconds}s
               </span>
+              <span className="connector__meta connector__meta--quiet">{c.server}</span>
               {c.last_error && <span className="connector__error">{c.last_error}</span>}
             </div>
             <button type="button" className="button" disabled={busy !== null} onClick={() => run(`sync-${c.id}`, () => backend.syncConnector(c.id), (n) => notify('success', `Pulled ${n} items from ${c.name}`))}>
@@ -352,50 +387,60 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
             </button>
           </div>
         ))}
+      </section>
+
+      <h2 className="settings-subhead">Add a connector</h2>
+      <div className="choices">
+        <button type="button" className={`choice${mode === 'server' ? ' choice--on' : ''}`} disabled={busy !== null} onClick={() => setMode(mode === 'server' ? 'none' : 'server')} aria-expanded={mode === 'server'}>
+          <span className="choice__title">Add server</span>
+          <span className="choice__text">Any MCP server. A model works out how to read it.</span>
+        </button>
+        <button type="button" className="choice" disabled={busy !== null} onClick={() => run('demo', () => backend.addDemoConnector(), () => notify('success', 'Demo tracker connected'))}>
+          <span className="choice__title">{busy === 'demo' ? <Spinner label="Connecting…" /> : 'Add demo tracker'}</span>
+          <span className="choice__text">A small fake issue tracker, to see two-way sync working.</span>
+        </button>
+        <button type="button" className={`choice${mode === 'profile' ? ' choice--on' : ''}`} disabled={busy !== null} onClick={() => setMode(mode === 'profile' ? 'none' : 'profile')} aria-expanded={mode === 'profile'}>
+          <span className="choice__title">Paste profile</span>
+          <span className="choice__text">You already have a Connector Profile as JSON.</span>
+        </button>
       </div>
-      <div className="settings-actions">
-        <button type="button" className="button button--primary" disabled={busy !== null} onClick={() => setMode(mode === 'server' ? 'list' : 'server')} aria-expanded={mode === 'server'}>
-          Add server
-        </button>
-        <button type="button" className="button" disabled={busy !== null} onClick={() => run('demo', () => backend.addDemoConnector(), () => notify('success', 'Demo tracker connected'))}>
-          {busy === 'demo' ? <Spinner label="Connecting…" /> : 'Add demo tracker'}
-        </button>
-        <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => setMode(mode === 'profile' ? 'list' : 'profile')} aria-expanded={mode === 'profile'}>
-          Paste profile
-        </button>
-      </div>
+
       {mode === 'server' && (
-        <AddServer
-          notify={notify}
-          fail={fail}
-          onAdded={() => {
-            setMode('list')
-            reload()
-          }}
-        />
+        <section className="group">
+          <AddServer
+            notify={notify}
+            fail={fail}
+            onAdded={() => {
+              setMode('none')
+              reload()
+            }}
+          />
+        </section>
       )}
       {mode === 'profile' && (
-        <div className="panel">
-          <textarea aria-label="Connector profile JSON" placeholder="Paste a Connector Profile (JSON)" rows={10} value={profileJson} onChange={(e) => setProfileJson(e.target.value)} />
-          <div className="settings-actions">
-            <button
-              type="button"
-              className="button button--primary"
-              disabled={busy !== null || !profileJson.trim()}
-              onClick={() =>
-                run('profile', () => backend.addConnectorProfile(profileJson), () => {
-                  setProfileJson('')
-                  setMode('list')
-                  notify('success', 'Connector added')
-                })
-              }
-            >
-              {busy === 'profile' ? <Spinner label="Adding…" /> : 'Add connector'}
-            </button>
+        <section className="group">
+          <div className="panel">
+            <textarea aria-label="Connector profile JSON" placeholder="Paste a Connector Profile (JSON)" rows={10} value={profileJson} onChange={(e) => setProfileJson(e.target.value)} />
+            <div className="settings-actions settings-actions--end">
+              <button
+                type="button"
+                className="button button--primary"
+                disabled={busy !== null || !profileJson.trim()}
+                onClick={() =>
+                  run('profile', () => backend.addConnectorProfile(profileJson), () => {
+                    setProfileJson('')
+                    setMode('none')
+                    notify('success', 'Connector added')
+                  })
+                }
+              >
+                {busy === 'profile' ? <Spinner label="Adding…" /> : 'Add connector'}
+              </button>
+            </div>
           </div>
-        </div>
+        </section>
       )}
-    </section>
+    </>
   )
 }
 
@@ -476,7 +521,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
   }
 
   return (
-    <div className="panel" data-testid="add-server">
+    <div className="panel panel--form" data-testid="add-server">
       <div className="panel__grid">
         <Row label="Name">
           <input type="text" aria-label="Server name" placeholder="Tuesday" value={name} onChange={(e) => setName(e.target.value)} />
@@ -521,7 +566,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
       <Row label="Hint for the model" help="Optional. Which project, whose items, what the product is called.">
         <input type="text" aria-label="Hint for the model" placeholder="only tickets assigned to me in the Platform project" value={hint} onChange={(e) => setHint(e.target.value)} />
       </Row>
-      <div className="settings-actions">
+      <div className="settings-actions settings-actions--end">
         <button type="button" className="button button--primary" disabled={busy || !ready} onClick={() => discover()}>
           {phase === 'discovering' ? <Spinner label="Asking the model and checking the server…" /> : phase === 'signing-in' ? <Spinner label="Waiting for your browser…" /> : 'Discover'}
         </button>

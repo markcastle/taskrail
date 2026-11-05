@@ -14,9 +14,11 @@ use std::sync::Mutex;
 
 use taskrail_core::settings::Edge;
 use windows::core::w;
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::core::BOOL;
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+    EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, HDC, HMONITOR, MONITORINFO,
+    MONITORINFOEXW, MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::Shell::{
     DefSubclassProc, RemoveWindowSubclass, SHAppBarMessage, SetWindowSubclass, ABE_LEFT, ABE_RIGHT,
@@ -30,10 +32,11 @@ use crate::dock::{DesktopDock, DockError, DockRequest, DockedRect, RawWindow};
 
 const SUBCLASS_ID: usize = 0x5452_4149; // "TRAI"
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct Placement {
     edge: Edge,
     width: i32,
+    monitor: Option<String>,
     callback_message: u32,
 }
 
@@ -88,15 +91,16 @@ impl DesktopDock for AppBarDock {
         let placement = Placement {
             edge: request.edge,
             width: request.width_px as i32,
+            monitor: request.monitor.clone(),
             callback_message: self.callback_message,
         };
-        *lock_placement() = Some(placement);
-        place(self.hwnd(), placement)
+        *lock_placement() = Some(placement.clone());
+        place(self.hwnd(), &placement)
     }
 
     fn relayout(&mut self) -> Result<DockedRect, DockError> {
-        let placement = (*lock_placement()).ok_or(DockError::NotDocked)?;
-        place(self.hwnd(), placement)
+        let placement = lock_placement().clone().ok_or(DockError::NotDocked)?;
+        place(self.hwnd(), &placement)
     }
 
     fn undock(&mut self) -> Result<(), DockError> {
@@ -125,17 +129,73 @@ fn lock_placement() -> std::sync::MutexGuard<'static, Option<Placement>> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Runs the query/set/move sequence for the given placement.
-fn place(hwnd: HWND, placement: Placement) -> Result<DockedRect, DockError> {
-    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY) };
+/// Every display: the device name Windows uses for it (`\\.\DISPLAY1`) and
+/// its full rectangle in physical pixels.
+fn monitors() -> Vec<(String, RECT)> {
+    unsafe extern "system" fn collect(
+        monitor: HMONITOR,
+        _hdc: HDC,
+        _clip: *mut RECT,
+        out: LPARAM,
+    ) -> BOOL {
+        let out = &mut *(out.0 as *mut Vec<(String, RECT)>);
+        let mut info = MONITORINFOEXW {
+            monitorInfo: MONITORINFO {
+                cbSize: size_of::<MONITORINFOEXW>() as u32,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        if GetMonitorInfoW(
+            monitor,
+            &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
+        )
+        .as_bool()
+        {
+            let len = info
+                .szDevice
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(info.szDevice.len());
+            let name = String::from_utf16_lossy(&info.szDevice[..len]);
+            out.push((name, info.monitorInfo.rcMonitor));
+        }
+        BOOL::from(true)
+    }
+    let mut out: Vec<(String, RECT)> = Vec::new();
+    unsafe {
+        let _ = EnumDisplayMonitors(
+            None,
+            None,
+            Some(collect),
+            LPARAM(&mut out as *mut _ as isize),
+        );
+    }
+    out
+}
+
+/// The display to dock to: the named one if it is still attached, else the
+/// primary display.
+fn screen_for(monitor: Option<&str>) -> Result<RECT, DockError> {
+    if let Some(name) = monitor {
+        if let Some((_, rect)) = monitors().into_iter().find(|(n, _)| n == name) {
+            return Ok(rect);
+        }
+    }
+    let primary = unsafe { MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) };
     let mut info = MONITORINFO {
         cbSize: size_of::<MONITORINFO>() as u32,
         ..Default::default()
     };
-    unsafe { GetMonitorInfoW(monitor, &mut info) }
+    unsafe { GetMonitorInfoW(primary, &mut info) }
         .ok()
         .map_err(|e| DockError::Os(format!("GetMonitorInfoW: {e}")))?;
-    let screen = info.rcMonitor;
+    Ok(info.rcMonitor)
+}
+
+/// Runs the query/set/move sequence for the given placement.
+fn place(hwnd: HWND, placement: &Placement) -> Result<DockedRect, DockError> {
+    let screen = screen_for(placement.monitor.as_deref())?;
 
     let mut data = APPBARDATA {
         cbSize: size_of::<APPBARDATA>() as u32,
@@ -149,11 +209,11 @@ fn place(hwnd: HWND, placement: Placement) -> Result<DockedRect, DockError> {
         ..Default::default()
     };
 
-    fit(&mut data.rc, placement, screen);
+    fit(&mut data.rc, placement.edge, placement.width, screen);
     unsafe { SHAppBarMessage(ABM_QUERYPOS, &mut data) };
     // The system may have pushed our outer edge inward to make room for
     // another bar. Keep our width and accept the new edge.
-    fit(&mut data.rc, placement, screen);
+    fit(&mut data.rc, placement.edge, placement.width, screen);
     unsafe { SHAppBarMessage(ABM_SETPOS, &mut data) };
 
     let rc = data.rc;
@@ -179,12 +239,12 @@ fn place(hwnd: HWND, placement: Placement) -> Result<DockedRect, DockError> {
     })
 }
 
-fn fit(rc: &mut RECT, placement: Placement, screen: RECT) {
+fn fit(rc: &mut RECT, edge: Edge, width: i32, screen: RECT) {
     rc.top = screen.top;
     rc.bottom = screen.bottom;
-    match placement.edge {
-        Edge::Right => rc.left = rc.right - placement.width,
-        Edge::Left => rc.right = rc.left + placement.width,
+    match edge {
+        Edge::Right => rc.left = rc.right - width,
+        Edge::Left => rc.right = rc.left + width,
     }
 }
 
@@ -198,12 +258,12 @@ unsafe extern "system" fn subclass_proc(
     _id: usize,
     _data: usize,
 ) -> LRESULT {
-    let placement = PLACEMENT.lock().ok().and_then(|guard| *guard);
+    let placement = PLACEMENT.lock().ok().and_then(|guard| guard.clone());
     if let Some(placement) = placement {
         let layout_changed = msg == WM_DISPLAYCHANGE
             || (msg == placement.callback_message && wparam.0 == ABN_POSCHANGED as usize);
         if layout_changed {
-            let _ = place(hwnd, placement);
+            let _ = place(hwnd, &placement);
         }
     }
     DefSubclassProc(hwnd, msg, wparam, lparam)

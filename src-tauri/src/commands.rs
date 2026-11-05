@@ -148,7 +148,9 @@ pub fn update_settings(
         let mut rail = lock(&state.rail);
         let before = rail.settings.clone();
         rail.save_settings(settings)?;
-        before.edge != rail.settings.edge || before.width_px != rail.settings.width_px
+        before.edge != rail.settings.edge
+            || before.width_px != rail.settings.width_px
+            || before.monitor != rail.settings.monitor
     };
     if needs_redock {
         crate::dock::redock(&app).map_err(|e| e.to_string())?;
@@ -412,6 +414,11 @@ pub fn open_settings(app: AppHandle) -> CommandResult<()> {
         let _ = window.set_focus();
     }
     app.emit(OPEN_SETTINGS_EVENT, ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_monitors(app: AppHandle) -> Vec<crate::dock::MonitorInfo> {
+    crate::dock::monitors(&app)
 }
 
 #[tauri::command]

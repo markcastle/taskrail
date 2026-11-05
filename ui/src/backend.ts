@@ -52,6 +52,17 @@ export interface RailSettings {
   top_limit: number
   event_lead_minutes: number
   theme: Theme
+  monitor: string | null
+}
+
+export interface MonitorInfo {
+  name: string
+  width: number
+  height: number
+  x: number
+  y: number
+  scale: number
+  primary: boolean
 }
 
 export interface ConnectorSummary {
@@ -127,6 +138,8 @@ export interface RailBackend {
   quit(): Promise<void>
   /** Widen the rail for settings, or give the width back. */
   expandRail(expanded: boolean): Promise<void>
+  /** The displays attached right now, primary first. */
+  listMonitors(): Promise<MonitorInfo[]>
   /** Fires when the tray asks the rail to show settings. Returns an unsubscribe. */
   onOpenSettings(callback: () => void): () => void
   /** The tail of the app's log file. */
@@ -196,6 +209,7 @@ function tauriBackend(): RailBackend {
     updateSettings: (settings) => call('update_settings', { settings }),
     quit: () => call('quit'),
     expandRail: (expanded) => call('expand_rail', { expanded }),
+    listMonitors: () => call('list_monitors'),
     onOpenSettings: (cb) => listen('rail:open-settings', cb),
     readLog: (lines) => call('read_log', { lines: lines ?? null }),
     openLogFolder: () => call('open_log_folder'),
@@ -273,7 +287,7 @@ function browserBackend(): RailBackend {
     task('update-project-plan', 'Update project plan', 'done'),
   ]
   let active: string | null = 'design-dashboard'
-  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system' }
+  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
@@ -289,7 +303,7 @@ function browserBackend(): RailBackend {
       const state = JSON.parse(raw) as DevState
       items = state.items
       active = state.active
-      settings = { ...state.settings, theme: state.settings.theme ?? 'system' }
+      settings = { ...state.settings, theme: state.settings.theme ?? 'system', monitor: state.settings.monitor ?? null }
       connectors = state.connectors
       modelSettings = state.modelSettings
       signedIn = state.signedIn ?? []
@@ -429,6 +443,11 @@ function browserBackend(): RailBackend {
     updateSettings: (next) => async(() => ((settings = { ...next }), notify(), settings)),
     quit: () => async(() => undefined),
     expandRail: () => async(() => undefined),
+    listMonitors: () =>
+      async(() => [
+        { name: '\\\\.\\DISPLAY1', width: 2560, height: 1440, x: 0, y: 0, scale: 1, primary: true },
+        { name: '\\\\.\\DISPLAY2', width: 1920, height: 1080, x: 2560, y: 0, scale: 1, primary: false },
+      ]),
     onOpenSettings: () => () => undefined,
     readLog: () => async(() => devLog.join('\n')),
     openLogFolder: () => async(() => undefined),

@@ -42,6 +42,7 @@ pub fn run() {
             commands::quit,
             commands::open_settings,
             commands::expand_rail,
+            commands::list_monitors,
             commands::list_connectors,
             commands::add_connector_profile,
             commands::add_demo_connector,

@@ -2,10 +2,13 @@ use taskrail_core::settings::Edge;
 
 /// What the shell asks for. Width is in *physical* pixels because that is
 /// what both operating systems want to hear; the shell does the scaling.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// `monitor` is the platform's name for a display, as the shell lists them;
+/// `None`, or a name that no longer exists, means the primary display.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DockRequest {
     pub edge: Edge,
     pub width_px: u32,
+    pub monitor: Option<String>,
 }
 
 /// Where the rail ended up, in physical pixels with a top-left origin.
