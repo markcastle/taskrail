@@ -125,8 +125,9 @@ impl SignInStart {
             .await
             .map_err(AuthError::InternalError)?;
         let mut flow = self.flow;
-        flow.handle_callback_url(&callback_url).await?;
-        flow.complete_authorization().await
+        // Handling the callback exchanges the code, saves the credentials
+        // through the store, and moves the state to Authorized itself.
+        flow.handle_callback_url(&callback_url).await
     }
 }
 
