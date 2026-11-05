@@ -1,7 +1,7 @@
 //! The global quick-add shortcut. Pressing it anywhere on the desktop brings
 //! the rail forward and tells the UI to open the capture box.
 
-use tauri::{AppHandle, Emitter, Manager, Runtime};
+use tauri::{AppHandle, Emitter, Wry};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 pub const QUICK_ADD_EVENT: &str = "rail:quick-add";
@@ -10,14 +10,12 @@ fn quick_add_shortcut() -> Shortcut {
     Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space)
 }
 
-pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
+pub fn plugin() -> tauri::plugin::TauriPlugin<Wry> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, shortcut, event| {
             if event.state == ShortcutState::Pressed && *shortcut == quick_add_shortcut() {
-                if let Some(window) = app.get_webview_window(crate::dock::RAIL_WINDOW) {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
+                // A hidden rail comes back docked, then takes the new task.
+                crate::dock::show(app);
                 let _ = app.emit(QUICK_ADD_EVENT, ());
             }
         })

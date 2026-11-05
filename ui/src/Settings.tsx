@@ -58,7 +58,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
     <div className="settings-window">
       <nav className="settings-nav">
         <div className="settings-nav__brand">
-          <img className="rail__mark" src="/icon.png" alt="" width={24} height={24} />
+          <img className="rail__mark" src="/logo.svg" alt="" width={24} height={24} />
           <span>Task Rail</span>
         </div>
         {PAGES.map((p) => (
@@ -189,7 +189,7 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
       <Row label="Top priorities shown" help="The rest wait behind the fold.">
         <Slider label="Top priorities shown" value={draft.top_limit} min={1} max={10} unit={draft.top_limit === 1 ? 'card' : 'cards'} onChange={(v) => set('top_limit', v)} />
       </Row>
-      <Row label="Pull in events starting within" help="A meeting this close joins Top Priorities.">
+      <Row label="Pull in events starting within" help="A meeting this close joins Priorities.">
         <Slider label="Pull in events starting within" value={draft.event_lead_minutes} min={0} max={240} step={5} unit="min" onChange={(v) => set('event_lead_minutes', v)} />
       </Row>
     </section>

@@ -19,8 +19,10 @@ pub struct RailView {
     /// Top Priorities, already cut at the fold. Events close to starting come
     /// first, then tasks in rank order.
     pub top: Vec<Item>,
-    /// How many items sit behind the fold.
+    /// How many items sit behind the fold. Always `later.len()`.
     pub top_hidden: usize,
+    /// The items behind the fold, in the order they would have followed.
+    pub later: Vec<Item>,
     /// Never capped. The active item, if any, is first.
     pub in_progress: Vec<Item>,
     /// The one item the user is focused on. Always a member of `in_progress`.
@@ -66,8 +68,8 @@ pub fn build_rail_view(
     } else {
         settings.effective_top_limit()
     };
-    let top_hidden = top.len().saturating_sub(limit);
-    top.truncate(limit);
+    let later = top.split_off(limit.min(top.len()));
+    let top_hidden = later.len();
 
     let mut in_progress: Vec<Item> = items
         .iter()
@@ -96,6 +98,7 @@ pub fn build_rail_view(
         up_next,
         top,
         top_hidden,
+        later,
         in_progress,
         active,
         done_today,

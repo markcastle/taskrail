@@ -48,6 +48,42 @@ pub fn redock(app: &AppHandle) -> tauri::Result<()> {
     })
 }
 
+/// Take the rail off the screen but keep the app running: the reserved
+/// strip goes back to the desktop, the tray and the hotkey stay. Runs on
+/// the main thread because the dock is a window operation.
+pub fn hide(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        release(&handle);
+        if let Ok(window) = rail_window(&handle) {
+            if let Err(e) = window.hide() {
+                log::warn!("could not hide the rail: {e}");
+            }
+        }
+        log::info!("rail hidden");
+    });
+}
+
+/// Bring a hidden rail back and dock it again. A rail that is already on
+/// screen is just focused.
+pub fn show(app: &AppHandle) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let Ok(window) = rail_window(&handle) else {
+            return;
+        };
+        let was_hidden = !window.is_visible().unwrap_or(true);
+        let _ = window.show();
+        if was_hidden {
+            if let Err(e) = attach(&handle) {
+                log::warn!("could not dock the rail again: {e}");
+            }
+            log::info!("rail shown");
+        }
+        let _ = window.set_focus();
+    });
+}
+
 /// Undock and drop the platform dock. Safe to call more than once.
 pub fn release(app: &AppHandle) {
     let state = app.state::<AppState>();

@@ -77,7 +77,11 @@ async fn a_correct_first_answer_is_validated_against_the_live_server() {
     let llm = Scripted::new(&[&good_answer()]);
     let outcome = discover(&request(), &llm).await.unwrap();
     assert_eq!(outcome.rounds, 1);
-    assert_eq!(outcome.sample.len(), 5, "the demo profile asks for \"me\", so Sam's tickets stay out");
+    assert_eq!(
+        outcome.sample.len(),
+        5,
+        "the demo profile asks for \"me\", so Sam's tickets stay out"
+    );
     assert_eq!(outcome.profile.id, "fake");
     assert!(matches!(outcome.profile.server, ServerSpec::Stdio { .. }));
     assert!(outcome.notes.is_empty());

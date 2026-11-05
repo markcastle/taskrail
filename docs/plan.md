@@ -16,7 +16,7 @@ A permanent task strip docked to the edge of the desktop. The next few things yo
 | Calendars | A source like any other. Events carry a time and no status |
 | LLM | Bring your own key: Anthropic, OpenAI or OpenRouter. Used at setup only |
 | macOS | Parity from day one: floating panel, plus opt-in Accessibility window-nudging |
-| Sections | Top Priorities, In Progress, Completed. User-defined later |
+| Sections | Up next, Priorities, In progress, Later (the fold), Completed. User-defined later |
 | The fold | Five shown by default, ten at most, the last card fades when more exist |
 | Active task | One Active card among many In Progress. Local only, no timer |
 | Rail as MCP server | In v1, so agents can read and push tasks |
@@ -35,5 +35,5 @@ A permanent task strip docked to the edge of the desktop. The next few things yo
 
 - Which sign-in does the first target server use: the MCP authorization flow, a static token, or none?
 - Google Calendar through an MCP server, or a first-party connector on the Calendar API?
-- Is one hour the right window for pulling an upcoming meeting into Top Priorities?
+- Is one hour the right window for pulling an upcoming meeting into Priorities?
 - Which global shortcuts for quick-add and for toggling the rail?

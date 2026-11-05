@@ -15,38 +15,63 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
 await page.goto('http://localhost:5173/')
 await page.evaluate(() => localStorage.clear())
 await page.reload()
-await page.getByText('Top Priorities').waitFor()
+await page.getByTestId('section-priority').waitFor()
 if (shots) await page.screenshot({ path: `${shots}/01-initial.png` })
 
 const titles = async (tone) => page.locator(`[data-testid="section-${tone}"] .card__title`).allTextContents()
+const count = async (tone) => page.locator(`[data-testid="section-${tone}"] .section__count`).textContent()
 
-// 1. Initial layout: up next band, fold with "3 more", active card first.
-assert.equal(await page.getByTestId('upnext').count(), 1, 'up next band shown')
+// 1. Initial layout: the day in numbers, up next, the fold as a collapsed Later section, active card first.
+assert.match(await page.getByTestId('day-progress').textContent(), /2 of 11 complete/)
+assert.equal(await page.getByTestId('upnext').count(), 1, 'up next card shown')
+assert.match(await page.getByTestId('upnext').textContent(), /Design dashboard/, 'the focused task is up next')
 assert.deepEqual(await titles('priority'), ['Q1 board meeting', 'Prepare board deck', 'Reply to supplier', 'Book venue', 'Update docs'])
-assert.match(await page.locator('.section__more').textContent(), /3 more/)
+assert.equal(await count('later'), '3', 'three items behind the fold')
+assert.equal(await page.locator('[data-testid="section-later"] .card').count(), 0, 'Later starts collapsed')
 assert.deepEqual(await titles('progress'), ['Design dashboard', 'Review pull request'])
 assert.equal(await page.locator('.card--active .card__title').textContent(), 'Design dashboard')
 
-// 2. Expand the fold.
-await page.locator('.section__more').click()
-await page.getByText('Show fewer').waitFor()
-assert.equal((await titles('priority')).length, 8, 'all todo items plus the event after expanding')
-await page.getByText('Show fewer').click()
-await page.locator('.section__more', { hasText: '3 more' }).waitFor()
+// 2. Open the fold, then switch to All tasks, where there is no fold at all.
+await page.locator('[data-testid="section-later"] .section__header').click()
+assert.deepEqual(await titles('later'), ['Plan next sprint', 'Release notes', 'Deploy to dev'])
+await page.getByRole('radio', { name: 'All tasks' }).click()
+assert.equal((await titles('priority')).length, 8, 'all todo items plus the event in All tasks')
+assert.equal(await page.getByTestId('section-later').count(), 0, 'no Later section in All tasks')
+await page.getByRole('radio', { name: 'Today' }).click()
+await page.locator('[data-testid="section-later"]').waitFor()
 
-// 3. Quick-add via the + button lands at the top of To Do.
+// 2b. Search filters every section and ignores the fold.
+await page.getByRole('button', { name: 'Search', exact: true }).click()
+await page.getByLabel('Search tasks').fill('deploy')
+assert.deepEqual(await titles('priority'), ['Deploy to dev'], 'a hidden item is found by search')
+await page.keyboard.press('Escape')
+await page.locator('[data-testid="section-later"]').waitFor()
+
+// 3. The + button puts the cursor in the add box; the new task lands at the top of To Do.
 await page.getByRole('button', { name: 'Add a task', exact: true }).click()
+await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'New task title')
 await page.getByLabel('New task title').fill('Call the bank')
 await page.keyboard.press('Enter')
-await page.getByText('Call the bank').waitFor()
+await page.locator('.card__title', { hasText: 'Call the bank' }).waitFor()
 assert.equal((await titles('priority'))[1], 'Call the bank', 'new task sits right after the imminent event')
+assert.equal(await page.getByLabel('New task title').inputValue(), '', 'the add box clears after adding')
 
-// 4. Quick-add via the keyboard shortcut.
+// 4. The keyboard shortcut focuses the add box; Escape lets go of it.
+await page.locator('body').click({ position: { x: 5, y: 5 } })
 await page.keyboard.press('Control+Shift+Space')
-await page.getByLabel('New task title').waitFor()
+await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'New task title')
 await page.keyboard.press('Escape')
-await page.waitForTimeout(100)
-assert.equal(await page.getByLabel('New task title').count(), 0, 'escape closes quick-add')
+await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') !== 'New task title')
+
+// 4b. The circle completes a task straight from the list, and the day's count moves.
+await page.getByRole('button', { name: 'Complete Reply to supplier', exact: true }).click()
+await page.waitForFunction(() => !document.querySelector('[data-testid="section-priority"]')?.textContent.includes('Reply to supplier'))
+assert.match(await page.getByTestId('day-progress').textContent(), /3 of 12 complete/)
+await page.locator('[data-testid="section-done"] .section__header').click()
+await page.locator('[data-testid="section-done"] .card__title', { hasText: 'Reply to supplier' }).waitFor()
+await page.getByRole('button', { name: 'Reopen Reply to supplier', exact: true }).click()
+await page.locator('[data-testid="section-priority"] .card__title', { hasText: 'Reply to supplier' }).waitFor()
+await page.locator('[data-testid="section-done"] .section__header').click()
 
 // 5. Tap a card to open it, Start it, it leads In Progress.
 await page.getByText('Call the bank').click()
@@ -153,7 +178,8 @@ await settings.getByRole('button', { name: /^Add demo tracker/ }).click()
 await settings.getByTestId('connector-demo-tracker').waitFor()
 assert.equal(await settings.getByTestId('toast').getAttribute('class'), 'toast toast--success', 'a success is green, not red')
 await page.locator('.card__source', { hasText: 'demo-tracker' }).first().waitFor()
-assert.ok((await page.locator('.card__source').count()) >= 2, 'remote cards carry their source')
+assert.ok((await page.locator('.card__source').count()) >= 2, 'remote rows carry their source')
+await page.locator('[data-testid="sync-status"]', { hasText: 'Everything is up to date' }).waitFor()
 if (shots) await page.screenshot({ path: `${shots}/05-rail-with-connector.png` })
 await settings.getByRole('button', { name: /^Paste profile/ }).click()
 await settings.getByLabel('Connector profile JSON').fill('{"id": "demo-tracker", "name": "Dup"}')
@@ -162,6 +188,7 @@ await settings.locator('.toast--error', { hasText: 'already exists' }).waitFor()
 await settings.getByTestId('connector-demo-tracker').getByRole('button', { name: 'Remove', exact: true }).click()
 await settings.getByText('Nothing connected yet.').waitFor()
 await page.waitForFunction(() => document.querySelectorAll('.card__source').length === 0)
+await page.locator('[data-testid="sync-status"]', { hasText: 'Local tasks only' }).waitFor()
 
 // 10. Model settings, then discovery of a new server through the model.
 await settings.getByRole('button', { name: /^Add server/ }).click()

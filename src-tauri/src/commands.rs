@@ -7,7 +7,7 @@ use taskrail_core::domain::{Item, ItemId, Status};
 use taskrail_core::ports::ItemRepository;
 use taskrail_core::settings::RailSettings;
 use taskrail_core::usecases::RailView;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::connectors::{demo_profile, ConnectorSummary};
 use crate::state::{lock, AppState};
@@ -426,10 +426,7 @@ pub const OPEN_SETTINGS_EVENT: &str = "rail:open-settings";
 
 #[tauri::command]
 pub fn open_settings(app: AppHandle) -> CommandResult<()> {
-    if let Some(window) = app.get_webview_window(crate::dock::RAIL_WINDOW) {
-        let _ = window.show();
-        let _ = window.set_focus();
-    }
+    crate::dock::show(&app);
     app.emit(OPEN_SETTINGS_EVENT, ()).map_err(|e| e.to_string())
 }
 

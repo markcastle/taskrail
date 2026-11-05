@@ -39,6 +39,8 @@ export interface RailView {
   up_next: Item | null
   top: Item[]
   top_hidden: number
+  /** The items behind the fold, in order. */
+  later: Item[]
   in_progress: Item[]
   active: string | null
   done_today: Item[]
@@ -392,7 +394,8 @@ function browserBackend(): RailBackend {
         const soon = upcoming.filter((i) => Date.parse(i.window!.start) <= t + settings.event_lead_minutes * 60_000)
         let top = [...soon, ...section('todo')]
         const limit = expandTop ? top.length : Math.min(Math.max(settings.top_limit, 1), TOP_LIMIT_MAX)
-        const top_hidden = Math.max(top.length - limit, 0)
+        const later = top.slice(limit)
+        const top_hidden = later.length
         top = top.slice(0, limit)
         const in_progress = section('in_progress').sort((a, b) => Number(b.id === active) - Number(a.id === active))
         const midnight = new Date().setHours(0, 0, 0, 0)
@@ -403,6 +406,7 @@ function browserBackend(): RailBackend {
           up_next: upcoming[0] ?? null,
           top,
           top_hidden,
+          later,
           in_progress,
           active: in_progress.some((i) => i.id === active) ? active : null,
           done_today,
