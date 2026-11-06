@@ -11,7 +11,8 @@
     "ui:build": "tsc -b && vite build",
     "ui:preview": "vite preview",
     "lint": "oxlint ui/src",
-    "ui:test": "node scripts/ui-test.mjs"
+    "ui:test": "node scripts/ui-test.mjs",
+    "release": "node scripts/release.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

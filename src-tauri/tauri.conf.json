@@ -30,6 +30,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Mark Castle",
+    "shortDescription": "A task strip that lives on the edge of your screen.",
+    "license": "MIT",
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

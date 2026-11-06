@@ -1,0 +1,88 @@
+name: Release
+
+# Pushing a tag such as v0.1.0 builds the installers and publishes a GitHub
+# Release carrying them. install.ps1 and install.sh fetch "latest" from there.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    name: Tag matches the app version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare the tag with tauri.conf.json
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "${{ github.event_name }}" = "push" ] && [ "$tag" != "$version" ]; then
+            echo "Tag v$tag does not match tauri.conf.json version $version. Run: npm run release -- $tag"
+            exit 1
+          fi
+          echo "Building Task Rail $version"
+
+  build:
+    name: Build (${{ matrix.name }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+            args: ''
+          - name: macOS universal
+            os: macos-latest
+            args: '--target universal-apple-darwin'
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build installers and publish the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Task Rail ${{ github.ref_name }}'
+          releaseBody: |
+            Install with one line.
+
+            **Windows**
+            ```powershell
+            irm https://raw.githubusercontent.com/markcastle/taskrail/main/install.ps1 | iex
+            ```
+
+            **macOS**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/markcastle/taskrail/main/install.sh | sh
+            ```
+
+            Or download the installer below. The builds are not code-signed yet, so Windows SmartScreen and macOS Gatekeeper will ask before the first run; the install scripts handle that for you.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -21,6 +21,33 @@ The plan, with every decision and why, lives in the project doc linked from the 
 | 3. Generic MCP connector: discovery, profiles, two-way sync | Built: profiles, the MCP client, two-way sync, a demo tracker, model-assisted discovery, and the MCP sign-in flow for remote servers. Awaiting a hands-on run against a real remote server |
 | 4. Rail as an MCP server, tray, settings, release pipeline | Not started |
 
+## Installing it
+
+One line, on either platform. It fetches the latest release, installs for the current user without an admin prompt, and starts the app.
+
+Windows, in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/markcastle/taskrail/main/install.ps1 | iex
+```
+
+macOS, in Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/markcastle/taskrail/main/install.sh | sh
+```
+
+Run the same line again to update. The installers are also on the [releases page](https://github.com/markcastle/taskrail/releases). They are not code-signed yet, so a downloaded installer run by hand gets a SmartScreen or Gatekeeper warning; the scripts clear that for you.
+
+### Cutting a release
+
+```bash
+npm run release -- 0.1.1
+git push --follow-tags
+```
+
+That sets the version in `package.json`, `Cargo.toml` and `tauri.conf.json`, commits, and tags. The tag starts the Release workflow, which builds a Windows installer and a universal macOS disk image and publishes them as a GitHub Release.
+
 ## Running it
 
 You need a stable Rust toolchain, Node 22 or later, and the usual [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your platform.
