@@ -191,6 +191,8 @@ export interface RailBackend {
   discoverConnector(request: DiscoverRequest): Promise<DiscoveryResult>
   /** A saved connector's profile as a blueprint: no server, no secrets, pretty JSON. */
   exportBlueprint(id: string): Promise<string>
+  /** Open one of the project's GitHub pages in the browser. Refuses anything else. */
+  openProjectPage(url: string): Promise<void>
   /** Run the MCP sign-in flow in the browser for a server. Resolves when the browser comes back. */
   signIn(id: string, url: string): Promise<void>
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
@@ -258,6 +260,7 @@ function tauriBackend(): RailBackend {
     testModel: () => call('test_model'),
     discoverConnector: (request) => call('discover_connector', { request }),
     exportBlueprint: (id) => call('export_blueprint', { id }),
+    openProjectPage: (url) => call('open_project_page', { url }),
     signIn: (id, url) => call('sign_in', { id, url }),
   }
 }
@@ -628,6 +631,10 @@ function browserBackend(): RailBackend {
           2,
         ),
       ),
+    openProjectPage: (url) =>
+      async(() => {
+        devLog.push(`${new Date().toISOString()} [info] stand-in would open ${url}`)
+      }),
     signIn: (id) =>
       new Promise((resolve) =>
         setTimeout(() => {

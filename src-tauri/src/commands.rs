@@ -423,6 +423,18 @@ pub fn export_blueprint(state: State<'_, AppState>, id: String) -> CommandResult
     serde_json::to_string_pretty(&blueprint).map_err(|e| e.to_string())
 }
 
+/// Open one of this project's GitHub pages in the browser, such as the
+/// prefilled blueprint submission form. Only our own pages: the UI never
+/// gets to open an arbitrary address.
+#[tauri::command]
+pub fn open_project_page(url: String) -> CommandResult<()> {
+    const OURS: &str = "https://github.com/markcastle/taskrail/";
+    if !url.starts_with(OURS) {
+        return Err(format!("only pages under {OURS} can be opened"));
+    }
+    open::that(&url).map_err(|e| e.to_string())
+}
+
 /// The MCP sign-in flow for one server: open the browser, wait for it to
 /// come back to a local port, keep the credentials in the credential store.
 /// Blocks until the person finishes or five minutes pass.

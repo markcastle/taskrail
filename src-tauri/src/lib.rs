@@ -60,6 +60,7 @@ pub fn run() {
             commands::log_from_ui,
             commands::open_log_folder,
             commands::export_blueprint,
+            commands::open_project_page,
             commands::check_for_update,
             commands::install_update,
         ])

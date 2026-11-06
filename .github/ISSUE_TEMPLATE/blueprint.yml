@@ -1,0 +1,44 @@
+name: Submit a blueprint
+description: Share a connector profile so the next person to connect this system needs no model and no API key.
+title: "Blueprint: "
+labels: ["blueprint"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A blueprint you submit here is turned into a pull request automatically, checked by the same code the app uses, and reviewed by a maintainer. Once merged, every running copy of Task Rail picks it up within the hour.
+
+        The JSON below comes from Settings → Connectors → **Blueprint** on a connector that works. It carries no server address and no secrets. If it contains your own user id, swap it for `{me}` and add an `identity` block; the [blueprints README](https://github.com/markcastle/taskrail/blob/main/blueprints/README.md) shows how.
+  - type: input
+    id: system
+    attributes:
+      label: What system is this?
+      description: The name people know it by, and a link if it has one.
+      placeholder: Linear, https://linear.app
+    validations:
+      required: true
+  - type: input
+    id: pulls
+    attributes:
+      label: What does the profile pull?
+      description: One line, as a person would say it. This becomes the blueprint's description.
+      placeholder: Your open issues across every team you belong to
+    validations:
+      required: true
+  - type: textarea
+    id: blueprint
+    attributes:
+      label: Blueprint JSON
+      description: Paste the JSON from the Blueprint button. Leave the backticks out; it is formatted for you.
+      render: json
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: What you have seen it do
+      options:
+        - label: Tasks from this system appear on the rail
+          required: true
+        - label: Moving a task on the rail changes its status in the system
+        - label: The profile says `{me}` rather than my own user id, or does not need to

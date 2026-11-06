@@ -15,6 +15,7 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - Releases built by GitHub Actions and a one-line install on both platforms.
 - Auto-update: a signed manifest with every release, a check on start and every hour, an "Install now" banner on the rail, and an **Update automatically** switch in Settings.
 - Blueprints: a registry of ready-made profiles in the repository, matched by a server's tools before any model is asked, with `{me}` and `identity` so one profile serves everyone, and a Blueprint button on each connector to share yours.
+- Blueprint submissions: Submit for review opens a prefilled form, a workflow checks the blueprint and turns it into a pull request, a maintainer merges, and running apps pick it up within the hour.
 
 ## 🔜 Next
 

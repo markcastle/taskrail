@@ -1,0 +1,114 @@
+name: Blueprint submission
+
+# A "Submit a blueprint" issue becomes a pull request against the registry.
+# The blueprint is checked by the same code the app uses before the pull
+# request is opened; a maintainer reviews and merges; running apps pick the
+# new entry up on their next fetch.
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: write
+
+jobs:
+  submission:
+    if: contains(github.event.issue.labels.*.name, 'blueprint')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Turn the issue into a registry change
+        id: change
+        env:
+          BODY: ${{ github.event.issue.body }}
+        run: |
+          printf '%s' "$BODY" > /tmp/body.md
+          if node scripts/blueprint-submission.mjs --body-file /tmp/body.md --registry blueprints/registry.json > /tmp/result.json 2> /tmp/error.txt; then
+            echo "result=$(cat /tmp/result.json)" >> "$GITHUB_OUTPUT"
+            cat /tmp/result.json
+          else
+            echo "error<<EOF" >> "$GITHUB_OUTPUT"
+            cat /tmp/error.txt >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            cat /tmp/error.txt
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Check it the way the app does
+        id: validate
+        run: |
+          if cargo test -p taskrail-connector-mcp --lib blueprint 2> /tmp/test.txt > /tmp/test.out; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            tail -n 40 /tmp/test.out /tmp/test.txt
+            exit 1
+          fi
+
+      - name: Open the pull request
+        id: pr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: blueprint/${{ fromJson(steps.change.outputs.result).id }}
+          title: "${{ fromJson(steps.change.outputs.result).action == 'update' && 'Update blueprint' || 'Blueprint' }}: ${{ fromJson(steps.change.outputs.result).title }}"
+          commit-message: |
+            ${{ fromJson(steps.change.outputs.result).action == 'update' && 'Update blueprint' || 'Add blueprint' }}: ${{ fromJson(steps.change.outputs.result).title }}
+
+            Submitted in #${{ github.event.issue.number }}.
+          body: |
+            ${{ fromJson(steps.change.outputs.result).action == 'update' && 'Updates' || 'Adds' }} the **${{ fromJson(steps.change.outputs.result).title }}** blueprint, submitted by @${{ github.event.issue.user.login }} in #${{ github.event.issue.number }}.
+
+            Matched on: `${{ join(fromJson(steps.change.outputs.result).tools, '`, `') }}`
+
+            The blueprint parsed, carries no server or secrets, and instantiates through the app's own checks. Things only a person can judge:
+
+            - [ ] The description says what the system is and what the profile pulls
+            - [ ] The tool names look like that system's, not another's
+            - [ ] It says `{me}` where a person's id would go, with an `identity` block
+            - [ ] Nothing in it is specific to the submitter's workspace
+
+            Merging publishes it: running apps fetch the registry within the hour.
+
+            Closes #${{ github.event.issue.number }}
+          labels: blueprint
+          delete-branch: true
+
+      - name: Run CI on the branch
+        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref "blueprint/${{ fromJson(steps.change.outputs.result).id }}"
+
+      - name: Tell the submitter
+        if: steps.pr.outputs.pull-request-url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "${{ github.event.issue.number }}" --body "Thank you. This is now ${{ steps.pr.outputs.pull-request-url }}, checked and waiting for review. Once it is merged, every running Task Rail picks it up within the hour."
+
+      - name: Explain what went wrong
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ERROR: ${{ steps.change.outputs.error }}
+        run: |
+          if [ -n "$ERROR" ]; then
+            why="$ERROR"
+          elif [ "${{ steps.validate.outputs.ok }}" = "false" ]; then
+            why="The blueprint parsed but did not pass the app's own checks. The run log has the details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          else
+            why="Something went wrong turning this into a pull request. A maintainer will look: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          gh issue comment "${{ github.event.issue.number }}" --body "$(printf 'This could not be added yet.\n\n> %s\n\nEdit the issue to fix it and the check runs again.' "$why")"

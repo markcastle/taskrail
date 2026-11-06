@@ -204,6 +204,8 @@ if (shots) await page.screenshot({ path: `${shots}/05-rail-with-connector.png` }
 await settings.getByRole('button', { name: 'Blueprint', exact: true }).click()
 await settings.getByTestId('blueprint-demo-tracker').waitFor()
 assert.match(await settings.getByLabel('Blueprint JSON').inputValue(), /"match"/, 'the blueprint carries a fingerprint')
+await settings.getByTestId('submit-blueprint').click()
+await settings.locator('.toast', { hasText: 'submission form is open' }).waitFor()
 await settings.getByRole('button', { name: 'Close', exact: true }).click()
 await settings.getByRole('button', { name: /^Paste profile/ }).click()
 await settings.getByLabel('Connector profile JSON').fill('{"id": "demo-tracker", "name": "Dup"}')

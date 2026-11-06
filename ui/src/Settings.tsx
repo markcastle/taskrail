@@ -126,8 +126,34 @@ function Row({
 }
 
 /** A connector's profile as a blueprint, to copy into the registry or an issue. */
+const SUBMIT_URL = 'https://github.com/markcastle/taskrail/issues/new'
+
+/** The submission form, prefilled. Browsers and GitHub cap the address length, so a big blueprint goes by clipboard instead. */
+function submissionLink(json: string): { url: string; prefilled: boolean } {
+  let title = 'Blueprint: '
+  try {
+    title += String(JSON.parse(json).title ?? '')
+  } catch {
+    /* the title field is just a nicety */
+  }
+  const params = new URLSearchParams({ template: 'blueprint.yml', title, blueprint: json })
+  const url = `${SUBMIT_URL}?${params}`
+  if (url.length <= 7000) return { url, prefilled: true }
+  return { url: `${SUBMIT_URL}?${new URLSearchParams({ template: 'blueprint.yml', title })}`, prefilled: false }
+}
+
 function BlueprintPanel({ id, json, onClose, notify }: { id: string; json: string; onClose: () => void; notify: (tone: Tone, text: string) => void }) {
   const area = useRef<HTMLTextAreaElement>(null)
+  const submit = () => {
+    const link = submissionLink(json)
+    const go = () =>
+      backend
+        .openProjectPage(link.url)
+        .then(() => notify('info', link.prefilled ? 'The submission form is open in your browser' : 'The form is open in your browser. Paste the blueprint into it.'))
+        .catch((e) => notify('error', String(e)))
+    if (link.prefilled || !navigator.clipboard?.writeText) go()
+    else navigator.clipboard.writeText(json).then(go, go)
+  }
   const copy = () => {
     const done = () => notify('success', 'Blueprint copied')
     const fallback = () => {
@@ -141,16 +167,19 @@ function BlueprintPanel({ id, json, onClose, notify }: { id: string; json: strin
   return (
     <div className="panel panel--form" data-testid={`blueprint-${id}`}>
       <p className="settings-muted">
-        This is the connector without your server or secrets, with the tools it calls as the fingerprint. Paste it into <code>blueprints/registry.json</code> in a pull request, or into an issue, and
-        the next person to connect this system will not need a model. If it names you, swap your id for <code>{'{me}'}</code> and add an <code>identity</code> block; the registry's README shows how.
+        This is the connector without your server or secrets, with the tools it calls as the fingerprint. Submit it for review and, once a maintainer merges it, the next person to connect this
+        system will not need a model. If it names you, swap your id for <code>{'{me}'}</code> and add an <code>identity</code> block; the registry's README shows how.
       </p>
       <textarea ref={area} aria-label="Blueprint JSON" readOnly rows={14} value={json} />
       <div className="settings-actions settings-actions--end">
         <button type="button" className="button button--quiet" onClick={onClose}>
           Close
         </button>
-        <button type="button" className="button button--primary" onClick={copy} data-testid="copy-blueprint">
+        <button type="button" className="button" onClick={copy} data-testid="copy-blueprint">
           Copy
+        </button>
+        <button type="button" className="button button--primary" onClick={submit} data-testid="submit-blueprint">
+          Submit for review
         </button>
       </div>
     </div>
