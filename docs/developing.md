@@ -108,7 +108,9 @@ Secrets are never written to the database or to a profile. A profile only names 
 
 ## Cutting a release
 
-Two commands:
+Pick the number first. A patch (0.2.0 to 0.2.1) is for fixes and small adjustments. A minor (0.2.x to 0.3.0) is for anything a person would notice as new: a feature, a redesign, a new connector ability. Leaving 0.x behind is a judgement about stability, not a feature count.
+
+Then two commands:
 
 ```bash
 npm run release -- 0.1.1
