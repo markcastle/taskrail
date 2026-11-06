@@ -48,6 +48,10 @@ pub struct RailSettings {
     /// back to it too.
     #[serde(default)]
     pub monitor: Option<String>,
+    /// Install new releases without asking. Off until the person turns it
+    /// on: an update that changes things under you is a surprise.
+    #[serde(default)]
+    pub auto_update: bool,
 }
 
 impl Default for RailSettings {
@@ -59,6 +63,7 @@ impl Default for RailSettings {
             event_lead_minutes: 60,
             theme: Theme::System,
             monitor: None,
+            auto_update: false,
         }
     }
 }

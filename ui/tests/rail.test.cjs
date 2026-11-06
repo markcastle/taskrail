@@ -267,6 +267,20 @@ await settings.getByTestId('connector-jira').waitFor()
 await settings.getByTestId('connector-jira').getByRole('button', { name: 'Remove', exact: true }).click()
 await settings.getByText('Nothing connected yet.').waitFor()
 
+// 11b. Updates: a check finds the stand-in's newer release; the rail shows the banner; the switch persists.
+await settings.getByRole('button', { name: 'Rail', exact: true }).click()
+await settings.getByTestId('check-update').click()
+await settings.getByText('Task Rail 0.2.0 is ready.').waitFor()
+await page.getByTestId('update-banner').waitFor()
+assert.match(await page.getByTestId('update-banner').textContent(), /0\.2\.0/)
+await page.getByRole('button', { name: 'Not now', exact: true }).click()
+assert.equal(await page.getByTestId('update-banner').count(), 0, 'the banner can be put away')
+await settings.getByRole('switch', { name: 'Update automatically' }).click()
+await settings.locator('.saved--visible').waitFor()
+await settings.reload()
+await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
+assert.equal(await settings.getByRole('switch', { name: 'Update automatically' }).getAttribute('aria-checked'), 'true', 'auto-update persisted')
+
 // 12. The Logs page shows the stand-in's log, including this page's own start line.
 await settings.getByRole('button', { name: 'Logs', exact: true }).click()
 await settings.getByTestId('log').waitFor()

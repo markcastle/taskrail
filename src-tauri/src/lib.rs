@@ -19,6 +19,7 @@ mod state;
 mod sync;
 mod theme;
 mod tray;
+mod update;
 
 pub use state::AppState;
 
@@ -28,6 +29,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(logs::plugin())
         .plugin(shortcuts::plugin())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::rail_view,
             commands::add_task,
@@ -57,6 +59,8 @@ pub fn run() {
             commands::app_version,
             commands::log_from_ui,
             commands::open_log_folder,
+            commands::check_for_update,
+            commands::install_update,
         ])
         .setup(|app| {
             log::info!(
@@ -76,6 +80,7 @@ pub fn run() {
             tray::install(app.handle())?;
             release_on_console_signal(app.handle().clone());
             sync::start(app.handle().clone());
+            update::start(app.handle().clone());
             Ok(())
         })
         .build(tauri::generate_context!())

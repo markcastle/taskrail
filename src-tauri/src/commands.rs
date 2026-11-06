@@ -459,6 +459,22 @@ pub fn expand_rail(
     crate::dock::redock(&app).map_err(|e| e.to_string())
 }
 
+/// Ask the release feed now, for the settings page's "Check for updates".
+#[tauri::command]
+pub async fn check_for_update(app: AppHandle) -> CommandResult<crate::update::UpdateStatus> {
+    let available = crate::update::check(&app).await?;
+    Ok(crate::update::UpdateStatus {
+        current: env!("CARGO_PKG_VERSION").to_owned(),
+        available,
+    })
+}
+
+/// Install the newest release and restart into it.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> CommandResult<()> {
+    crate::update::install(&app).await
+}
+
 #[tauri::command]
 pub fn app_version() -> String {
     format!(

@@ -55,6 +55,19 @@ export interface RailSettings {
   event_lead_minutes: number
   theme: Theme
   monitor: string | null
+  /** Install new releases without asking. */
+  auto_update: boolean
+}
+
+export interface AvailableUpdate {
+  version: string
+  notes: string | null
+  date: string | null
+}
+
+export interface UpdateStatus {
+  current: string
+  available: AvailableUpdate | null
 }
 
 export interface MonitorInfo {
@@ -148,6 +161,12 @@ export interface RailBackend {
   readLog(lines?: number): Promise<string>
   /** Version and commit of the running build. */
   appVersion(): Promise<string>
+  /** Ask the release feed now. */
+  checkForUpdate(): Promise<UpdateStatus>
+  /** Download, verify and install the newest release, then restart. Never resolves on success. */
+  installUpdate(): Promise<void>
+  /** Fires when a periodic check finds a newer release. Returns an unsubscribe. */
+  onUpdateAvailable(callback: (update: AvailableUpdate) => void): () => void
   /** Reveal the log folder in the file manager. */
   openLogFolder(): Promise<void>
   /** Write a line from this page into the app's log. Never rejects. */
@@ -217,6 +236,9 @@ function tauriBackend(): RailBackend {
     onOpenSettings: (cb) => listen('rail:open-settings', cb),
     readLog: (lines) => call('read_log', { lines: lines ?? null }),
     appVersion: () => call('app_version'),
+    checkForUpdate: () => call('check_for_update'),
+    installUpdate: () => call('install_update'),
+    onUpdateAvailable: (cb) => listen<AvailableUpdate>('rail:update-available', cb),
     openLogFolder: () => call('open_log_folder'),
     logFromUi: (level, message) => call<void>('log_from_ui', { level, message }).catch(() => undefined),
     listConnectors: () => call('list_connectors'),
@@ -292,12 +314,13 @@ function browserBackend(): RailBackend {
     task('update-project-plan', 'Update project plan', 'done'),
   ]
   let active: string | null = 'design-dashboard'
-  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null }
+  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, auto_update: false }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
   const devLog: string[] = [`${new Date().toISOString()} [info] browser stand-in started`]
   const changedListeners = new Set<() => void>()
+  const updateListeners = new Set<(update: AvailableUpdate) => void>()
   const quickAddListeners = new Set<() => void>()
   const syncErrorListeners = new Set<(e: SyncError) => void>()
 
@@ -308,7 +331,7 @@ function browserBackend(): RailBackend {
       const state = JSON.parse(raw) as DevState
       items = state.items
       active = state.active
-      settings = { ...state.settings, theme: state.settings.theme ?? 'system', monitor: state.settings.monitor ?? null }
+      settings = { ...state.settings, theme: state.settings.theme ?? 'system', monitor: state.settings.monitor ?? null, auto_update: state.settings.auto_update ?? false }
       connectors = state.connectors
       modelSettings = state.modelSettings
       signedIn = state.signedIn ?? []
@@ -330,7 +353,13 @@ function browserBackend(): RailBackend {
     changedListeners.forEach((cb) => cb())
     channel?.postMessage('changed')
   }
-  channel?.addEventListener('message', () => {
+  channel?.addEventListener('message', (event) => {
+    // An update found in one tab is announced in every tab, the way the app
+    // emits the event to its one window.
+    if (event.data && typeof event.data === 'object' && event.data.type === 'update') {
+      updateListeners.forEach((cb) => cb(event.data.update))
+      return
+    }
     load()
     changedListeners.forEach((cb) => cb())
   })
@@ -459,6 +488,23 @@ function browserBackend(): RailBackend {
     onOpenSettings: () => () => undefined,
     readLog: () => async(() => devLog.join('\n')),
     appVersion: () => async(() => 'browser stand-in'),
+    // The stand-in always has a newer release waiting, so the banner and the
+    // settings page can be seen and tested. Installing just logs.
+    checkForUpdate: () =>
+      new Promise((resolve) => {
+        window.setTimeout(() => {
+          const update = { version: '0.2.0', notes: 'Smoother gestures and a quieter tray.', date: new Date().toISOString() }
+          updateListeners.forEach((cb) => cb(update))
+          channel?.postMessage({ type: 'update', update })
+          resolve({ current: '0.1.0', available: update })
+        }, 300)
+      }),
+    installUpdate: () =>
+      new Promise((_, reject) => {
+        devLog.push(`${new Date().toISOString()} [info] stand-in would install 0.2.0 and restart`)
+        window.setTimeout(() => reject(new Error('the browser stand-in cannot restart itself')), 300)
+      }),
+    onUpdateAvailable: (cb) => (updateListeners.add(cb), () => updateListeners.delete(cb)),
     openLogFolder: () => async(() => undefined),
     logFromUi: (level, message) =>
       async(() => {

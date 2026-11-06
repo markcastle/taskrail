@@ -43,6 +43,7 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 - 🎯 **One thing in focus.** Mark the task you are on. It sits at the top as Up next.
 - ⌨️ **Quick-add anywhere.** Ctrl+Shift+Space from any window.
 - 🌗 **Light, dark, or follow the system.**
+- 🔄 **Keeps itself current.** A signed update arrives as a quiet banner with Install now, or installs by itself if you say so.
 - 🔐 **Your keys stay yours.** API keys and sign-in tokens live in your operating system's credential store, never in a file.
 
 ## 🚀 Install
@@ -98,7 +99,7 @@ The plan for not needing a key at all is on the [roadmap](docs/roadmap.md#discov
 
 ## 🗺️ Where it is going
 
-Next up: an auto-updater, pausing a connector, richer task details, and animation and sound that make every gesture feel acknowledged. The full list, with what is done and what is still a question, is the [roadmap](docs/roadmap.md). The thinking behind the decisions so far is in [docs/plan.md](docs/plan.md).
+Next up: pausing a connector, richer task details, and animation and sound that make every gesture feel acknowledged. The full list, with what is done and what is still a question, is the [roadmap](docs/roadmap.md). The thinking behind the decisions so far is in [docs/plan.md](docs/plan.md).
 
 ## 🛠️ Developing
 

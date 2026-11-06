@@ -11,7 +11,7 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { createBackend, type ConnectorSummary, type Item, type RailBackend, type RailView, type Status, type SyncError } from './backend'
+import { createBackend, type AvailableUpdate, type ConnectorSummary, type Item, type RailBackend, type RailView, type Status, type SyncError } from './backend'
 import { Segmented } from './controls'
 import { dueWord, formatTime, relativeStart, shortcutHint, todayLine, whenWord } from './format'
 import Settings from './Settings'
@@ -35,6 +35,8 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
   const [foldLimit, setFoldLimit] = useState(5)
+  const [update, setUpdate] = useState<AvailableUpdate | null>(null)
+  const [installing, setInstalling] = useState(false)
   const [moreProgress, setMoreProgress] = useState(false)
   const addInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
@@ -74,6 +76,14 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [notice])
   useEffect(() => backend.onQuickAdd(() => addInput.current?.focus()), [])
+  useEffect(() => backend.onUpdateAvailable(setUpdate), [])
+  const installUpdate = () => {
+    setInstalling(true)
+    backend.installUpdate().catch((e) => {
+      setInstalling(false)
+      setNotice(`Update failed: ${e}`)
+    })
+  }
   useEffect(() => backend.onOpenSettings(() => setSettingsOpen(true)), [])
   useEffect(() => {
     if (searchOpen) searchInput.current?.focus()
@@ -252,6 +262,23 @@ export default function App() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && toggleSearch(false)}
           />
+        </div>
+      )}
+
+      {update && (
+        <div className="update" role="status" data-testid="update-banner">
+          <div className="update__text">
+            <strong>Task Rail {update.version} is ready.</strong>
+            {update.notes && <span className="update__notes">{update.notes}</span>}
+          </div>
+          <div className="update__actions">
+            <button className="focus-button" disabled={installing} onClick={installUpdate}>
+              {installing ? 'Installing…' : 'Install now'}
+            </button>
+            <button className="icon-button icon-button--quiet" aria-label="Not now" title="Not now" onClick={() => setUpdate(null)}>
+              ×
+            </button>
+          </div>
         </div>
       )}
 

@@ -126,7 +126,20 @@ The first sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.
 
 `install.ps1` and `install.sh` at the repo root read `releases/latest`, so the moment the workflow finishes the one-line install picks up the new version.
 
-The builds are not code-signed. When a Windows certificate and an Apple Developer ID are available they go in as repository secrets and the workflow picks them up; until then the install scripts clear the first-run warnings.
+### How the app updates itself
+
+Every release is signed with the updater key, and the workflow writes a `latest.json` manifest into the release. The running app reads that manifest twenty seconds after start and every four hours, verifies the signature with the public key in `src-tauri/tauri.conf.json`, and either installs the update at once (the **Update automatically** switch in Settings) or shows an "Install now" banner on the rail. Settings also has **Check for updates**.
+
+Two repository secrets make the signing work, and a release built without them has no signatures, so running apps will refuse it:
+
+| Secret | What it holds |
+| --- | --- |
+| `TAURI_SIGNING_PRIVATE_KEY` | The contents of the updater private key file |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Its password |
+
+If the key is ever lost, generate a new pair with `npx tauri signer generate -w taskrail.key`, put the new public key in `tauri.conf.json`, update the secrets, and ship a release. Apps already installed will not accept updates signed with the new key, so that release has to be installed by hand once.
+
+The builds are not code-signed for the operating system. When a Windows certificate and an Apple Developer ID are available they go in as repository secrets and the workflow picks them up; until then the install scripts clear the first-run warnings.
 
 ## Conventions
 

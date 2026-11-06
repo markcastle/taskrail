@@ -27,9 +27,16 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE0OTI5NEFFRDRCODA4MDUKUldRRkNMalVycFNTRkduQ3hGenU4STV3dTFFZTBSZUFEeC96R21rQ2xMYjR2Y0pWc3ZpWE5WVlEK",
+      "endpoints": ["https://github.com/markcastle/taskrail/releases/latest/download/latest.json"]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "publisher": "Mark Castle",
     "shortDescription": "A task strip that lives on the edge of your screen.",
     "license": "MIT",

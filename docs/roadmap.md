@@ -13,12 +13,9 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - A tray icon with Show, Hide, Settings and Quit.
 - The generic MCP connector: model-assisted discovery, sign-in through the browser, two-way sync, fan-out over boards, `where` filters.
 - Releases built by GitHub Actions and a one-line install on both platforms.
+- Auto-update: a signed manifest with every release, a check on start and every four hours, an "Install now" banner on the rail, and an **Update automatically** switch in Settings.
 
 ## 🔜 Next
-
-### Auto-update
-
-The app checks for a new release on start and every few hours. When one exists, the rail says so quietly and offers **Install now**. A toggle in Settings, **Update automatically**, installs new releases without asking, at the next quiet moment. The Release workflow signs an update manifest so the app only ever installs what we built.
 
 ### Pause a connector
 

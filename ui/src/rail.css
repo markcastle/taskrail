@@ -318,6 +318,38 @@ button {
   transition: width 200ms ease;
 }
 
+/* a release waiting to be installed */
+
+.update {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.update__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.update__notes {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.update__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 /* sections */
 
 .section {

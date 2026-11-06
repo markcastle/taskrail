@@ -11,6 +11,7 @@ import {
   type RailSettings,
   type ServerSpec,
   type Theme,
+  type UpdateStatus,
 } from './backend'
 import { Result, SavedMark, Segmented, Slider, Spinner, Toggle, type Tone } from './controls'
 import { useDebouncedSave } from './useDebouncedSave'
@@ -226,7 +227,68 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
       <Row label="Pull in events starting within" help="A meeting this close joins Priorities.">
         <Slider label="Pull in events starting within" value={draft.event_lead_minutes} min={0} max={240} step={5} unit="min" onChange={(v) => set('event_lead_minutes', v)} />
       </Row>
+      <Updates autoUpdate={draft.auto_update} onAutoUpdate={(v) => set('auto_update', v)} fail={fail} />
     </section>
+  )
+}
+
+/** Checking for and installing new releases. Automatic is a switch; otherwise the rail asks. */
+function Updates({ autoUpdate, onAutoUpdate, fail }: { autoUpdate: boolean; onAutoUpdate: (on: boolean) => void; fail: (e: unknown) => void }) {
+  const [version, setVersion] = useState('')
+  const [checking, setChecking] = useState(false)
+  const [status, setStatus] = useState<UpdateStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [installing, setInstalling] = useState(false)
+  useEffect(() => {
+    backend.appVersion().then(setVersion).catch(() => setVersion(''))
+  }, [])
+  const check = () => {
+    setChecking(true)
+    setError(null)
+    setStatus(null)
+    backend
+      .checkForUpdate()
+      .then(setStatus)
+      .catch((e) => setError(String(e)))
+      .finally(() => setChecking(false))
+  }
+  const install = () => {
+    setInstalling(true)
+    backend.installUpdate().catch((e) => {
+      setInstalling(false)
+      fail(e)
+    })
+  }
+  return (
+    <>
+      <div className="settings-subhead">Updates</div>
+      <Row label="Update automatically" help="New releases install at a quiet moment. Off, and the rail tells you one is ready instead.">
+        <Toggle checked={autoUpdate} onChange={onAutoUpdate} label="Update automatically" />
+      </Row>
+      <Row label="Version" help={version ? `You have ${version}.` : undefined}>
+        <button type="button" className="button" disabled={checking} onClick={check} data-testid="check-update">
+          {checking ? <Spinner label="Checking…" /> : 'Check for updates'}
+        </button>
+      </Row>
+      {status && !status.available && (
+        <Result tone="success">
+          <strong>You're up to date.</strong> {status.current} is the newest release.
+        </Result>
+      )}
+      {status?.available && (
+        <Result tone="info">
+          <strong>Task Rail {status.available.version} is ready.</strong> {status.available.notes}{' '}
+          <button type="button" className="link" disabled={installing} onClick={install} data-testid="install-update">
+            {installing ? 'Installing…' : 'Install and restart'}
+          </button>
+        </Result>
+      )}
+      {error && (
+        <Result tone="error">
+          <strong>Couldn't check.</strong> {error}
+        </Result>
+      )}
+    </>
   )
 }
 
