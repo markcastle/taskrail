@@ -63,16 +63,6 @@ export function shortcutHint(): string {
   return mac ? '⌃⇧Space' : 'Ctrl ⇧ Space'
 }
 
-/** Release notes as the app shows them: the changes, one per line, without the markdown and without the install line. */
-export function noteLines(notes: string | null | undefined, max = 6): string[] {
-  if (!notes) return []
-  return notes
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*[-*]\s*/, '').replace(/[`*_#]/g, '').trim())
-    .filter((line) => line.length > 0 && !/^download below|^install/i.test(line) && !/https?:\/\//.test(line))
-    .slice(0, max)
-}
-
 /** "just now", "4 min ago", "2 h ago", or the date once it is older than a day. */
 export function agoWord(iso: string, now = Date.now()): string {
   const minutes = Math.round((now - Date.parse(iso)) / 60_000)

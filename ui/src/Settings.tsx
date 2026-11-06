@@ -14,7 +14,6 @@ import {
   type UpdateStatus,
 } from './backend'
 import { Result, SavedMark, Segmented, Slider, Spinner, Toggle, type Tone } from './controls'
-import { noteLines } from './format'
 import { useDebouncedSave } from './useDebouncedSave'
 import { followTheme } from './theme'
 
@@ -334,22 +333,24 @@ function Updates({ autoUpdate, onAutoUpdate, fail }: { autoUpdate: boolean; onAu
       </Row>
       {status && !status.available && (
         <Result tone="success">
-          <strong>You're up to date.</strong> {status.current} is the newest release.
+          <strong>You're up to date.</strong>
         </Result>
       )}
       {status?.available && (
         <Result tone="info">
-          <strong>Task Rail {status.available.version} is ready.</strong>
-          {noteLines(status.available.notes).length > 0 && (
-            <ul className="result__list">
-              {noteLines(status.available.notes).map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          )}
-          <button type="button" className="button button--primary" disabled={installing} onClick={install} data-testid="install-update">
-            {installing ? 'Installing…' : 'Install and restart'}
+          <strong>Task Rail {status.available.version} is available.</strong>{' '}
+          <button
+            type="button"
+            className="link"
+            onClick={() => backend.openProjectPage(`https://github.com/markcastle/taskrail/releases/tag/v${status.available?.version}`).catch(fail)}
+          >
+            Release notes
           </button>
+          <div className="settings-actions">
+            <button type="button" className="button button--primary" disabled={installing} onClick={install} data-testid="install-update">
+              {installing ? 'Installing…' : 'Install and restart'}
+            </button>
+          </div>
         </Result>
       )}
       {error && (

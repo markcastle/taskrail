@@ -13,7 +13,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from '@dnd-kit/utilities'
 import { createBackend, type AvailableUpdate, type ConnectorSummary, type Item, type RailBackend, type RailView, type Status, type SyncError } from './backend'
 import { Segmented } from './controls'
-import { agoWord, dueWord, formatTime, noteLines, relativeStart, shortcutHint, todayLine, whenWord } from './format'
+import { agoWord, dueWord, formatTime, relativeStart, shortcutHint, todayLine, whenWord } from './format'
 import Settings from './Settings'
 import { followTheme } from './theme'
 import { useSwipe } from './useSwipe'
@@ -268,12 +268,7 @@ export default function App() {
       {update && (
         <div className="update" role="status" data-testid="update-banner">
           <div className="update__text">
-            <strong>Task Rail {update.version} is ready.</strong>
-            {noteLines(update.notes, 1).map((line) => (
-              <span key={line} className="update__notes">
-                {line}
-              </span>
-            ))}
+            <strong>Task Rail {update.version} is available.</strong>
           </div>
           <div className="update__actions">
             <button className="focus-button" disabled={installing} onClick={installUpdate}>

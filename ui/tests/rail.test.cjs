@@ -304,7 +304,7 @@ await settings.getByText('Nothing connected yet.').waitFor()
 // 11b. Updates: a check finds the stand-in's newer release; the rail shows the banner; the switch persists.
 await settings.getByRole('button', { name: 'Rail', exact: true }).click()
 await settings.getByTestId('check-update').click()
-await settings.getByText('Task Rail 0.2.0 is ready.').waitFor()
+await settings.getByText('Task Rail 0.2.0 is available.').waitFor()
 await page.getByTestId('update-banner').waitFor()
 assert.match(await page.getByTestId('update-banner').textContent(), /0\.2\.0/)
 await page.getByRole('button', { name: 'Not now', exact: true }).click()
