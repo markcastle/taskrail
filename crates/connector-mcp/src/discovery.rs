@@ -31,8 +31,11 @@ const SAMPLE_CHARS: usize = 6_000;
 
 #[derive(Clone)]
 pub struct DiscoveryRequest {
-    /// The id the profile will get. Letters, digits and dashes.
+    /// The id the profile will get. Letters, digits and dashes. Empty means
+    /// "work one out from the name", kept clear of `taken_ids`.
     pub id: String,
+    /// What to call the connector. Empty means "ask the server": the
+    /// blueprint's title, then what the server calls itself, then its host.
     pub name: String,
     pub server: ServerSpec,
     /// Tasks or calendar events.
@@ -46,6 +49,71 @@ pub struct DiscoveryRequest {
     /// How to get let in: a static token, stored sign-in credentials, or
     /// nothing.
     pub auth: SessionAuth,
+    /// Ids already in use, so a worked-out id can step aside: "tuesday-2".
+    pub taken_ids: Vec<String>,
+}
+
+/// A request with its name and id settled. The name comes from the person
+/// if they gave one, else the blueprint, else the server's own handshake,
+/// else the host. The id is the name as a slug, made unique.
+fn settle(
+    request: &DiscoveryRequest,
+    session: &McpSession,
+    blueprint_title: Option<&str>,
+) -> DiscoveryRequest {
+    let mut settled = request.clone();
+    if settled.name.trim().is_empty() {
+        let from_server = session.server_name().filter(|n| !n.trim().is_empty());
+        let from_host = match &request.server {
+            ServerSpec::Http { url, .. } => crate::blueprint::host_of(url),
+            ServerSpec::Stdio { command, .. } => std::path::Path::new(command)
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned()),
+        };
+        settled.name = blueprint_title
+            .map(str::to_owned)
+            .or(from_server)
+            .or(from_host)
+            .unwrap_or_else(|| "Connector".into());
+        log::info!("discovery: no name given, calling it {:?}", settled.name);
+    }
+    settled.name = settled.name.trim().to_owned();
+    if settled.id.trim().is_empty() {
+        settled.id = unique_id(&slug(&settled.name), &request.taken_ids);
+    }
+    settled
+}
+
+/// Lower-case letters, digits and dashes, the way ids are spelled.
+pub fn slug(name: &str) -> String {
+    let mut out = String::new();
+    let mut dash = false;
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+            dash = false;
+        } else if !dash && !out.is_empty() {
+            out.push('-');
+            dash = true;
+        }
+    }
+    let trimmed = out.trim_end_matches('-').to_owned();
+    if trimmed.is_empty() {
+        "connector".into()
+    } else {
+        trimmed
+    }
+}
+
+/// `base`, or `base-2`, `base-3`... the first that is not taken.
+pub fn unique_id(base: &str, taken: &[String]) -> String {
+    if !taken.iter().any(|t| t == base) {
+        return base.to_owned();
+    }
+    (2..)
+        .map(|n| format!("{base}-{n}"))
+        .find(|candidate| !taken.iter().any(|t| t == candidate))
+        .expect("the integers do not run out")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,7 +158,8 @@ pub async fn discover(
     llm: &dyn LlmClient,
 ) -> Result<DiscoveryOutcome, DiscoveryError> {
     let session = connect(request).await?;
-    let outcome = discover_with(request, llm, &session).await;
+    let request = settle(request, &session, None);
+    let outcome = discover_with(&request, llm, &session).await;
     session.close().await;
     outcome
 }
@@ -118,7 +187,9 @@ pub async fn discover_or_blueprint(
             crate::profile::ServerSpec::Stdio { .. } => None,
         };
         let mut notes = Vec::new();
-        if let Some(blueprint) = registry.find(&tools, url) {
+        let found = registry.find(&tools, url);
+        let request = &settle(request, &session, found.map(|b| b.title.as_str()));
+        if let Some(blueprint) = found {
             log::info!(
                 "discovery for {:?}: the {:?} blueprint fits this server's tools",
                 request.name,

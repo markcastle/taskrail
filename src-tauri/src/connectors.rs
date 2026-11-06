@@ -202,6 +202,16 @@ pub fn session_auth(server: &ServerSpec) -> SessionAuth {
 }
 
 /// Where a connector's sign-in credentials live in the credential store.
+/// Where a connector made before credentials were keyed by server kept
+/// its sign-in. Still read, never written.
 pub fn oauth_secret_name(connector_id: &str) -> String {
     format!("connector:{connector_id}:oauth")
+}
+
+/// Where a server's sign-in lives: keyed by its host, because the
+/// credentials are the server's, and the connector's id is not known
+/// until the server has said what it is.
+pub fn oauth_secret_name_for_url(url: &str) -> String {
+    let host = taskrail_connector_mcp::blueprint::host_of(url).unwrap_or_else(|| url.to_owned());
+    format!("oauth:{host}")
 }

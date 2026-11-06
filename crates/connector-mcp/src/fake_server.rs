@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::{Json, Parameters};
-use rmcp::model::{ServerCapabilities, ServerConfig};
+use rmcp::model::{Implementation, ServerCapabilities, ServerConfig};
 use rmcp::{schemars, tool, tool_handler, tool_router, ServerHandler, ServiceExt};
 use serde::{Deserialize, Serialize};
 
@@ -297,7 +297,10 @@ impl FakeTracker {
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for FakeTracker {
     fn get_info(&self) -> ServerConfig {
-        ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
+        ServerConfig::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
+            Implementation::new("fake-tracker", env!("CARGO_PKG_VERSION"))
+                .with_title("Fake tracker"),
+        )
     }
 }
 

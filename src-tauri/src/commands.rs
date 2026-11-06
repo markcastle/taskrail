@@ -7,7 +7,7 @@ use taskrail_core::domain::{Item, ItemId, Status};
 use taskrail_core::ports::ItemRepository;
 use taskrail_core::settings::RailSettings;
 use taskrail_core::usecases::RailView;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::connectors::{demo_profile, ConnectorSummary};
 use crate::state::{lock, AppState};
@@ -315,7 +315,11 @@ pub enum DiscoveryResult {
 
 #[derive(Debug, Deserialize)]
 pub struct DiscoverRequest {
+    /// Empty: worked out from the name, kept clear of existing connectors.
+    #[serde(default)]
     pub id: String,
+    /// Empty: the blueprint's title, else what the server calls itself.
+    #[serde(default)]
     pub name: String,
     pub server: taskrail_connector_mcp::ServerSpec,
     #[serde(default = "task_kind")]
@@ -355,15 +359,20 @@ pub async fn discover_connector(
         bearer: request.bearer.filter(|t| !t.trim().is_empty()),
         oauth: None,
     };
-    // A completed sign-in for this id is picked up here and recorded in the
-    // spec, so the saved profile knows where its credentials live.
-    if let taskrail_connector_mcp::ServerSpec::Http { oauth_secret, .. } = &mut server {
-        let name = crate::connectors::oauth_secret_name(&request.id);
-        if crate::secrets::OsSecrets
-            .get(&name)
-            .ok()
-            .flatten()
-            .is_some()
+    // A completed sign-in for this server is picked up here and recorded in
+    // the spec, so the saved profile knows where its credentials live. Older
+    // connectors kept theirs under their id; those are still honoured.
+    if let taskrail_connector_mcp::ServerSpec::Http {
+        url, oauth_secret, ..
+    } = &mut server
+    {
+        let mut candidates = vec![crate::connectors::oauth_secret_name_for_url(url)];
+        if !request.id.trim().is_empty() {
+            candidates.push(crate::connectors::oauth_secret_name(&request.id));
+        }
+        if let Some(name) = candidates
+            .into_iter()
+            .find(|name| crate::secrets::OsSecrets.get(name).ok().flatten().is_some())
         {
             *oauth_secret = Some(name.clone());
             auth.oauth = Some(std::sync::Arc::new(
@@ -371,6 +380,7 @@ pub async fn discover_connector(
             ));
         }
     }
+    let taken_ids = lock(&app.state::<AppState>().connectors).ids();
     let request = taskrail_connector_mcp::DiscoveryRequest {
         id: request.id,
         name: request.name,
@@ -379,6 +389,7 @@ pub async fn discover_connector(
         hint: request.hint,
         allow_unannotated_list: request.allow_unannotated_list,
         auth,
+        taken_ids,
     };
     // A pasted blueprint is the whole registry for this attempt. Otherwise
     // the live registry, or the one built in. Either way a blueprint that
@@ -466,10 +477,11 @@ pub fn open_project_page(url: String) -> CommandResult<()> {
 /// come back to a local port, keep the credentials in the credential store.
 /// Blocks until the person finishes or five minutes pass.
 #[tauri::command]
-pub async fn sign_in(id: String, url: String) -> CommandResult<()> {
+pub async fn sign_in(url: String) -> CommandResult<()> {
     let store = std::sync::Arc::new(crate::secrets::KeychainCredentials::new(
-        crate::connectors::oauth_secret_name(&id),
+        crate::connectors::oauth_secret_name_for_url(&url),
     ));
+    let id = crate::connectors::oauth_secret_name_for_url(&url);
     log::info!("sign-in for {id} starting at {url}");
     let start = taskrail_connector_mcp::auth::begin(&url, store)
         .await

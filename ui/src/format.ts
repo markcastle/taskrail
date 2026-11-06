@@ -72,3 +72,13 @@ export function noteLines(notes: string | null | undefined, max = 6): string[] {
     .filter((line) => line.length > 0 && !/^download below|^install/i.test(line) && !/https?:\/\//.test(line))
     .slice(0, max)
 }
+
+/** "just now", "4 min ago", "2 h ago", or the date once it is older than a day. */
+export function agoWord(iso: string, now = Date.now()): string {
+  const minutes = Math.round((now - Date.parse(iso)) / 60_000)
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.round(minutes / 60)
+  if (hours < 24) return `${hours} h ago`
+  return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+}

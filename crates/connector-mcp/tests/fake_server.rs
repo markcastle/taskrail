@@ -164,11 +164,26 @@ async fn the_demo_blueprint_connects_the_fake_tracker_with_no_model() {
         hint: String::new(),
         allow_unannotated_list: false,
         auth: SessionAuth::default(),
+        taken_ids: vec![],
     };
     let outcome = discover_or_blueprint(&request, &Registry::bundled(), None)
         .await
         .unwrap();
     assert_eq!(outcome.blueprint.as_deref(), Some("Demo tracker"));
+    assert_eq!(
+        outcome.profile.name, "Demo",
+        "a name the person typed is kept"
+    );
+
+    let mut unnamed = request.clone();
+    unnamed.name = String::new();
+    unnamed.id = String::new();
+    unnamed.taken_ids = vec!["demo-tracker".into()];
+    let named = discover_or_blueprint(&unnamed, &Registry::bundled(), None)
+        .await
+        .unwrap();
+    assert_eq!(named.profile.name, "Demo tracker", "the blueprint names it");
+    assert_eq!(named.profile.id, "demo-tracker-2");
     assert_eq!(outcome.rounds, 0, "no model rounds");
     assert_eq!(
         outcome.sample.len(),
@@ -200,6 +215,7 @@ async fn no_blueprint_and_no_model_is_a_clear_message() {
         hint: String::new(),
         allow_unannotated_list: false,
         auth: SessionAuth::default(),
+        taken_ids: vec![],
     };
     let empty = Registry::parse(r#"{"blueprints": []}"#).unwrap();
     let err = discover_or_blueprint(&request, &empty, None)

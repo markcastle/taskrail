@@ -196,7 +196,7 @@ export interface RailBackend {
   /** Open one of the project's GitHub pages in the browser. Refuses anything else. */
   openProjectPage(url: string): Promise<void>
   /** Run the MCP sign-in flow in the browser for a server. Resolves when the browser comes back. */
-  signIn(id: string, url: string): Promise<void>
+  signIn(url: string): Promise<void>
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
   onChanged(callback: () => void): () => void
   /** Fires when the global quick-add shortcut was pressed. Returns an unsubscribe. */
@@ -263,7 +263,7 @@ function tauriBackend(): RailBackend {
     discoverConnector: (request) => call('discover_connector', { request }),
     exportBlueprint: (id) => call('export_blueprint', { id }),
     openProjectPage: (url) => call('open_project_page', { url }),
-    signIn: (id, url) => call('sign_in', { id, url }),
+    signIn: (url) => call('sign_in', { url }),
   }
 }
 
@@ -579,6 +579,15 @@ function browserBackend(): RailBackend {
       new Promise((resolve, reject) =>
         setTimeout(() => {
           load()
+          // No name given: the blueprint's title, else the server's own (here, its host). The id steps aside from taken ones.
+          const settle = (blueprintTitle: string | null) => {
+            const host = request.server.transport === 'http' ? new URL(request.server.url).hostname : request.server.command
+            const name = request.name.trim() || blueprintTitle || host
+            const base = request.id.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'connector'
+            let id = base
+            for (let n = 2; connectors.some((c) => c.id === id); n++) id = `${base}-${n}`
+            return { id, name }
+          }
           // A pasted blueprint, or a server whose URL says "blueprint", is one the registry knows: no model needed.
           let pasted: string | null = null
           if (request.blueprint?.trim()) {
@@ -592,7 +601,7 @@ function browserBackend(): RailBackend {
             return resolve({
               status: 'ok',
               blueprint: pasted ?? 'Demo tracker',
-              profile: { id: request.id, name: request.name, server: request.server, list: { tool: 'list_tickets' }, identity: { tool: 'whoami', id: '$.id' } },
+              profile: { ...settle(pasted ?? 'Demo tracker'), server: request.server, list: { tool: 'list_tickets' }, identity: { tool: 'whoami', id: '$.id' } },
               sample: [
                 { external_id: 'T-101', title: 'Prepare board deck', status: 'Selected' },
                 { external_id: 'T-102', title: 'Reply to supplier', status: 'Selected' },
@@ -604,17 +613,16 @@ function browserBackend(): RailBackend {
           }
           if (!modelSettings.has_key) return reject(new Error('no blueprint matches this server, and no API key is saved; add one under Model in settings'))
           if (request.server.transport === 'stdio' && request.server.command.includes('risky') && !request.allow_unannotated_list) {
-            return resolve({ status: 'needs_confirmation', tool: 'transition_ticket', profile: { id: request.id } })
+            return resolve({ status: 'needs_confirmation', tool: 'transition_ticket', profile: { id: settle(null).id } })
           }
-          if (request.server.transport === 'http' && request.server.url.includes('oauth') && !signedIn.includes(request.id)) {
+          if (request.server.transport === 'http' && request.server.url.includes('oauth') && !signedIn.includes(request.server.url)) {
             return resolve({ status: 'sign_in_required' })
           }
           resolve({
             status: 'ok',
             blueprint: null,
             profile: {
-              id: request.id,
-              name: request.name,
+              ...settle(null),
               server: request.server,
               kind: request.kind,
               list: { tool: 'list_tickets', arguments: { assignee: 'me' }, items: '$.tickets[*]', fields: { external_id: '$.ticket_id', title: '$.summary', status: '$.state' } },
@@ -645,11 +653,11 @@ function browserBackend(): RailBackend {
       async(() => {
         devLog.push(`${new Date().toISOString()} [info] stand-in would open ${url}`)
       }),
-    signIn: (id) =>
+    signIn: (url) =>
       new Promise((resolve) =>
         setTimeout(() => {
           load()
-          signedIn = [...signedIn, id]
+          signedIn = [...signedIn, url]
           persist()
           resolve()
         }, 300),

@@ -13,7 +13,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from '@dnd-kit/utilities'
 import { createBackend, type AvailableUpdate, type ConnectorSummary, type Item, type RailBackend, type RailView, type Status, type SyncError } from './backend'
 import { Segmented } from './controls'
-import { dueWord, formatTime, noteLines, relativeStart, shortcutHint, todayLine, whenWord } from './format'
+import { agoWord, dueWord, formatTime, noteLines, relativeStart, shortcutHint, todayLine, whenWord } from './format'
 import Settings from './Settings'
 import { followTheme } from './theme'
 import { useSwipe } from './useSwipe'
@@ -428,6 +428,12 @@ function QuickAdd({ inputRef, onSubmit }: { inputRef: React.RefObject<HTMLInputE
 }
 
 function SyncStatus({ connectors }: { connectors: ConnectorSummary[] }) {
+  // "4 min ago" has to move on its own, so the footer re-renders twice a minute.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const t = window.setInterval(() => setTick((n) => n + 1), 30_000)
+    return () => window.clearInterval(t)
+  }, [])
   const failing = connectors.filter((c) => c.last_error)
   let tone: 'ok' | 'off' | 'error' = 'ok'
   let text = 'Everything is up to date'
@@ -443,7 +449,7 @@ function SyncStatus({ connectors }: { connectors: ConnectorSummary[] }) {
     <footer className={`foot foot--${tone}`} data-testid="sync-status">
       <span className="foot__dot" aria-hidden="true" />
       <span className="foot__text">{text}</span>
-      {latest && tone === 'ok' && <span className="foot__time">{formatTime(latest)}</span>}
+      {latest && tone === 'ok' && <span className="foot__time">Synced {agoWord(latest)}</span>}
     </footer>
   )
 }

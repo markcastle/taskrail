@@ -236,7 +236,8 @@ pub fn complete_profile(
     Ok(profile)
 }
 
-fn host_of(url: &str) -> Option<String> {
+/// The host part of a URL, for naming things after a server.
+pub fn host_of(url: &str) -> Option<String> {
     let rest = url.split("://").nth(1)?;
     let host = rest.split('/').next()?.split('@').next_back()?;
     (!host.is_empty()).then(|| host.to_owned())

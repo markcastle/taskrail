@@ -216,16 +216,15 @@ await settings.getByText('Nothing connected yet.').waitFor()
 await page.waitForFunction(() => document.querySelectorAll('.card__source').length === 0)
 await page.locator('[data-testid="sync-status"]', { hasText: 'Local tasks only' }).waitFor()
 
-// 10. A server the registry knows needs no model at all.
+// 10. A server the registry knows needs no model at all, and no name: the blueprint supplies one.
 await settings.getByRole('button', { name: /^Add server/ }).click()
-await settings.getByLabel('Server name').fill('Known')
 await settings.getByLabel('Server URL').fill('https://blueprint.example/mcp')
 await settings.getByRole('button', { name: 'Discover', exact: true }).click()
 await settings.getByTestId('discovery-result').waitFor()
-assert.match(await settings.locator('.discovery .result--success').textContent(), /using the Demo tracker blueprint. No model was needed/)
+assert.match(await settings.locator('.discovery .result--success').textContent(), /on Demo tracker using the Demo tracker blueprint. No model was needed/)
 await settings.getByRole('button', { name: 'Add connector', exact: true }).click()
-await settings.getByTestId('connector-known').waitFor()
-await settings.getByTestId('connector-known').getByRole('button', { name: 'Remove', exact: true }).click()
+await settings.getByTestId('connector-demo-tracker').waitFor()
+await settings.getByTestId('connector-demo-tracker').getByRole('button', { name: 'Remove', exact: true }).click()
 await settings.getByText('Nothing connected yet.').waitFor()
 
 // 10b. A pasted blueprint is used instead of the registry, and Paste profile knows one when it sees it.
@@ -270,7 +269,7 @@ await settings.getByLabel('Server name').fill('Tuesday')
 await settings.getByLabel('Server URL').fill('https://tuesday.example/mcp')
 await settings.getByRole('button', { name: 'Discover', exact: true }).click()
 await settings.getByTestId('discovery-result').waitFor()
-assert.match(await settings.locator('.discovery .result--success').textContent(), /Found 2 items in 1 round/)
+assert.match(await settings.locator('.discovery .result--success').textContent(), /Found 2 items on Tuesday in 1 round/)
 assert.match(await settings.getByLabel('Discovered profile JSON').inputValue(), /"id": "tuesday"/)
 if (shots) await settings.screenshot({ path: `${shots}/07-settings-discovery.png` })
 // A long page scrolls inside the main pane: the window itself never grows past the screen.

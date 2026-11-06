@@ -60,6 +60,7 @@ fn request() -> DiscoveryRequest {
         hint: String::new(),
         allow_unannotated_list: false,
         auth: SessionAuth::default(),
+        taken_ids: vec![],
     }
 }
 
@@ -213,5 +214,23 @@ async fn an_invented_board_id_gets_the_real_boards_back_as_a_sample() {
         prompts[1].contains("\"boards\""),
         "the parent call's result is the sample for a fan-out: {}",
         prompts[1]
+    );
+}
+
+#[tokio::test]
+async fn an_unnamed_server_is_named_by_its_handshake_and_its_id_steps_aside() {
+    let mut req = request();
+    req.id = String::new();
+    req.name = String::new();
+    req.taken_ids = vec!["fake-tracker".into(), "fake-tracker-2".into()];
+    let llm = Scripted::new(&[&good_answer()]);
+    let outcome = discover(&req, &llm).await.unwrap();
+    assert_eq!(
+        outcome.profile.name, "Fake tracker",
+        "the server's own title"
+    );
+    assert_eq!(
+        outcome.profile.id, "fake-tracker-3",
+        "clear of the two already there"
     );
 }

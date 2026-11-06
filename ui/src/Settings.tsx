@@ -669,7 +669,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
             return { transport: 'stdio', command: parts[0], args: parts.slice(1), env: {} }
           })()
         : null
-  const ready = id.length > 0 && server !== null
+  const ready = server !== null
   const busy = phase !== 'idle'
 
   const discover = (allow = allowUnannotated) => {
@@ -692,7 +692,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
     setResult(null)
     setProblem(null)
     backend
-      .signIn(id, server.url)
+      .signIn(server.url)
       .then(() => {
         notify('success', 'Signed in')
         discover()
@@ -707,7 +707,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
     backend
       .addConnectorProfile(profileJson, bearer.trim() || undefined)
       .then(() => {
-        notify('success', `${name.trim()} connected`)
+        notify('success', `${(result?.status === 'ok' && String(result.profile.name)) || name.trim() || 'Server'} connected`)
         onAdded()
       })
       .catch(fail)
@@ -717,8 +717,8 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
   return (
     <div className="panel panel--form" data-testid="add-server">
       <div className="panel__grid">
-        <Row label="Name">
-          <input type="text" aria-label="Server name" placeholder="Tuesday" value={name} onChange={(e) => setName(e.target.value)} />
+        <Row label="Name" help="Optional. Left blank, the server says what it is called.">
+          <input type="text" aria-label="Server name" placeholder="Whatever the server calls itself" value={name} onChange={(e) => setName(e.target.value)} />
         </Row>
         <Row label="It holds">
           <Segmented<ItemKind>
@@ -808,11 +808,11 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
           <Result tone="success">
             {result.blueprint ? (
               <>
-                <strong>Found {result.sample.length} items</strong> using the {result.blueprint} blueprint. No model was needed.
+                <strong>Found {result.sample.length} items</strong> on {String(result.profile.name)} using the {result.blueprint} blueprint. No model was needed.
               </>
             ) : (
               <>
-                <strong>Found {result.sample.length} items</strong> in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
+                <strong>Found {result.sample.length} items</strong> on {String(result.profile.name)} in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
               </>
             )}
             {result.notes.length > 0 && <span className="connector__meta"> Earlier tries: {result.notes.join('; ')}</span>}

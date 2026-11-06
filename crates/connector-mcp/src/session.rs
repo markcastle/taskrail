@@ -136,10 +136,18 @@ impl McpSession {
         Ok(session)
     }
 
+    /// What the server calls itself in the handshake: its title if it gives
+    /// one, else its name. Servers are inconsistent here, so the caller
+    /// should treat it as a good default rather than the truth.
     pub fn server_name(&self) -> Option<String> {
-        self.service
-            .peer_info()
-            .and_then(|info| info.server_info.as_ref().map(|s| s.name.to_string()))
+        self.service.peer_info().and_then(|info| {
+            info.server_info.as_ref().map(|s| {
+                s.title
+                    .clone()
+                    .filter(|t| !t.trim().is_empty())
+                    .unwrap_or_else(|| s.name.to_string())
+            })
+        })
     }
 
     pub async fn tools(&self) -> Result<Vec<ToolSummary>, ConnectorError> {

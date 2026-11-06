@@ -18,7 +18,7 @@ A small fake issue tracker ships inside the app. Adding it gives you seven ticke
 
 ### Add server
 
-Give the server a name, a URL (or a command for a server that runs locally over stdio), and optionally a hint. Press **Discover**.
+Give the server a URL (or a command for a server that runs locally over stdio) and optionally a hint. The name is optional too: left blank, the blueprint's title or what the server calls itself in the MCP handshake is used, and the id is kept clear of connectors you already have ("tuesday-2"). Press **Discover**.
 
 What happens next:
 
