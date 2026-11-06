@@ -228,6 +228,23 @@ await settings.getByTestId('connector-known').waitFor()
 await settings.getByTestId('connector-known').getByRole('button', { name: 'Remove', exact: true }).click()
 await settings.getByText('Nothing connected yet.').waitFor()
 
+// 10b. A pasted blueprint is used instead of the registry, and Paste profile knows one when it sees it.
+await settings.getByRole('button', { name: /^Paste profile/ }).click()
+await settings.getByLabel('Connector profile JSON').fill('{"id": "x", "title": "Pasted thing", "match": {"tools": ["a"]}, "profile": {"list": {"tool": "a"}}}')
+await settings.getByRole('button', { name: 'Add connector', exact: true }).click()
+await settings.locator('.toast', { hasText: 'That is a blueprint, not a profile' }).waitFor()
+await settings.getByRole('button', { name: /^Add server/ }).click()
+await settings.getByLabel('Server name').fill('Pasted')
+await settings.getByLabel('Server URL').fill('https://somewhere.example/mcp')
+await settings.getByLabel('Blueprint to use').fill('{"id": "x", "title": "Pasted thing", "match": {"tools": ["a"]}, "profile": {"list": {"tool": "a"}}}')
+await settings.getByRole('button', { name: 'Discover', exact: true }).click()
+await settings.getByTestId('discovery-result').waitFor()
+assert.match(await settings.locator('.discovery .result--success').textContent(), /using the Pasted thing blueprint/)
+await settings.getByRole('button', { name: 'Add connector', exact: true }).click()
+await settings.getByTestId('connector-pasted').waitFor()
+await settings.getByTestId('connector-pasted').getByRole('button', { name: 'Remove', exact: true }).click()
+await settings.getByText('Nothing connected yet.').waitFor()
+
 // 10a. An unknown server with no key says so, then discovery through the model once a key exists.
 await settings.getByRole('button', { name: /^Add server/ }).click()
 await settings.getByLabel('Server name').fill('Tuesday')

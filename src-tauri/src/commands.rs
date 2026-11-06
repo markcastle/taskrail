@@ -326,6 +326,10 @@ pub struct DiscoverRequest {
     pub allow_unannotated_list: bool,
     #[serde(default)]
     pub bearer: Option<String>,
+    /// A blueprint to use instead of the registry: one someone sent, or one
+    /// being tested before it is merged.
+    #[serde(default)]
+    pub blueprint: Option<String>,
 }
 
 fn task_kind() -> taskrail_core::domain::ItemKind {
@@ -339,6 +343,13 @@ pub async fn discover_connector(
 ) -> CommandResult<DiscoveryResult> {
     use taskrail_core::ports::SecretStore;
     let llm = crate::model::client_if_configured(&app)?;
+    let own_blueprint = match request.blueprint.as_deref().map(str::trim) {
+        Some(json) if !json.is_empty() => Some(
+            serde_json::from_str::<taskrail_connector_mcp::Blueprint>(json)
+                .map_err(|e| format!("that is not a blueprint: {e}"))?,
+        ),
+        _ => None,
+    };
     let mut server = request.server;
     let mut auth = taskrail_connector_mcp::SessionAuth {
         bearer: request.bearer.filter(|t| !t.trim().is_empty()),
@@ -369,13 +380,29 @@ pub async fn discover_connector(
         allow_unannotated_list: request.allow_unannotated_list,
         auth,
     };
-    // The live registry, or the one built in; either way a blueprint that
+    // A pasted blueprint is the whole registry for this attempt. Otherwise
+    // the live registry, or the one built in. Either way a blueprint that
     // fits is tried before any model.
-    let registry = taskrail_connector_mcp::Registry::load(
-        taskrail_connector_mcp::blueprint::REGISTRY_URL,
-        std::time::Duration::from_secs(5),
-    )
-    .await;
+    let registry = match own_blueprint {
+        Some(blueprint) => {
+            log::info!(
+                "discovery for {:?}: using the pasted {:?} blueprint",
+                request.name,
+                blueprint.title
+            );
+            taskrail_connector_mcp::Registry {
+                version: 1,
+                blueprints: vec![blueprint],
+            }
+        }
+        None => {
+            taskrail_connector_mcp::Registry::load(
+                taskrail_connector_mcp::blueprint::REGISTRY_URL,
+                std::time::Duration::from_secs(5),
+            )
+            .await
+        }
+    };
     match taskrail_connector_mcp::discover_or_blueprint(&request, &registry, llm.as_deref()).await {
         Ok(outcome) => {
             log::info!(

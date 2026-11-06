@@ -75,6 +75,86 @@
         },
         "poll_seconds": 60
       }
+    },
+    {
+      "id": "tuesday",
+      "title": "Tuesday",
+      "description": "Inovus Medical's internal work tracker. Tasks assigned to you on every board you can see; moving one on the rail updates its status.",
+      "match": {
+        "tools": [
+          "get_board",
+          "list_boards",
+          "update_task",
+          "whoami"
+        ],
+        "url_contains": [
+          "tuesday.inovusmedical.com"
+        ]
+      },
+      "profile": {
+        "kind": "task",
+        "identity": {
+          "tool": "whoami",
+          "arguments": {},
+          "id": "$.email"
+        },
+        "list": {
+          "tool": "get_board",
+          "arguments": {
+            "board_id": "{board_id}"
+          },
+          "items": "$.tasks[*]",
+          "fields": {
+            "external_id": "$.id",
+            "title": "$.name",
+            "status": "$.status",
+            "priority": "$.priority",
+            "due": "$.due_date",
+            "updated_at": "$.updated_at"
+          },
+          "where": [
+            {
+              "path": "$.assignees[*]",
+              "equals": "{me}"
+            }
+          ],
+          "for_each": {
+            "tool": "list_boards",
+            "arguments": {},
+            "items": "$[*].boards[*]",
+            "id": "$.id",
+            "placeholder": "{board_id}"
+          }
+        },
+        "set_status": {
+          "tool": "update_task",
+          "arguments": {
+            "task_id": "{external_id}",
+            "status": "{status}"
+          }
+        },
+        "status_map": {
+          "to_section": {
+            "not_started": "todo",
+            "blocked": "todo",
+            "working_on_it": "in_progress",
+            "stuck": "in_progress",
+            "done": "done"
+          },
+          "canonical": {
+            "todo": "not_started",
+            "in_progress": "working_on_it",
+            "done": "done"
+          }
+        },
+        "priority_map": {
+          "critical": "highest",
+          "high": "high",
+          "medium": "normal",
+          "low": "low"
+        },
+        "poll_seconds": 60
+      }
     }
   ]
 }

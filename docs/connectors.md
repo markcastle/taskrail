@@ -35,6 +35,8 @@ If the model picks a list tool the server does not promise is read-only, discove
 
 **It needs a model only when no blueprint fits.** Then set one up under **Model** in the same panel, with your own key for Anthropic, OpenRouter or OpenAI. The key lives in your credential store. The model is only ever called during discovery; after that every pull and every write-back is plain code.
 
+Have a blueprint that is not in the registry yet, from a colleague or one you are about to submit? Paste it into the **Blueprint** box on the Add server form. It is used instead of the registry and the model, with the server address and sign-in from the form.
+
 ### Paste profile
 
 If you already have a profile, from someone else or from an earlier discovery, paste it in. A bearer token, if the server needs one, goes in the field beside it and into your credential store, never into the saved profile.

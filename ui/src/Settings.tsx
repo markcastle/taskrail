@@ -597,13 +597,17 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
                 type="button"
                 className="button button--primary"
                 disabled={busy !== null || !profileJson.trim()}
-                onClick={() =>
+                onClick={() => {
+                  if (looksLikeBlueprint(profileJson)) {
+                    notify('info', 'That is a blueprint, not a profile. Use Add server: enter the address, paste the blueprint in its Blueprint box, and press Discover.')
+                    return
+                  }
                   run('profile', () => backend.addConnectorProfile(profileJson), () => {
                     setProfileJson('')
                     setMode('none')
                     notify('success', 'Connector added')
                   })
-                }
+                }}
               >
                 {busy === 'profile' ? <Spinner label="Adding…" /> : 'Add connector'}
               </button>
@@ -613,6 +617,16 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
       )}
     </>
   )
+}
+
+/** A blueprint has a `profile` inside and a `match`; a profile has its `server` at the top. */
+function looksLikeBlueprint(json: string): boolean {
+  try {
+    const value = JSON.parse(json)
+    return !!value && typeof value === 'object' && 'profile' in value && 'match' in value && !('server' in value)
+  } catch {
+    return false
+  }
 }
 
 /** Describe a server, let the model write a profile, check the sample it pulled, then save. */
@@ -625,6 +639,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
   const [hint, setHint] = useState('')
   const [bearer, setBearer] = useState('')
   const [allowUnannotated, setAllowUnannotated] = useState(false)
+  const [blueprint, setBlueprint] = useState('')
   const [phase, setPhase] = useState<'idle' | 'discovering' | 'signing-in' | 'adding'>('idle')
   const [result, setResult] = useState<DiscoveryResult | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -655,7 +670,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
     setResult(null)
     setProblem(null)
     backend
-      .discoverConnector({ id, name: name.trim(), server, kind, hint, allow_unannotated_list: allow, bearer: bearer.trim() || null })
+      .discoverConnector({ id, name: name.trim(), server, kind, hint, allow_unannotated_list: allow, bearer: bearer.trim() || null, blueprint: blueprint.trim() || null })
       .then((r) => {
         setResult(r)
         if (r.status === 'ok') setProfileJson(JSON.stringify(r.profile, null, 2))
@@ -736,6 +751,9 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
       )}
       <Row label="Hint for the model" help="Optional. Which project, whose items, what the product is called.">
         <input type="text" aria-label="Hint for the model" placeholder="only tickets assigned to me in the Platform project" value={hint} onChange={(e) => setHint(e.target.value)} />
+      </Row>
+      <Row label="Blueprint" help="Optional. One someone sent you, or one you are trying before it is in the registry. Used instead of the registry and the model." stack>
+        <textarea aria-label="Blueprint to use" placeholder='{ "id": "...", "match": { "tools": [...] }, "profile": { ... } }' rows={4} value={blueprint} onChange={(e) => setBlueprint(e.target.value)} />
       </Row>
       <div className="settings-actions settings-actions--end">
         <button type="button" className="button button--primary" disabled={busy || !ready} onClick={() => discover()}>

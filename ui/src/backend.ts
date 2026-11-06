@@ -117,6 +117,8 @@ export interface DiscoverRequest {
   hint: string
   allow_unannotated_list: boolean
   bearer?: string | null
+  /** A blueprint to use instead of the registry. */
+  blueprint?: string | null
 }
 
 export interface ToolSummary {
@@ -577,11 +579,19 @@ function browserBackend(): RailBackend {
       new Promise((resolve, reject) =>
         setTimeout(() => {
           load()
-          // A server whose URL says "blueprint" is one the registry knows: no model needed.
-          if (request.server.transport === 'http' && request.server.url.includes('blueprint')) {
+          // A pasted blueprint, or a server whose URL says "blueprint", is one the registry knows: no model needed.
+          let pasted: string | null = null
+          if (request.blueprint?.trim()) {
+            try {
+              pasted = String(JSON.parse(request.blueprint).title ?? 'pasted')
+            } catch (e) {
+              return reject(new Error(`that is not a blueprint: ${(e as Error).message}`))
+            }
+          }
+          if (pasted || (request.server.transport === 'http' && request.server.url.includes('blueprint'))) {
             return resolve({
               status: 'ok',
-              blueprint: 'Demo tracker',
+              blueprint: pasted ?? 'Demo tracker',
               profile: { id: request.id, name: request.name, server: request.server, list: { tool: 'list_tickets' }, identity: { tool: 'whoami', id: '$.id' } },
               sample: [
                 { external_id: 'T-101', title: 'Prepare board deck', status: 'Selected' },
