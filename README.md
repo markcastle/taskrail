@@ -39,7 +39,7 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 - 🗓️ **Your day at a glance.** Today's date, how many tasks are done, what is up next, and your priorities in the order you set.
 - 🖐️ **Gestures, not menus.** Drag to reorder, pull into In progress, flick to complete, tap for details.
 - 🔁 **Two-way sync.** Moving a task on the rail moves it in the system it came from.
-- 🔌 **Any MCP server.** Add a server, and a model reads its tools and writes the connector for you. After that the model is out of the loop.
+- 🔌 **Any MCP server.** Known systems connect from a shared blueprint with nothing to set up. For a new one, a model reads its tools and writes the connector, then it is out of the loop.
 - 🎯 **One thing in focus.** Mark the task you are on. It sits at the top as Up next.
 - ⌨️ **Quick-add anywhere.** Ctrl+Shift+Space from any window.
 - 🌗 **Light, dark, or follow the system.**
@@ -87,7 +87,7 @@ Open ⚙️ and look at **Connectors**.
 - **Add demo tracker** gives you a small fake issue tracker to play with. Its tickets appear in seconds. Drag one into In progress and watch the tracker move it too.
 - **Add server** is the real thing. Name it, give it a URL, press **Discover**. If the server wants you to sign in, your browser opens and discovery carries on when you are back. You see what it found before you keep it.
 
-Discovery uses a language model once, at setup, with your own key for Anthropic, OpenRouter or OpenAI. Everything after that is plain code.
+If the server is one somebody has connected before, a [blueprint](blueprints/README.md) does the work and no model is involved. Otherwise discovery uses a language model once, at setup, with your own key for Anthropic, OpenRouter or OpenAI. Everything after that is plain code.
 
 Want the details, or to write a connector by hand? See [docs/connectors.md](docs/connectors.md). 📖
 
@@ -95,7 +95,7 @@ Want the details, or to write a connector by hand? See [docs/connectors.md](docs
 
 We know. Pasting an API key into an app you found on GitHub is a lot to ask, and we want to stop asking. Until then, here is exactly what happens with it: it goes into your operating system's credential store, never into a file; it is sent only to the provider you chose, only during discovery, and never again once a connector is saved; and the code that does it is in `crates/llm`, short enough to read over coffee. Discovery is the only thing in the app that talks to a model.
 
-The plan for not needing a key at all is on the [roadmap](docs/roadmap.md#discovery-without-an-api-key): ready-made profiles for the common systems, discovery by plain rules for servers with obvious tool names, and letting the agent you already trust do the thinking.
+Most people should never need one. Blueprints already cover any system somebody has connected and shared, and the [roadmap](docs/roadmap.md#discovery-without-an-api-key) has the rest: discovery by plain rules for servers with obvious tool names, and letting the agent you already trust do the thinking. If you connect a system with a key, pressing **Blueprint** and sending it in means the next person will not need one.
 
 ## 🗺️ Where it is going
 

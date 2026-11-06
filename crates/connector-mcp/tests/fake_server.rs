@@ -31,7 +31,8 @@ async fn the_fake_tracker_describes_its_tools_with_annotations() {
             "get_ticket",
             "list_boards",
             "list_tickets",
-            "transition_ticket"
+            "transition_ticket",
+            "whoami"
         ]
     );
     let by_name = |name: &str| tools.iter().find(|t| t.name == name).unwrap();
@@ -150,4 +151,60 @@ async fn list_tickets_honours_the_assignee_argument() {
     assert!(items
         .iter()
         .all(|i| i.external_id != "T-103" && i.external_id != "T-106"));
+}
+
+#[tokio::test]
+async fn the_demo_blueprint_connects_the_fake_tracker_with_no_model() {
+    use taskrail_connector_mcp::{discover_or_blueprint, DiscoveryRequest, Registry};
+    let request = DiscoveryRequest {
+        id: "demo".into(),
+        name: "Demo".into(),
+        server: fake_tracker_profile(server()).server,
+        kind: taskrail_core::domain::ItemKind::Task,
+        hint: String::new(),
+        allow_unannotated_list: false,
+        auth: SessionAuth::default(),
+    };
+    let outcome = discover_or_blueprint(&request, &Registry::bundled(), None)
+        .await
+        .unwrap();
+    assert_eq!(outcome.blueprint.as_deref(), Some("Demo tracker"));
+    assert_eq!(outcome.rounds, 0, "no model rounds");
+    assert_eq!(
+        outcome.sample.len(),
+        5,
+        "{{me}} became mark, so Sam's tickets stay out"
+    );
+    assert!(outcome.profile.identity.is_some());
+    assert!(
+        outcome.profile.uses_me(),
+        "the saved profile keeps {{me}}, so it stays shareable"
+    );
+
+    // The saved profile keeps working through the connector, which resolves {me} on connect.
+    let connector = McpConnector::new(outcome.profile, SessionAuth::default());
+    let items = connector.list().await.unwrap();
+    assert_eq!(items.len(), 5);
+}
+
+#[tokio::test]
+async fn no_blueprint_and_no_model_is_a_clear_message() {
+    use taskrail_connector_mcp::{
+        discover_or_blueprint, DiscoveryError, DiscoveryRequest, Registry,
+    };
+    let request = DiscoveryRequest {
+        id: "demo".into(),
+        name: "Demo".into(),
+        server: fake_tracker_profile(server()).server,
+        kind: taskrail_core::domain::ItemKind::Task,
+        hint: String::new(),
+        allow_unannotated_list: false,
+        auth: SessionAuth::default(),
+    };
+    let empty = Registry::parse(r#"{"blueprints": []}"#).unwrap();
+    let err = discover_or_blueprint(&request, &empty, None)
+        .await
+        .unwrap_err();
+    assert!(matches!(err, DiscoveryError::NoModel(_)), "{err}");
+    assert!(err.to_string().contains("no API key"), "{err}");
 }

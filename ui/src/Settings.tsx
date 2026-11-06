@@ -125,6 +125,38 @@ function Row({
   )
 }
 
+/** A connector's profile as a blueprint, to copy into the registry or an issue. */
+function BlueprintPanel({ id, json, onClose, notify }: { id: string; json: string; onClose: () => void; notify: (tone: Tone, text: string) => void }) {
+  const area = useRef<HTMLTextAreaElement>(null)
+  const copy = () => {
+    const done = () => notify('success', 'Blueprint copied')
+    const fallback = () => {
+      area.current?.focus()
+      area.current?.select()
+      notify('info', 'Press Ctrl+C to copy the selected text')
+    }
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(json).then(done, fallback)
+    else fallback()
+  }
+  return (
+    <div className="panel panel--form" data-testid={`blueprint-${id}`}>
+      <p className="settings-muted">
+        This is the connector without your server or secrets, with the tools it calls as the fingerprint. Paste it into <code>blueprints/registry.json</code> in a pull request, or into an issue, and
+        the next person to connect this system will not need a model. If it names you, swap your id for <code>{'{me}'}</code> and add an <code>identity</code> block; the registry's README shows how.
+      </p>
+      <textarea ref={area} aria-label="Blueprint JSON" readOnly rows={14} value={json} />
+      <div className="settings-actions settings-actions--end">
+        <button type="button" className="button button--quiet" onClick={onClose}>
+          Close
+        </button>
+        <button type="button" className="button button--primary" onClick={copy} data-testid="copy-blueprint">
+          Copy
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ rail */
 
 function monitorName(m: MonitorInfo, index: number) {
@@ -433,6 +465,14 @@ function ModelPage({ notify, fail }: { notify: (tone: Tone, text: string) => voi
 function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
   const [mode, setMode] = useState<'none' | 'server' | 'profile'>('none')
+  const [blueprint, setBlueprint] = useState<{ id: string; json: string } | null>(null)
+  const showBlueprint = (id: string) => {
+    if (blueprint?.id === id) return setBlueprint(null)
+    backend
+      .exportBlueprint(id)
+      .then((json) => setBlueprint({ id, json }))
+      .catch(fail)
+  }
   const [profileJson, setProfileJson] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
 
@@ -481,8 +521,14 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
             <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`remove-${c.id}`, () => backend.removeConnector(c.id), () => notify('info', `Removed ${c.name}`))}>
               Remove
             </button>
+            <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showBlueprint(c.id)} aria-expanded={blueprint?.id === c.id}>
+              Blueprint
+            </button>
           </div>
         ))}
+        {blueprint && (
+          <BlueprintPanel id={blueprint.id} json={blueprint.json} onClose={() => setBlueprint(null)} notify={notify} />
+        )}
       </section>
 
       <h2 className="settings-subhead">Add a connector</h2>
@@ -705,7 +751,15 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
       {result?.status === 'ok' && (
         <div className="discovery" data-testid="discovery-result">
           <Result tone="success">
-            <strong>Found {result.sample.length} items</strong> in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
+            {result.blueprint ? (
+              <>
+                <strong>Found {result.sample.length} items</strong> using the {result.blueprint} blueprint. No model was needed.
+              </>
+            ) : (
+              <>
+                <strong>Found {result.sample.length} items</strong> in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
+              </>
+            )}
             {result.notes.length > 0 && <span className="connector__meta"> Earlier tries: {result.notes.join('; ')}</span>}
           </Result>
           <ul className="discovery__sample">

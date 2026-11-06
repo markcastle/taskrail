@@ -150,8 +150,25 @@ impl FakeTracker {
     }
 }
 
+#[derive(Debug, Serialize, schemars::JsonSchema)]
+struct Me {
+    id: String,
+    name: String,
+}
+
 #[tool_router]
 impl FakeTracker {
+    #[tool(
+        description = "Who the signed-in person is.",
+        annotations(read_only_hint = true)
+    )]
+    fn whoami(&self) -> Json<Me> {
+        Json(Me {
+            id: "mark".into(),
+            name: "Mark Castle".into(),
+        })
+    }
+
     #[tool(
         description = "List tickets in the tracker, optionally only those assigned to someone and only open ones.",
         annotations(read_only_hint = true)

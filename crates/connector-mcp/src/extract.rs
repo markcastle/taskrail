@@ -7,7 +7,7 @@ use serde_json_path::JsonPath;
 use taskrail_connector_api::RemoteItem;
 use taskrail_core::domain::{ItemKind, TimeWindow};
 
-use crate::profile::{Condition, ConnectorProfile, FieldPaths};
+use crate::profile::{Condition, ConnectorProfile, FieldPaths, ListSpec, ME};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExtractError {
@@ -153,11 +153,21 @@ pub fn extract_items(
     profile: &ConnectorProfile,
     result: &Value,
 ) -> Result<Vec<RemoteItem>, ExtractError> {
-    let items = path(&profile.list.items)?.query(result).all();
+    extract_with(profile, &profile.list, result)
+}
+
+/// `extract_items` with a list spec that may differ from the profile's own,
+/// such as one with `{me}` filled in.
+pub fn extract_with(
+    profile: &ConnectorProfile,
+    list: &ListSpec,
+    result: &Value,
+) -> Result<Vec<RemoteItem>, ExtractError> {
+    let items = path(&list.items)?.query(result).all();
     let mut out = Vec::new();
     for (index, item) in items.into_iter().enumerate() {
-        if passes(item, &profile.list.filter)? {
-            out.push(extract_item(profile, &profile.list.fields, item, index)?);
+        if passes(item, &list.filter)? {
+            out.push(extract_item(profile, &list.fields, item, index)?);
         }
     }
     Ok(out)
@@ -245,18 +255,72 @@ pub fn fill_placeholders(template: &Value, pairs: &[(&str, &str)]) -> Value {
     }
 }
 
+/// The list spec with `{me}` replaced everywhere it can appear: the list
+/// and parent arguments, and the values conditions compare against.
+pub fn list_for(list: &ListSpec, me: &str) -> ListSpec {
+    let mut out = list.clone();
+    let pairs = [(ME, me)];
+    out.call.arguments = fill_placeholders(&out.call.arguments, &pairs);
+    for condition in &mut out.filter {
+        if let Some(value) = &condition.equals {
+            condition.equals = Some(fill_placeholders(value, &pairs));
+        }
+    }
+    if let Some(each) = &mut out.for_each {
+        each.arguments = fill_placeholders(&each.arguments, &pairs);
+        for condition in &mut each.filter {
+            if let Some(value) = &condition.equals {
+                condition.equals = Some(fill_placeholders(value, &pairs));
+            }
+        }
+    }
+    out
+}
+
+/// Ask the server who the signed-in person is, through the profile's
+/// `identity`. `Ok(None)` when the profile has no identity.
+pub async fn resolve_me(
+    session: &crate::session::McpSession,
+    profile: &ConnectorProfile,
+) -> Result<Option<String>, taskrail_connector_api::ConnectorError> {
+    use taskrail_connector_api::ConnectorError;
+    let Some(identity) = &profile.identity else {
+        return Ok(None);
+    };
+    let raw = session.call(&identity.tool, &identity.arguments).await?;
+    let me = string_at(&raw, &identity.id)
+        .map_err(|e| ConnectorError::Invalid(e.to_string()))?
+        .ok_or_else(|| {
+            ConnectorError::Protocol(format!(
+                "{} answered, but nothing was at {:?} to say who you are",
+                identity.tool, identity.id
+            ))
+        })?;
+    log::info!("{}: {} says the person is {me}", profile.id, identity.tool);
+    Ok(Some(me))
+}
+
 /// Run a profile's list call against a session, including the `for_each`
 /// fan-out, and return every item. The one place the list pipeline lives;
-/// the connector and discovery both use it.
+/// the connector and discovery both use it. A profile that says `{me}`
+/// learns who that is first.
 pub async fn fetch_items(
     session: &crate::session::McpSession,
     profile: &ConnectorProfile,
 ) -> Result<Vec<RemoteItem>, taskrail_connector_api::ConnectorError> {
     use taskrail_connector_api::ConnectorError;
-    let list = &profile.list;
+    let resolved;
+    let list = match resolve_me(session, profile).await? {
+        Some(me) if profile.uses_me() => {
+            resolved = list_for(&profile.list, &me);
+            &resolved
+        }
+        _ => &profile.list,
+    };
     let Some(each) = &list.for_each else {
         let raw = session.call(&list.call.tool, &list.call.arguments).await?;
-        return extract_items(profile, &raw).map_err(|e| ConnectorError::Protocol(e.to_string()));
+        return extract_with(profile, list, &raw)
+            .map_err(|e| ConnectorError::Protocol(e.to_string()));
     };
     let parent = session.call(&each.tool, &each.arguments).await?;
     let elements = path(&each.items)
@@ -294,8 +358,8 @@ pub async fn fetch_items(
             &[(each.placeholder.as_str(), id.as_str())],
         );
         let raw = session.call(&list.call.tool, &arguments).await?;
-        let mut items =
-            extract_items(profile, &raw).map_err(|e| ConnectorError::Protocol(e.to_string()))?;
+        let mut items = extract_with(profile, list, &raw)
+            .map_err(|e| ConnectorError::Protocol(e.to_string()))?;
         all.append(&mut items);
     }
     Ok(all)
@@ -386,6 +450,40 @@ mod tests {
             .unwrap(),
             "numbers and their text compare equal"
         );
+    }
+
+    #[test]
+    fn me_is_filled_in_everywhere_it_can_appear() {
+        use crate::profile::ForEach;
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.call.arguments = json!({ "assignee": "{me}", "board_id": "{board_id}" });
+        profile.list.filter = vec![Condition {
+            path: "$.owner".into(),
+            equals: Some(json!("{me}")),
+            ..Default::default()
+        }];
+        profile.list.for_each = Some(ForEach {
+            tool: "list_boards".into(),
+            arguments: json!({ "member": "{me}" }),
+            items: "$.boards[*]".into(),
+            id: "$.id".into(),
+            placeholder: "{board_id}".into(),
+            filter: vec![Condition {
+                path: "$.owner".into(),
+                equals: Some(json!("{me}")),
+                ..Default::default()
+            }],
+        });
+        let list = list_for(&profile.list, "u-7");
+        assert_eq!(
+            list.call.arguments,
+            json!({ "assignee": "u-7", "board_id": "{board_id}" }),
+            "other placeholders are left for later"
+        );
+        assert_eq!(list.filter[0].equals, Some(json!("u-7")));
+        let each = list.for_each.unwrap();
+        assert_eq!(each.arguments, json!({ "member": "u-7" }));
+        assert_eq!(each.filter[0].equals, Some(json!("u-7")));
     }
 
     #[test]

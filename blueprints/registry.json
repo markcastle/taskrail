@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "blueprints": [
+    {
+      "id": "demo-tracker",
+      "title": "Demo tracker",
+      "description": "The small fake issue tracker that ships inside Task Rail. Here as the worked example of a blueprint: a profile with {me} and an identity, so it works for whoever signs in.",
+      "homepage": "https://github.com/markcastle/taskrail",
+      "match": {
+        "tools": [
+          "list_tickets",
+          "transition_ticket",
+          "whoami"
+        ]
+      },
+      "profile": {
+        "kind": "task",
+        "list": {
+          "tool": "list_tickets",
+          "arguments": {
+            "open_only": false
+          },
+          "items": "$.tickets[*]",
+          "fields": {
+            "external_id": "$.ticket_id",
+            "title": "$.summary",
+            "status": "$.state",
+            "priority": "$.priority",
+            "due": "$.due_date",
+            "url": "$.link"
+          },
+          "where": [
+            {
+              "path": "$.assignee",
+              "equals": "{me}"
+            }
+          ]
+        },
+        "identity": {
+          "tool": "whoami",
+          "arguments": {},
+          "id": "$.id"
+        },
+        "set_status": {
+          "tool": "transition_ticket",
+          "arguments": {
+            "ticket_id": "{external_id}",
+            "state": "{status}"
+          }
+        },
+        "create": {
+          "tool": "create_ticket",
+          "arguments": {
+            "summary": "{title}"
+          }
+        },
+        "status_map": {
+          "to_section": {
+            "Backlog": "todo",
+            "Selected": "todo",
+            "In Progress": "in_progress",
+            "Done": "done"
+          },
+          "canonical": {
+            "todo": "Selected",
+            "in_progress": "In Progress",
+            "done": "Done"
+          }
+        },
+        "priority_map": {
+          "P1": "highest",
+          "P2": "high",
+          "P3": "normal",
+          "P4": "low"
+        },
+        "poll_seconds": 60
+      }
+    }
+  ]
+}

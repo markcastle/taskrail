@@ -338,7 +338,7 @@ pub async fn discover_connector(
     request: DiscoverRequest,
 ) -> CommandResult<DiscoveryResult> {
     use taskrail_core::ports::SecretStore;
-    let llm = crate::model::client(&app)?;
+    let llm = crate::model::client_if_configured(&app)?;
     let mut server = request.server;
     let mut auth = taskrail_connector_mcp::SessionAuth {
         bearer: request.bearer.filter(|t| !t.trim().is_empty()),
@@ -369,13 +369,25 @@ pub async fn discover_connector(
         allow_unannotated_list: request.allow_unannotated_list,
         auth,
     };
-    match taskrail_connector_mcp::discover(&request, llm.as_ref()).await {
+    // The live registry, or the one built in; either way a blueprint that
+    // fits is tried before any model.
+    let registry = taskrail_connector_mcp::Registry::load(
+        taskrail_connector_mcp::blueprint::REGISTRY_URL,
+        std::time::Duration::from_secs(5),
+    )
+    .await;
+    match taskrail_connector_mcp::discover_or_blueprint(&request, &registry, llm.as_deref()).await {
         Ok(outcome) => {
             log::info!(
-                "discovery for {:?} done in {} rounds with {} sample items",
+                "discovery for {:?} done in {} rounds with {} sample items{}",
                 outcome.profile.name,
                 outcome.rounds,
-                outcome.sample.len()
+                outcome.sample.len(),
+                outcome
+                    .blueprint
+                    .as_ref()
+                    .map(|b| format!(" through the {b:?} blueprint"))
+                    .unwrap_or_default()
             );
             Ok(DiscoveryResult::Ok(outcome))
         }
@@ -390,6 +402,25 @@ pub async fn discover_connector(
         }
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// A saved connector's profile as a blueprint others could use: no server,
+/// no secrets, the tools it calls as the fingerprint. Pretty JSON, ready to
+/// paste into the registry or an issue.
+#[tauri::command]
+pub fn export_blueprint(state: State<'_, AppState>, id: String) -> CommandResult<String> {
+    let registry = lock(&state.connectors);
+    let profile = registry
+        .profiles()
+        .iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| format!("no connector {id}"))?;
+    let blueprint = taskrail_connector_mcp::Blueprint::from_profile(
+        profile,
+        &profile.name,
+        "What this system is and what the profile pulls.",
+    );
+    serde_json::to_string_pretty(&blueprint).map_err(|e| e.to_string())
 }
 
 /// The MCP sign-in flow for one server: open the browser, wait for it to

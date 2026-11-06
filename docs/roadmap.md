@@ -14,6 +14,7 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - The generic MCP connector: model-assisted discovery, sign-in through the browser, two-way sync, fan-out over boards, `where` filters.
 - Releases built by GitHub Actions and a one-line install on both platforms.
 - Auto-update: a signed manifest with every release, a check on start and every four hours, an "Install now" banner on the rail, and an **Update automatically** switch in Settings.
+- Blueprints: a registry of ready-made profiles in the repository, matched by a server's tools before any model is asked, with `{me}` and `identity` so one profile serves everyone, and a Blueprint button on each connector to share yours.
 
 ## 🔜 Next
 
@@ -35,7 +36,7 @@ Sound is part of this. A short, quiet tick on complete, a softer one on start, n
 
 Pasting an API key into an app you just installed is the biggest piece of friction in Task Rail, and it is friction at exactly the wrong moment: before the app has earned any trust. The aim is for most people never to see the Model page. Three layers, in the order they will land:
 
-1. **Ready-made profiles.** A connector profile for each common system ships with the app or is fetched from this repository. Adding Jira, Linear, Trello, Monday or GitHub Issues becomes "sign in", with no model involved. A profile is a JSON document, so anyone who has connected a system can contribute theirs.
+1. **Ready-made profiles.** Done, as blueprints: see above. What remains is filling the registry. Jira, Linear, Trello, Monday and GitHub Issues each need one person to connect them once and press Blueprint.
 2. **Discovery by plain rules.** Many servers are obvious: a read-only tool called `list_issues` or `get_tasks` returning objects with `id` and `title`. A rule-based discoverer tries those first and only gives up when the server is genuinely unusual. No model, no key.
 3. **Bring your own agent.** People who want Task Rail usually already have an agent they trust with a key: Claude Desktop, Claude Code, Cursor. Task Rail exposes a small MCP server of its own, and that agent does the discovery through it: list the server's tools, explore, propose a profile, test it. The key never enters Task Rail. This is the clearest answer so far to what the rail's MCP server is for.
 

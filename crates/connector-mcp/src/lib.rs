@@ -19,6 +19,7 @@
 //! [`Connector`]: taskrail_connector_api::Connector
 
 pub mod auth;
+pub mod blueprint;
 pub mod connector;
 pub mod discovery;
 pub mod extract;
@@ -27,9 +28,12 @@ pub mod profile;
 pub mod session;
 
 pub use auth::{CredentialPersistence, SessionAuth};
+pub use blueprint::{Blueprint, Registry};
 pub use connector::McpConnector;
-pub use discovery::{discover, DiscoveryError, DiscoveryOutcome, DiscoveryRequest};
+pub use discovery::{
+    discover, discover_or_blueprint, DiscoveryError, DiscoveryOutcome, DiscoveryRequest,
+};
 pub use profile::{
-    Condition, ConnectorProfile, FieldPaths, ForEach, ListSpec, ServerSpec, ToolSpec,
+    Condition, ConnectorProfile, FieldPaths, ForEach, Identity, ListSpec, ServerSpec, ToolSpec,
 };
 pub use session::{McpSession, ToolSummary};

@@ -126,6 +126,8 @@ export interface ToolSummary {
 }
 
 export interface DiscoveryOutcome {
+  /** The blueprint that fitted the server, when no model was needed. */
+  blueprint: string | null
   profile: Record<string, unknown>
   sample: { external_id: string; title: string; status: string | null }[]
   tools: ToolSummary[]
@@ -187,6 +189,8 @@ export interface RailBackend {
   testModel(): Promise<string>
   /** Ask the model to write a profile for a server and validate it live. */
   discoverConnector(request: DiscoverRequest): Promise<DiscoveryResult>
+  /** A saved connector's profile as a blueprint: no server, no secrets, pretty JSON. */
+  exportBlueprint(id: string): Promise<string>
   /** Run the MCP sign-in flow in the browser for a server. Resolves when the browser comes back. */
   signIn(id: string, url: string): Promise<void>
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
@@ -253,6 +257,7 @@ function tauriBackend(): RailBackend {
     saveModelSettings: (config, apiKey) => call('save_model_settings', { config, apiKey: apiKey ?? null }),
     testModel: () => call('test_model'),
     discoverConnector: (request) => call('discover_connector', { request }),
+    exportBlueprint: (id) => call('export_blueprint', { id }),
     signIn: (id, url) => call('sign_in', { id, url }),
   }
 }
@@ -569,7 +574,22 @@ function browserBackend(): RailBackend {
       new Promise((resolve, reject) =>
         setTimeout(() => {
           load()
-          if (!modelSettings.has_key) return reject(new Error('no API key saved; add one under Model in settings'))
+          // A server whose URL says "blueprint" is one the registry knows: no model needed.
+          if (request.server.transport === 'http' && request.server.url.includes('blueprint')) {
+            return resolve({
+              status: 'ok',
+              blueprint: 'Demo tracker',
+              profile: { id: request.id, name: request.name, server: request.server, list: { tool: 'list_tickets' }, identity: { tool: 'whoami', id: '$.id' } },
+              sample: [
+                { external_id: 'T-101', title: 'Prepare board deck', status: 'Selected' },
+                { external_id: 'T-102', title: 'Reply to supplier', status: 'Selected' },
+              ],
+              tools: [{ name: 'list_tickets', description: '', read_only: true }, { name: 'whoami', description: '', read_only: true }],
+              rounds: 0,
+              notes: [],
+            })
+          }
+          if (!modelSettings.has_key) return reject(new Error('no blueprint matches this server, and no API key is saved; add one under Model in settings'))
           if (request.server.transport === 'stdio' && request.server.command.includes('risky') && !request.allow_unannotated_list) {
             return resolve({ status: 'needs_confirmation', tool: 'transition_ticket', profile: { id: request.id } })
           }
@@ -578,6 +598,7 @@ function browserBackend(): RailBackend {
           }
           resolve({
             status: 'ok',
+            blueprint: null,
             profile: {
               id: request.id,
               name: request.name,
@@ -598,6 +619,14 @@ function browserBackend(): RailBackend {
             notes: [],
           })
         }, 300),
+      ),
+    exportBlueprint: (id) =>
+      async(() =>
+        JSON.stringify(
+          { id, title: connectors.find((c) => c.id === id)?.name ?? id, description: 'What this system is and what the profile pulls.', match: { tools: ['list_tickets', 'transition_ticket'] }, profile: { kind: 'task', list: { tool: 'list_tickets' } } },
+          null,
+          2,
+        ),
       ),
     signIn: (id) =>
       new Promise((resolve) =>

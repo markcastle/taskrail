@@ -109,6 +109,23 @@ pub struct ForEach {
     pub filter: Vec<Condition>,
 }
 
+/// Who the signed-in person is, so a profile can say "my tasks" without
+/// carrying anyone's user id. `tool` is called once per connection and `id`
+/// reads the value that replaces `{me}` wherever it appears in the profile.
+/// This is what lets a profile written for one person become a blueprint
+/// for everyone.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Identity {
+    pub tool: String,
+    #[serde(default = "empty_object")]
+    pub arguments: serde_json::Value,
+    /// JSONPath to the person's id in the tool's result, such as `$.id`.
+    pub id: String,
+}
+
+/// The placeholder [`Identity`] fills in.
+pub const ME: &str = "{me}";
+
 /// The list call and how to read its result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListSpec {
@@ -136,6 +153,9 @@ pub struct ConnectorProfile {
     #[serde(default = "default_kind")]
     pub kind: ItemKind,
     pub list: ListSpec,
+    /// How to learn who the person is, when the profile uses `{me}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identity: Option<Identity>,
     #[serde(default)]
     pub set_status: Option<ToolSpec>,
     #[serde(default)]
@@ -169,6 +189,11 @@ impl ConnectorProfile {
             .iter()
             .find(|(k, _)| k.to_lowercase() == lower)
             .map(|(_, v)| *v)
+    }
+
+    /// Does any part of the list call depend on knowing who the person is?
+    pub fn uses_me(&self) -> bool {
+        serde_json::to_string(&self.list).is_ok_and(|json| json.contains(ME))
     }
 
     /// Problems a person should fix before the profile is used.
@@ -205,6 +230,12 @@ impl ConnectorProfile {
                 .iter()
                 .flat_map(|each| each.filter.iter()),
         );
+        if self.identity.is_none() && self.uses_me() {
+            problems.push(
+                "the profile uses {me} but has no \"identity\" saying which tool tells us who that is"
+                    .into(),
+            );
+        }
         for condition in conditions {
             if condition.path.trim().is_empty() {
                 problems.push("every \"where\" condition needs a path".into());
@@ -252,6 +283,7 @@ pub fn fake_tracker_profile(command: impl Into<String>) -> ConnectorProfile {
             for_each: None,
             filter: vec![],
         },
+        identity: None,
         set_status: Some(ToolSpec {
             tool: "transition_ticket".into(),
             arguments: serde_json::json!({ "ticket_id": "{external_id}", "state": "{status}" }),
@@ -347,6 +379,29 @@ mod tests {
         bad.list.filter[0].contains = Some("x".into());
         bad.list.filter[1].path = String::new();
         assert_eq!(bad.validate().len(), 2, "{:?}", bad.validate());
+    }
+
+    #[test]
+    fn me_needs_an_identity() {
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.filter = vec![Condition {
+            path: "$.assignee".into(),
+            equals: Some(serde_json::json!("{me}")),
+            ..Default::default()
+        }];
+        assert!(profile.uses_me());
+        assert_eq!(profile.validate().len(), 1, "{:?}", profile.validate());
+        profile.identity = Some(Identity {
+            tool: "whoami".into(),
+            arguments: serde_json::json!({}),
+            id: "$.id".into(),
+        });
+        assert!(profile.validate().is_empty());
+        let json = serde_json::to_string(&fake_tracker_profile("fake")).unwrap();
+        assert!(
+            !json.contains("identity"),
+            "absent identity is not written out"
+        );
     }
 
     #[test]

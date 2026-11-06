@@ -59,6 +59,7 @@ pub fn run() {
             commands::app_version,
             commands::log_from_ui,
             commands::open_log_folder,
+            commands::export_blueprint,
             commands::check_for_update,
             commands::install_update,
         ])

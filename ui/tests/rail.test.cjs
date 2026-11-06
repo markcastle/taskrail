@@ -201,6 +201,10 @@ await page.locator('.card__source', { hasText: 'Demo tracker' }).first().waitFor
 assert.ok((await page.locator('.card__source').count()) >= 2, 'remote rows carry their source')
 await page.locator('[data-testid="sync-status"]', { hasText: 'Everything is up to date' }).waitFor()
 if (shots) await page.screenshot({ path: `${shots}/05-rail-with-connector.png` })
+await settings.getByRole('button', { name: 'Blueprint', exact: true }).click()
+await settings.getByTestId('blueprint-demo-tracker').waitFor()
+assert.match(await settings.getByLabel('Blueprint JSON').inputValue(), /"match"/, 'the blueprint carries a fingerprint')
+await settings.getByRole('button', { name: 'Close', exact: true }).click()
 await settings.getByRole('button', { name: /^Paste profile/ }).click()
 await settings.getByLabel('Connector profile JSON').fill('{"id": "demo-tracker", "name": "Dup"}')
 await settings.getByRole('button', { name: 'Add connector', exact: true }).click()
@@ -210,7 +214,19 @@ await settings.getByText('Nothing connected yet.').waitFor()
 await page.waitForFunction(() => document.querySelectorAll('.card__source').length === 0)
 await page.locator('[data-testid="sync-status"]', { hasText: 'Local tasks only' }).waitFor()
 
-// 10. Model settings, then discovery of a new server through the model.
+// 10. A server the registry knows needs no model at all.
+await settings.getByRole('button', { name: /^Add server/ }).click()
+await settings.getByLabel('Server name').fill('Known')
+await settings.getByLabel('Server URL').fill('https://blueprint.example/mcp')
+await settings.getByRole('button', { name: 'Discover', exact: true }).click()
+await settings.getByTestId('discovery-result').waitFor()
+assert.match(await settings.locator('.discovery .result--success').textContent(), /using the Demo tracker blueprint. No model was needed/)
+await settings.getByRole('button', { name: 'Add connector', exact: true }).click()
+await settings.getByTestId('connector-known').waitFor()
+await settings.getByTestId('connector-known').getByRole('button', { name: 'Remove', exact: true }).click()
+await settings.getByText('Nothing connected yet.').waitFor()
+
+// 10a. An unknown server with no key says so, then discovery through the model once a key exists.
 await settings.getByRole('button', { name: /^Add server/ }).click()
 await settings.getByLabel('Server name').fill('Tuesday')
 await settings.getByLabel('Server URL').fill('https://tuesday.example/mcp')

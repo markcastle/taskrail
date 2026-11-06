@@ -50,6 +50,9 @@ pub struct DiscoveryRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiscoveryOutcome {
+    /// The title of the blueprint that was used, when no model was needed.
+    #[serde(default)]
+    pub blueprint: Option<String>,
     pub profile: ConnectorProfile,
     /// What the list call returned through the profile, for the user to
     /// check before saving.
@@ -64,6 +67,8 @@ pub struct DiscoveryOutcome {
 pub enum DiscoveryError {
     #[error("could not reach the server: {0}")]
     Server(String),
+    #[error("{0}")]
+    NoModel(String),
     #[error("sign in required: {0}")]
     SignInRequired(String),
     #[error("the server has no tools")]
@@ -84,15 +89,103 @@ pub async fn discover(
     request: &DiscoveryRequest,
     llm: &dyn LlmClient,
 ) -> Result<DiscoveryOutcome, DiscoveryError> {
-    let session = McpSession::connect(&request.server, &request.auth)
+    let session = connect(request).await?;
+    let outcome = discover_with(request, llm, &session).await;
+    session.close().await;
+    outcome
+}
+
+/// The way the app does it: a blueprint that fits the server's tools is
+/// used, tested live and returned with no model involved. Only when none
+/// fits is the model asked, and if there is no model to ask, that is the
+/// error.
+pub async fn discover_or_blueprint(
+    request: &DiscoveryRequest,
+    registry: &crate::blueprint::Registry,
+    llm: Option<&dyn LlmClient>,
+) -> Result<DiscoveryOutcome, DiscoveryError> {
+    let session = connect(request).await?;
+    let outcome = async {
+        let tools = session
+            .tools()
+            .await
+            .map_err(|e| DiscoveryError::Server(e.to_string()))?;
+        if tools.is_empty() {
+            return Err(DiscoveryError::NoTools);
+        }
+        let url = match &request.server {
+            crate::profile::ServerSpec::Http { url, .. } => Some(url.as_str()),
+            crate::profile::ServerSpec::Stdio { .. } => None,
+        };
+        let mut notes = Vec::new();
+        if let Some(blueprint) = registry.find(&tools, url) {
+            log::info!(
+                "discovery for {:?}: the {:?} blueprint fits this server's tools",
+                request.name,
+                blueprint.title
+            );
+            match try_blueprint(blueprint, request, &session, &tools).await {
+                Ok(outcome) => return Ok(outcome),
+                Err(e) => {
+                    log::warn!("the {:?} blueprint did not work here: {e}", blueprint.title);
+                    notes.push(format!("the {} blueprint did not work here: {e}", blueprint.title));
+                }
+            }
+        }
+        let Some(llm) = llm else {
+            return Err(DiscoveryError::NoModel(if notes.is_empty() {
+                "no blueprint matches this server, and no API key is saved; add one under Model in settings, or write a profile by hand".into()
+            } else {
+                format!("{}, and no API key is saved to work out another profile; add one under Model in settings", notes.join("; "))
+            }));
+        };
+        let mut outcome = discover_with(request, llm, &session).await?;
+        notes.append(&mut outcome.notes);
+        outcome.notes = notes;
+        Ok(outcome)
+    }
+    .await;
+    session.close().await;
+    outcome
+}
+
+async fn connect(request: &DiscoveryRequest) -> Result<McpSession, DiscoveryError> {
+    McpSession::connect(&request.server, &request.auth)
         .await
         .map_err(|e| match e {
             ConnectorError::Auth(m) => DiscoveryError::SignInRequired(m),
             other => DiscoveryError::Server(other.to_string()),
-        })?;
-    let outcome = discover_with(request, llm, &session).await;
-    session.close().await;
-    outcome
+        })
+}
+
+async fn try_blueprint(
+    blueprint: &crate::blueprint::Blueprint,
+    request: &DiscoveryRequest,
+    session: &McpSession,
+    tools: &[ToolSummary],
+) -> Result<DiscoveryOutcome, String> {
+    let profile =
+        blueprint.instantiate(&request.id, &request.name, &request.server, request.kind)?;
+    let sample = fetch_items(session, &profile)
+        .await
+        .map_err(|e| e.to_string())?;
+    if sample.is_empty() {
+        return Err("it found no items for you".into());
+    }
+    log::info!(
+        "discovery for {:?}: {} items through the {:?} blueprint",
+        request.name,
+        sample.len(),
+        blueprint.title
+    );
+    Ok(DiscoveryOutcome {
+        blueprint: Some(blueprint.title.clone()),
+        profile,
+        sample,
+        tools: tools.to_vec(),
+        rounds: 0,
+        notes: vec![],
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -302,6 +395,7 @@ async fn discover_with(
                         .unwrap_or_default()
                 );
                 return Ok(DiscoveryOutcome {
+                    blueprint: None,
                     profile,
                     sample: items,
                     tools,
@@ -337,28 +431,17 @@ async fn discover_with(
 
 /// The model's answer as a profile, with the parts it must not decide
 /// (transport, id, name, kind) replaced by what the user gave.
-fn parse_profile(mut value: Value, request: &DiscoveryRequest) -> Result<ConnectorProfile, String> {
-    let Value::Object(map) = &mut value else {
+fn parse_profile(value: Value, request: &DiscoveryRequest) -> Result<ConnectorProfile, String> {
+    if !value.is_object() {
         return Err("the answer was not a JSON object".into());
-    };
-    map.insert("id".into(), Value::String(request.id.clone()));
-    map.insert("name".into(), Value::String(request.name.clone()));
-    map.insert(
-        "server".into(),
-        serde_json::to_value(&request.server).map_err(|e| e.to_string())?,
-    );
-    map.insert(
-        "kind".into(),
-        serde_json::to_value(request.kind).map_err(|e| e.to_string())?,
-    );
-    map.remove("version");
-    let profile: ConnectorProfile = serde_json::from_value(value)
-        .map_err(|e| format!("profile does not fit the schema: {e}"))?;
-    let problems = profile.validate();
-    if !problems.is_empty() {
-        return Err(problems.join("; "));
     }
-    Ok(profile)
+    crate::blueprint::complete_profile(
+        value,
+        &request.id,
+        &request.name,
+        &request.server,
+        request.kind,
+    )
 }
 
 fn trim(text: &str) -> String {
@@ -394,6 +477,7 @@ Rules for the profile:
 - "list.where" keeps only the items that pass every condition, for when the tool cannot narrow the list itself. Each condition is {{"path": <JSONPath on one item>, "equals": <value>}} or {{"path": ..., "contains": <text, any case>}}; a condition with neither keeps items where the path has a value, and "not": true inverts one. For example, to keep the person's own tasks: {{"where": [{{"path": "$.assignees[*].id", "equals": "<their user id>"}}]}}. Find their id with a whoami-style tool and the assignee field by looking at a real item; never guess either.
 - "list.for_each.where" works the same way on the containers, so {{"where": [{{"path": "$.name", "contains": "platform"}}]}} fans out over the Platform boards only.
 - When the person asks for their own items, or items from one project or board, honour that: narrow with the tool's own arguments where it has them, otherwise with "where". A profile that returns everyone's work from every board is wrong if they asked for theirs.
+- Never write the person's own user id into the profile. Write "{{me}}" where it would go, and add "identity": {{"tool": "whoami", "arguments": {{}}, "id": "$.id"}} naming the tool that returns the signed-in person and the path to their id in its result. The app fills "{{me}}" in at connect time, and the profile then works for anyone.
 - "set_status" names the tool that changes an item's status, with "{{external_id}}" and "{{status}}" placeholders in its arguments. Leave it out if no tool can do it.
 - "create" names the tool that creates an item from a title, with a "{{title}}" placeholder. Leave it out if there is none.
 - "status_map.to_section" maps every status value the server might return onto "todo", "in_progress" or "done". "status_map.canonical" names the one status to send for each of the three. Use real values you have seen; if you have seen none, use the words the descriptions suggest.

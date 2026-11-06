@@ -2,6 +2,12 @@
 
 Task Rail reads tasks from any system that has an [MCP](https://modelcontextprotocol.io) server. This page is for when the two buttons in Settings are not enough: you want to know what discovery does, you want to steer it, or you want to write a connector by hand.
 
+## Blueprints first
+
+Before any model is involved, Task Rail checks whether the server is one somebody has connected before. It lists the server's tools and looks them up in the [blueprint registry](../blueprints/registry.json): a profile for each known system with the personal parts left out. If one fits, it is used straight away, tested against the live server, and shown for approval. No model, no API key.
+
+The registry is fetched from this repository when you add a server, with a copy built into the app as the fallback. Contributing a blueprint is a **Blueprint** button on any saved connector and a pull request; [blueprints/README.md](../blueprints/README.md) has the steps.
+
 ## The three ways in
 
 Open ⚙️ and find **Connectors**.
@@ -27,7 +33,7 @@ If the model picks a list tool the server does not promise is read-only, discove
 
 **The hint matters.** "Only tasks assigned to me on the Platform board" tells the model to narrow the list, either through the tool's own arguments or with a `where` clause on the result. Without a hint you may get every task in the company.
 
-**It needs a model.** Set one up under **Model** in the same panel, with your own key for Anthropic, OpenRouter or OpenAI. The key lives in your credential store. The model is only ever called during discovery; after that every pull and every write-back is plain code.
+**It needs a model only when no blueprint fits.** Then set one up under **Model** in the same panel, with your own key for Anthropic, OpenRouter or OpenAI. The key lives in your credential store. The model is only ever called during discovery; after that every pull and every write-back is plain code.
 
 ### Paste profile
 
@@ -84,6 +90,7 @@ Field by field:
 | `list.fields` | JSONPaths evaluated against one item. `external_id` and `title` are required. `status`, `priority`, `due`, `url`, `updated_at` are optional. Events use `start` and `end`. |
 | `list.where` | Keeps only items that pass every condition. See below. |
 | `list.for_each` | For systems that keep work in containers: call `list_boards` once, then the list tool once per board. See below. |
+| `identity` | Which tool says who the signed-in person is, and where their id sits in its result. Lets the profile say `{me}` instead of carrying a user id. See below. |
 | `set_status` | The tool that changes a status. `{external_id}` and `{status}` are filled in at call time. Leave it out and the connector is read-only. |
 | `create` | The tool that makes a new item from a `{title}`. Optional. |
 | `status_map.to_section` | Every status word the server might return, mapped onto `todo`, `in_progress` or `done`. |
@@ -130,6 +137,19 @@ When the tool cannot narrow the list itself, the profile can. Each condition is 
 | `not: true` | Inverts the result. |
 
 A `where` on `for_each` filters the containers the same way, so `{ "path": "$.name", "contains": "platform" }` fans out over the Platform boards only.
+
+### Saying "me" without a user id
+
+A profile that filters on your user id works for you alone. With `identity`, it works for anyone:
+
+```json
+"identity": { "tool": "whoami", "arguments": {}, "id": "$.id" },
+"list": {
+  "where": [ { "path": "$.assignees[*].id", "equals": "{me}" } ]
+}
+```
+
+On every connection the tool is called once, the id is read from the result, and `{me}` is filled in wherever it appears: list and parent arguments, and the values conditions compare against. Discovery writes profiles this way when a whoami-style tool exists, which is what makes a discovered profile shareable as a blueprint.
 
 ## What sync does and does not touch
 

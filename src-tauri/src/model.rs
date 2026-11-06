@@ -77,6 +77,19 @@ pub fn save(
     Ok(settings(app))
 }
 
+/// A ready client when a key is saved, `None` when there is none. Discovery
+/// only needs one when no blueprint fits, so a missing key is not an error here.
+pub fn client_if_configured(app: &AppHandle) -> Result<Option<Box<dyn LlmClient>>, String> {
+    let config = load_config(app);
+    match OsSecrets
+        .get(&llm_key_name(config.provider))
+        .map_err(|e| e.to_string())?
+    {
+        Some(key) => Ok(Some(client_for(&config, &key).map_err(|e| e.to_string())?)),
+        None => Ok(None),
+    }
+}
+
 /// A ready client, or a message saying what is missing.
 pub fn client(app: &AppHandle) -> Result<Box<dyn LlmClient>, String> {
     let config = load_config(app);
