@@ -14,6 +14,7 @@ import {
   type UpdateStatus,
 } from './backend'
 import { Result, SavedMark, Segmented, Slider, Spinner, Toggle, type Tone } from './controls'
+import { noteLines } from './format'
 import { useDebouncedSave } from './useDebouncedSave'
 import { followTheme } from './theme'
 
@@ -338,8 +339,15 @@ function Updates({ autoUpdate, onAutoUpdate, fail }: { autoUpdate: boolean; onAu
       )}
       {status?.available && (
         <Result tone="info">
-          <strong>Task Rail {status.available.version} is ready.</strong> {status.available.notes}{' '}
-          <button type="button" className="link" disabled={installing} onClick={install} data-testid="install-update">
+          <strong>Task Rail {status.available.version} is ready.</strong>
+          {noteLines(status.available.notes).length > 0 && (
+            <ul className="result__list">
+              {noteLines(status.available.notes).map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+          <button type="button" className="button button--primary" disabled={installing} onClick={install} data-testid="install-update">
             {installing ? 'Installing…' : 'Install and restart'}
           </button>
         </Result>

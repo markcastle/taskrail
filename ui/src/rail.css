@@ -1398,6 +1398,19 @@ button {
   min-width: 0;
 }
 
+.result__body .result__list {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+}
+
+.result__body .result__list li {
+  margin: 2px 0;
+}
+
+.result__body .button {
+  margin-top: 4px;
+}
+
 .result--success {
   background: color-mix(in srgb, var(--done) 14%, var(--bg));
 }

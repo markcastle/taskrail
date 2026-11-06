@@ -62,3 +62,13 @@ export function shortcutHint(): string {
   const mac = /Mac|iPhone|iPad/.test(navigator.platform)
   return mac ? '⌃⇧Space' : 'Ctrl ⇧ Space'
 }
+
+/** Release notes as the app shows them: the changes, one per line, without the markdown and without the install line. */
+export function noteLines(notes: string | null | undefined, max = 6): string[] {
+  if (!notes) return []
+  return notes
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-*]\s*/, '').replace(/[`*_#]/g, '').trim())
+    .filter((line) => line.length > 0 && !/^download below|^install/i.test(line) && !/https?:\/\//.test(line))
+    .slice(0, max)
+}
