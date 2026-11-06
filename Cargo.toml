@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/core", "crates/platform", "crates/store-sqlite", "crates/connector-api", "crates/connector-mcp", "crates/sync", "crates/llm", "src-tauri"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/markcastle/taskrail"
