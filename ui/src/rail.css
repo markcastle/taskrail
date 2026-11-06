@@ -1489,6 +1489,22 @@ button {
   font-weight: 650;
 }
 
+/* A subhead inside a group reads as a section divider: a line above it, none through it. */
+.group > .settings-subhead {
+  margin: 0;
+  padding: 16px 18px 2px;
+  border-top: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.group > .settings-subhead + .row {
+  border-top: 0;
+}
+
 .empty {
   display: flex;
   flex-direction: column;
