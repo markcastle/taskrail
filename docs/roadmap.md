@@ -34,6 +34,16 @@ Every gesture gets an answer. A completed task slides away and the ones below cl
 
 Sound is part of this. A short, quiet tick on complete, a softer one on start, nothing on anything routine. Sound is off until you turn it on, there is one switch for it in Settings, and the tray menu has **Silence Task Rail** so it can be quietened in one click.
 
+### Discovery without an API key
+
+Pasting an API key into an app you just installed is the biggest piece of friction in Task Rail, and it is friction at exactly the wrong moment: before the app has earned any trust. The aim is for most people never to see the Model page. Three layers, in the order they will land:
+
+1. **Ready-made profiles.** A connector profile for each common system ships with the app or is fetched from this repository. Adding Jira, Linear, Trello, Monday or GitHub Issues becomes "sign in", with no model involved. A profile is a JSON document, so anyone who has connected a system can contribute theirs.
+2. **Discovery by plain rules.** Many servers are obvious: a read-only tool called `list_issues` or `get_tasks` returning objects with `id` and `title`. A rule-based discoverer tries those first and only gives up when the server is genuinely unusual. No model, no key.
+3. **Bring your own agent.** People who want Task Rail usually already have an agent they trust with a key: Claude Desktop, Claude Code, Cursor. Task Rail exposes a small MCP server of its own, and that agent does the discovery through it: list the server's tools, explore, propose a profile, test it. The key never enters Task Rail. This is the clearest answer so far to what the rail's MCP server is for.
+
+The API key stays as the last resort, clearly labelled as such, for a server none of the three can handle.
+
 ### Signed builds
 
 A Windows code-signing certificate and an Apple Developer ID, stored as repository secrets and used by the Release workflow. Until then the one-line install clears the first-run warnings, but anyone who downloads an installer by hand from the releases page meets SmartScreen or Gatekeeper.
@@ -50,13 +60,13 @@ Connector profiles for the common systems, shipped with the app, so Jira, Linear
 
 ### The rail as an MCP server
 
-The original plan had the rail expose an MCP server so agents can read and add tasks. It stays on the list, but we want to be sure what it is for before building it. The candidates:
+The original plan had the rail expose an MCP server so agents can read and add tasks. The first real use for it is above: letting the agent you already trust run discovery, so no key enters Task Rail. Beyond that, the candidates:
 
 - An agent in a coding session saying "add a task to follow this up", and it appears on the rail.
 - An agent reading what you are focused on right now and shaping its answers around it.
 - One endpoint that gives an agent all of your work across every system you have connected, without it needing a connector for each.
 
-If one of those would change how you work, say so. That decides whether and when this gets built.
+If one of those would change how you work, say so. That decides how far past discovery this goes.
 
 ## 💭 Questions we have not settled
 

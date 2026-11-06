@@ -31,6 +31,8 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 
 > ⚠️ **Early days.** Task Rail is young and moving fast. It works, it is used daily, and it still has rough edges. Issues are very welcome.
 
+> 🍎 **Not yet tested on a Mac.** The macOS build compiles and ships, but nobody on the project owns a Mac, so the floating panel, the menu bar icon and the installer have never been seen running. If you try it on a Mac, we would love to hear how it went, good or bad: [open an issue](https://github.com/markcastle/taskrail/issues/new) and say what you saw.
+
 ## ✨ What you get
 
 - 📌 **Always there.** A docked strip on Windows and a floating edge panel on macOS. Hide it from the tray when you need the space back.
@@ -87,6 +89,12 @@ Open ⚙️ and look at **Connectors**.
 Discovery uses a language model once, at setup, with your own key for Anthropic, OpenRouter or OpenAI. Everything after that is plain code.
 
 Want the details, or to write a connector by hand? See [docs/connectors.md](docs/connectors.md). 📖
+
+### 🔑 About that API key
+
+We know. Pasting an API key into an app you found on GitHub is a lot to ask, and we want to stop asking. Until then, here is exactly what happens with it: it goes into your operating system's credential store, never into a file; it is sent only to the provider you chose, only during discovery, and never again once a connector is saved; and the code that does it is in `crates/llm`, short enough to read over coffee. Discovery is the only thing in the app that talks to a model.
+
+The plan for not needing a key at all is on the [roadmap](docs/roadmap.md#discovery-without-an-api-key): ready-made profiles for the common systems, discovery by plain rules for servers with obvious tool names, and letting the agent you already trust do the thinking.
 
 ## 🗺️ Where it is going
 
