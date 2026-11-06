@@ -65,10 +65,21 @@ src=$(find "$mount" -maxdepth 1 -name '*.app' | head -1)
 osascript -e "quit app \"$APP\"" >/dev/null 2>&1 || true
 sleep 1
 
+if [ -z "$src" ]; then
+  echo "The disk image did not contain an app. Contents of $mount:" >&2
+  ls -la "$mount" >&2
+  hdiutil detach "$mount" -quiet || true
+  exit 1
+fi
+
 echo "Installing into /Applications..."
 rm -rf "/Applications/$APP.app"
 cp -R "$src" "/Applications/"
 hdiutil detach "$mount" -quiet || true
+if [ ! -d "/Applications/$APP.app" ]; then
+  echo "Copying into /Applications failed. You can drag the app there yourself from the disk image." >&2
+  exit 1
+fi
 
 # Downloads carry a quarantine flag, and an unsigned app would be refused on
 # first open. Clear it, and give an unsigned build an ad-hoc signature so
@@ -78,5 +89,11 @@ if ! codesign -dv "/Applications/$APP.app" 2>&1 | grep -q 'Authority='; then
   codesign --force --deep --sign - "/Applications/$APP.app" >/dev/null 2>&1 || true
 fi
 
-open -a "$APP"
-echo "$APP $tag is installed and running. It lives in the menu bar; Ctrl+Shift+Space adds a task."
+# By path, not by name: a just-copied app is not always in the launch
+# database yet, and "open -a" would say it cannot find it.
+if open "/Applications/$APP.app"; then
+  echo "$APP $tag is installed and running. It lives in the menu bar; Ctrl+Shift+Space adds a task."
+else
+  echo "$APP $tag is installed in /Applications. Open it from there; the first time, right-click it and choose Open." >&2
+  exit 1
+fi
