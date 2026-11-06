@@ -128,7 +128,7 @@ The first sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.
 
 ### How the app updates itself
 
-Every release is signed with the updater key, and the workflow writes a `latest.json` manifest into the release. The running app reads that manifest twenty seconds after start and every four hours, verifies the signature with the public key in `src-tauri/tauri.conf.json`, and either installs the update at once (the **Update automatically** switch in Settings) or shows an "Install now" banner on the rail. Settings also has **Check for updates**.
+Every release is signed with the updater key, and the workflow writes a `latest.json` manifest into the release. The running app reads that manifest twenty seconds after start and every hour, verifies the signature with the public key in `src-tauri/tauri.conf.json`, and either installs the update at once (the **Update automatically** switch in Settings) or shows an "Install now" banner on the rail. Settings also has **Check for updates**.
 
 Two repository secrets make the signing work, and a release built without them has no signatures, so running apps will refuse it:
 

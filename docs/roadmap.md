@@ -13,7 +13,7 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - A tray icon with Show, Hide, Settings and Quit.
 - The generic MCP connector: model-assisted discovery, sign-in through the browser, two-way sync, fan-out over boards, `where` filters.
 - Releases built by GitHub Actions and a one-line install on both platforms.
-- Auto-update: a signed manifest with every release, a check on start and every four hours, an "Install now" banner on the rail, and an **Update automatically** switch in Settings.
+- Auto-update: a signed manifest with every release, a check on start and every hour, an "Install now" banner on the rail, and an **Update automatically** switch in Settings.
 - Blueprints: a registry of ready-made profiles in the repository, matched by a server's tools before any model is asked, with `{me}` and `identity` so one profile serves everyone, and a Blueprint button on each connector to share yours.
 
 ## 🔜 Next

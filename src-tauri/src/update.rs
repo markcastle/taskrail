@@ -1,4 +1,4 @@
-//! Keeping the app current. A check shortly after start and every few hours;
+//! Keeping the app current. A check shortly after start and every hour;
 //! a new release is either installed straight away, if the person asked for
 //! that, or announced on the rail with an Install button. Every build is
 //! signed in CI and the plugin refuses anything the public key does not match,
@@ -13,7 +13,7 @@ use crate::state::{lock, AppState};
 pub const UPDATE_AVAILABLE_EVENT: &str = "rail:update-available";
 
 const FIRST_CHECK_SECONDS: u64 = 20;
-const CHECK_EVERY_SECONDS: u64 = 4 * 60 * 60;
+const CHECK_EVERY_SECONDS: u64 = 60 * 60;
 
 /// What the UI needs to know about a release that is newer than this one.
 #[derive(Debug, Clone, Serialize)]
@@ -30,7 +30,7 @@ pub struct UpdateStatus {
     pub available: Option<AvailableUpdate>,
 }
 
-/// Check once soon after start, then every few hours, for as long as the app runs.
+/// Check once soon after start, then every hour, for as long as the app runs.
 pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(FIRST_CHECK_SECONDS)).await;
