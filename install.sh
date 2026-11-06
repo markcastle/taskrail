@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs or updates Task Rail on macOS from the latest GitHub Release.
 #
-#   curl -fsSL https://raw.githubusercontent.com/markcastle/taskrail/main/install.sh | sh
+#   curl -fsSL https://taskrail.uk/install.sh | sh
 #
 # Downloads the universal DMG, copies the app into /Applications, clears the
 # quarantine flag that Gatekeeper puts on downloads, and opens it. Set
@@ -14,7 +14,7 @@ APP="Task Rail"
 
 if [ "$(uname -s)" != "Darwin" ]; then
   echo "This installer is for macOS. On Windows, run in PowerShell:" >&2
-  echo "  irm https://raw.githubusercontent.com/$REPO/main/install.ps1 | iex" >&2
+  echo "  irm https://taskrail.uk/install.ps1 | iex" >&2
   exit 1
 fi
 

@@ -53,13 +53,13 @@ One line. It fetches the latest release, installs for your user with no admin pr
 **Windows**, in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/markcastle/taskrail/main/install.ps1 | iex
+irm https://taskrail.uk/install.ps1 | iex
 ```
 
 **macOS**, in Terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/markcastle/taskrail/main/install.sh | sh
+curl -fsSL https://taskrail.uk/install.sh | sh
 ```
 
 Prefer a download? The installers are on the [releases page](https://github.com/markcastle/taskrail/releases/latest). They are not code-signed yet, so Windows and macOS will ask before the first run. The one-line install takes care of that for you.

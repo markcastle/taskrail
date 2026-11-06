@@ -1,6 +1,6 @@
 # Installs or updates Task Rail on Windows from the latest GitHub Release.
 #
-#   irm https://raw.githubusercontent.com/markcastle/taskrail/main/install.ps1 | iex
+#   irm https://taskrail.uk/install.ps1 | iex
 #
 # Downloads the installer, runs it quietly for the current user (no admin
 # prompt), and starts the app. Set GITHUB_TOKEN if the repository is private.

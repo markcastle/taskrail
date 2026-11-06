@@ -47,7 +47,7 @@ jobs:
             echo "notes<<EOF"
             echo "$notes"
             echo ""
-            echo "Download below, or install and update in one line: https://github.com/markcastle/taskrail#-install"
+            echo "Download below, or install and update in one line from https://taskrail.uk"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
           echo "$notes"

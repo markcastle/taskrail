@@ -83,12 +83,12 @@ Who makes it, why, and how to get in touch. A paragraph, not a page. Links to Gi
 - **Static.** There is nothing to log into and nothing to serve dynamically, so the site is files. Astro is the right tool: it renders Markdown from the repo's `docs/` folder, builds pages from JSON at build time, and ships no JavaScript it does not need. Plain HTML would also do; Astro saves rewriting the docs renderer.
 - **Lives in the repository** under `site/`, so a change to a doc, a blueprint or a release updates the site without anyone remembering to. One source of truth for everything.
 - **Deployed on push** by a GitHub Actions workflow, to Cloudflare Pages or GitHub Pages. Cloudflare Pages is the better fit: a custom domain, a CDN, redirects in a text file, and analytics that need no cookie banner.
-- **The install scripts get short addresses.** `taskrail.app/install.ps1` and `taskrail.app/install.sh` redirect to the raw files on GitHub, so the one-liners in the README, the release notes and the site become shorter and survive a move of the repository.
+- **The install scripts get short addresses.** `taskrail.uk/install.ps1` and `taskrail.uk/install.sh` redirect to the raw files on GitHub (redirects, not copies, so a fix in the repository is live at once), so the one-liners in the README, the release notes and the site become shorter and survive a move of the repository.
 - **Data at build time, not run time.** The blueprint registry, the docs, and the releases are read when the site is built. The site never calls GitHub from a visitor's browser.
 
 ## The domain
 
-`taskrail.app` if it is free, else `taskrail.dev`. The `.app` top-level domain forces HTTPS, which suits a page that tells people to pipe a script into their shell. The name without a hyphen, matching the repository.
+`taskrail.uk`, already registered and live. The name without a hyphen, matching the repository.
 
 ## What it must never do
 
