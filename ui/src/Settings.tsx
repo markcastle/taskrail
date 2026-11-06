@@ -544,18 +544,33 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
         )}
         {connectors.map((c) => (
           <div className="connector" key={c.id} data-testid={`connector-${c.id}`}>
-            <span className={`connector__dot${c.last_error ? ' connector__dot--error' : ''}`} aria-hidden="true" />
+            <span className={`connector__dot${c.last_error ? ' connector__dot--error' : c.paused ? ' connector__dot--paused' : ''}`} aria-hidden="true" />
             <div className="connector__main">
-              <span className="connector__name">{c.name}</span>
+              <span className="connector__name">
+                {c.name}
+                {c.paused && <span className="connector__tag">Paused</span>}
+              </span>
               <span className="connector__meta">
-                {c.item_count} {c.item_count === 1 ? 'item' : 'items'} · {c.capabilities.write_status ? 'changes sync back' : 'read-only'} · refreshes every {c.poll_seconds}s
+                {c.item_count} {c.item_count === 1 ? 'item' : 'items'} · {c.capabilities.write_status ? 'changes sync back' : 'read-only'} ·{' '}
+                {c.paused ? 'not refreshing' : `refreshes every ${c.poll_seconds}s`}
               </span>
               <span className="connector__meta connector__meta--quiet">{c.server}</span>
               {c.last_error && <span className="connector__error">{c.last_error}</span>}
             </div>
-            <button type="button" className="button" disabled={busy !== null} onClick={() => run(`sync-${c.id}`, () => backend.syncConnector(c.id), (n) => notify('success', `Pulled ${n} items from ${c.name}`))}>
-              {busy === `sync-${c.id}` ? <Spinner label="Syncing…" /> : 'Sync now'}
-            </button>
+            {c.paused ? (
+              <button type="button" className="button" disabled={busy !== null} onClick={() => run(`pause-${c.id}`, () => backend.setConnectorPaused(c.id, false), () => notify('success', `${c.name} resumed`))}>
+                {busy === `pause-${c.id}` ? <Spinner label="Resuming…" /> : 'Resume'}
+              </button>
+            ) : (
+              <>
+                <button type="button" className="button" disabled={busy !== null} onClick={() => run(`sync-${c.id}`, () => backend.syncConnector(c.id), (n) => notify('success', `Pulled ${n} items from ${c.name}`))}>
+                  {busy === `sync-${c.id}` ? <Spinner label="Syncing…" /> : 'Sync now'}
+                </button>
+                <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`pause-${c.id}`, () => backend.setConnectorPaused(c.id, true), () => notify('info', `${c.name} paused`))}>
+                  Pause
+                </button>
+              </>
+            )}
             <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`remove-${c.id}`, () => backend.removeConnector(c.id), () => notify('info', `Removed ${c.name}`))}>
               Remove
             </button>

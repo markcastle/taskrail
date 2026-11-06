@@ -153,6 +153,10 @@ A profile that filters on your user id works for you alone. With `identity`, it 
 
 On every connection the tool is called once, the id is read from the result, and `{me}` is filled in wherever it appears: list and parent arguments, and the values conditions compare against. Discovery writes profiles this way when a whoami-style tool exists, which is what makes a discovered profile shareable as a blueprint.
 
+## Pausing a connector
+
+**Pause** on a connector keeps its tasks on the rail, marked paused, and stops pulling and writing back. A task from a paused connector refuses to change status, with a note saying why, because the change would not reach the system and the next pull after resuming would undo it. **Resume** pulls straight away. The rail's footer says when every connector is paused.
+
 ## What sync does and does not touch
 
 Every `poll_seconds` the connector pulls the list and merges it:

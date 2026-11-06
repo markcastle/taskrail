@@ -107,11 +107,14 @@ export default function App() {
   }, [settingsOpen])
 
   // Every action collapses the open row: the row has usually just moved,
-  // and a details panel following it around reads as a glitch.
+  // and a details panel following it around reads as a glitch. A refused
+  // action is a notice, not a broken rail.
   const act = useCallback(
     (work: () => Promise<unknown>) => {
       setOpenCard(null)
-      work().then(refresh).catch((e) => setError(String(e)))
+      work()
+        .then(refresh)
+        .catch((e) => setNotice(String(e).replace(/^Error: /, '')))
     },
     [refresh],
   )
@@ -180,7 +183,7 @@ export default function App() {
   if (!view) return <div className="rail rail--empty">Loading…</div>
   if (settingsOpen) return <Settings onClose={closeSettings} />
 
-  const connectorNames = new Map(connectors.map((c) => [c.id, c.name]))
+  const connectorNames = new Map(connectors.map((c) => [c.id, c.paused ? `${c.name} · paused` : c.name]))
   const rowProps = (item: Item) => ({
     item,
     names: connectorNames,
@@ -429,17 +432,21 @@ function SyncStatus({ connectors }: { connectors: ConnectorSummary[] }) {
     const t = window.setInterval(() => setTick((n) => n + 1), 30_000)
     return () => window.clearInterval(t)
   }, [])
-  const failing = connectors.filter((c) => c.last_error)
+  const running = connectors.filter((c) => !c.paused)
+  const failing = running.filter((c) => c.last_error)
   let tone: 'ok' | 'off' | 'error' = 'ok'
   let text = 'Everything is up to date'
   if (connectors.length === 0) {
     tone = 'off'
     text = 'Local tasks only'
+  } else if (running.length === 0) {
+    tone = 'off'
+    text = connectors.length === 1 ? `${connectors[0].name} is paused` : 'All connectors paused'
   } else if (failing.length > 0) {
     tone = 'error'
     text = `${failing[0].name} could not sync`
   }
-  const latest = connectors.map((c) => c.last_sync).filter((t): t is string => !!t).sort().at(-1)
+  const latest = running.map((c) => c.last_sync).filter((t): t is string => !!t).sort().at(-1)
   return (
     <footer className={`foot foot--${tone}`} data-testid="sync-status">
       <span className="foot__dot" aria-hidden="true" />

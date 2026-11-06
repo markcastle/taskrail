@@ -16,12 +16,9 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - Auto-update: a signed manifest with every release, a check on start and every hour, an "Install now" banner on the rail, and an **Update automatically** switch in Settings.
 - Blueprints: a registry of ready-made profiles in the repository, matched by a server's tools before any model is asked, with `{me}` and `identity` so one profile serves everyone, and a Blueprint button on each connector to share yours.
 - Blueprint submissions: Submit for review opens a prefilled form, a workflow checks the blueprint and turns it into a pull request, a maintainer merges, and running apps pick it up within the hour.
+- Pause a connector: its tasks stay on the rail marked paused, nothing is pulled or written back, a task from it refuses to change status until it is resumed, and resuming pulls straight away.
 
 ## 🔜 Next
-
-### Pause a connector
-
-Each connector gets a pause switch. A paused connector keeps its tasks on the rail but stops pulling and stops writing back, and its rows say so. For when a system is being migrated, when it is noisy, or when you want a quiet afternoon.
 
 ### More on a task
 

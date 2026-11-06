@@ -49,6 +49,7 @@ pub fn run() {
             commands::add_connector_profile,
             commands::add_demo_connector,
             commands::remove_connector,
+            commands::set_connector_paused,
             commands::sync_connector,
             commands::get_model_settings,
             commands::save_model_settings,

@@ -35,8 +35,31 @@ pub fn add_task(app: AppHandle, state: State<'_, AppState>, title: String) -> Co
     Ok(item)
 }
 
+/// A task from a paused connector cannot change status: the change would
+/// not reach the system and the next pull after resuming would undo it.
+fn refuse_if_paused(state: &State<'_, AppState>, id: &ItemId) -> CommandResult<()> {
+    let origin = lock(&state.rail)
+        .service
+        .repository()
+        .get(id)
+        .ok()
+        .flatten()
+        .and_then(|item| item.origin);
+    if let Some(origin) = origin {
+        let registry = lock(&state.connectors);
+        if registry.is_paused(origin.connector.as_str()) {
+            return Err(format!(
+                "{} is paused. Resume it to change its tasks.",
+                registry.name_of(origin.connector.as_str())
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn start_task(app: AppHandle, state: State<'_, AppState>, id: ItemId) -> CommandResult<Item> {
+    refuse_if_paused(&state, &id)?;
     let item = lock(&state.rail)
         .service
         .start(&id)
@@ -52,6 +75,7 @@ pub fn complete_task(
     state: State<'_, AppState>,
     id: ItemId,
 ) -> CommandResult<Item> {
+    refuse_if_paused(&state, &id)?;
     let mut rail = lock(&state.rail);
     let item = rail.service.complete(&id).map_err(|e| e.to_string())?;
     if rail.active.as_ref() == Some(&id) {
@@ -65,6 +89,7 @@ pub fn complete_task(
 
 #[tauri::command]
 pub fn reopen_task(app: AppHandle, state: State<'_, AppState>, id: ItemId) -> CommandResult<Item> {
+    refuse_if_paused(&state, &id)?;
     let item = lock(&state.rail)
         .service
         .reopen(&id)
@@ -95,6 +120,11 @@ pub fn move_task(
         .ok()
         .flatten()
         .map(|i| i.status);
+    if before != Some(request.status) {
+        drop(rail);
+        refuse_if_paused(&state, &request.id)?;
+        rail = lock(&state.rail);
+    }
     let item = rail
         .service
         .move_to(&request.id, request.status, request.index)
@@ -233,6 +263,38 @@ async fn add_and_pull(
         .into_iter()
         .find(|s| s.id == id)
         .ok_or_else(|| "connector vanished".to_owned())
+}
+
+/// Pause or resume a connector. Resuming pulls straight away.
+#[tauri::command]
+pub async fn set_connector_paused(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    paused: bool,
+) -> CommandResult<ConnectorSummary> {
+    {
+        let mut registry = lock(&state.connectors);
+        if registry.set_paused(&id, paused) {
+            let mut rail = lock(&state.rail);
+            registry.save(rail.service.repository_mut())?;
+            log::info!(
+                "{} {}",
+                registry.name_of(&id),
+                if paused { "paused" } else { "resumed" }
+            );
+        }
+    }
+    if !paused {
+        let _ = crate::sync::pull(&app, &id).await;
+    }
+    changed(&app);
+    let registry = lock(&state.connectors);
+    registry
+        .summaries()
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| format!("no connector {id}"))
 }
 
 /// Remove a connector and every card that came from it.

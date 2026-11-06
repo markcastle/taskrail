@@ -89,6 +89,8 @@ export interface ConnectorSummary {
   last_sync: string | null
   last_error: string | null
   item_count: number
+  /** Paused: its tasks stay on the rail, nothing is pulled or written back. */
+  paused: boolean
 }
 
 export interface SyncError {
@@ -181,6 +183,8 @@ export interface RailBackend {
   /** Add the built-in demo tracker, then pull from it. */
   addDemoConnector(): Promise<ConnectorSummary>
   removeConnector(id: string): Promise<void>
+  /** Pause or resume a connector. Resuming pulls straight away. */
+  setConnectorPaused(id: string, paused: boolean): Promise<ConnectorSummary>
   syncConnector(id: string): Promise<number>
   /** Fires when a pull or a write-back failed. Returns an unsubscribe. */
   onSyncError(callback: (error: SyncError) => void): () => void
@@ -253,6 +257,7 @@ function tauriBackend(): RailBackend {
     addConnectorProfile: (profileJson, bearer) => call('add_connector_profile', { profileJson, bearer: bearer ?? null }),
     addDemoConnector: () => call('add_demo_connector'),
     removeConnector: (id) => call('remove_connector', { id }),
+    setConnectorPaused: (id, paused) => call('set_connector_paused', { id, paused }),
     syncConnector: (id) => call('sync_connector', { id }),
     onChanged: (cb) => listen('rail:changed', cb),
     onQuickAdd: (cb) => listen('rail:quick-add', cb),
@@ -384,8 +389,14 @@ function browserBackend(): RailBackend {
     last_sync: new Date().toISOString(),
     last_error: null,
     item_count: 3,
+    paused: false,
   })
 
+  const refuseIfPaused = (id: string) => {
+    const origin = items.find((i) => i.id === id)?.origin
+    const c = origin && connectors.find((c) => c.id === origin.connector)
+    if (c?.paused) throw new Error(`${c.name} is paused. Resume it to change its tasks.`)
+  }
   const find = (id: string) => {
     const item = items.find((i) => i.id === id)
     if (!item) throw new Error(`no item ${id}`)
@@ -460,9 +471,10 @@ function browserBackend(): RailBackend {
         notify()
         return item
       }),
-    start: (id) => async(() => (moveTo(id, 'in_progress', 0), notify(), find(id))),
+    start: (id) => async(() => (refuseIfPaused(id), moveTo(id, 'in_progress', 0), notify(), find(id))),
     complete: (id) =>
       async(() => {
+        refuseIfPaused(id)
         const item = find(id)
         item.status = 'done'
         item.completed_at = new Date().toISOString()
@@ -470,9 +482,10 @@ function browserBackend(): RailBackend {
         notify()
         return item
       }),
-    reopen: (id) => async(() => (moveTo(id, 'todo', 0), notify(), find(id))),
+    reopen: (id) => async(() => (refuseIfPaused(id), moveTo(id, 'todo', 0), notify(), find(id))),
     moveTask: (id, status, index) =>
       async(() => {
+        if (items.find((i) => i.id === id)?.status !== status) refuseIfPaused(id)
         const item = moveTo(id, status, index)
         if (status !== 'in_progress' && active === id) active = null
         notify()
@@ -550,6 +563,14 @@ function browserBackend(): RailBackend {
         ]
         notify()
         return summary
+      }),
+    setConnectorPaused: (id, paused) =>
+      async(() => {
+        const c = connectors.find((c) => c.id === id)
+        if (!c) throw new Error(`no connector ${id}`)
+        c.paused = paused
+        notify()
+        return c
       }),
     removeConnector: (id) =>
       async(() => {

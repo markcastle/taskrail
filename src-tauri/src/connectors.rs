@@ -18,6 +18,8 @@ use crate::secrets::{KeychainCredentials, OsSecrets};
 use taskrail_connector_mcp::{CredentialPersistence, SessionAuth};
 
 pub const PROFILES_KEY: &str = "connector_profiles";
+/// The ids of connectors the person has paused, as a JSON list.
+pub const PAUSED_KEY: &str = "connector_paused";
 
 /// What the UI shows for each connector.
 #[derive(Debug, Clone, Serialize)]
@@ -30,6 +32,8 @@ pub struct ConnectorSummary {
     pub last_sync: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub item_count: usize,
+    /// Paused: its tasks stay on the rail, nothing is pulled or written back.
+    pub paused: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -44,6 +48,7 @@ pub struct ConnectorRegistry {
     profiles: Vec<ConnectorProfile>,
     live: HashMap<String, Arc<McpConnector>>,
     status: HashMap<String, SyncStatus>,
+    paused: Vec<String>,
 }
 
 impl ConnectorRegistry {
@@ -54,8 +59,15 @@ impl ConnectorRegistry {
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_default();
+        let paused = store
+            .get_value(PAUSED_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
         Self {
             profiles,
+            paused,
             ..Default::default()
         }
     }
@@ -64,7 +76,35 @@ impl ConnectorRegistry {
         let json = serde_json::to_string(&self.profiles).map_err(|e| e.to_string())?;
         store
             .set_value(PROFILES_KEY, &json)
+            .map_err(|e| e.to_string())?;
+        let paused = serde_json::to_string(&self.paused).map_err(|e| e.to_string())?;
+        store
+            .set_value(PAUSED_KEY, &paused)
             .map_err(|e| e.to_string())
+    }
+
+    pub fn is_paused(&self, id: &str) -> bool {
+        self.paused.iter().any(|p| p == id)
+    }
+
+    /// Pause or resume. Returns whether anything changed.
+    pub fn set_paused(&mut self, id: &str, paused: bool) -> bool {
+        let was = self.is_paused(id);
+        if paused && !was {
+            self.paused.push(id.to_owned());
+        } else if !paused && was {
+            self.paused.retain(|p| p != id);
+        }
+        was != paused
+    }
+
+    /// The display name for a connector id, for messages.
+    pub fn name_of(&self, id: &str) -> String {
+        self.profiles
+            .iter()
+            .find(|p| p.id == id)
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| id.to_owned())
     }
 
     pub fn profiles(&self) -> &[ConnectorProfile] {
@@ -95,6 +135,7 @@ impl ConnectorRegistry {
         self.profiles.retain(|p| p.id != id);
         self.live.remove(id);
         self.status.remove(id);
+        self.paused.retain(|p| p != id);
         self.profiles.len() != before
     }
 
@@ -125,6 +166,7 @@ impl ConnectorRegistry {
     pub fn due_for_sync(&self, now: DateTime<Utc>) -> Vec<String> {
         self.profiles
             .iter()
+            .filter(|p| !self.is_paused(&p.id))
             .filter(|p| {
                 self.status
                     .get(&p.id)
@@ -156,6 +198,7 @@ impl ConnectorRegistry {
                     last_sync: status.last_sync,
                     last_error: status.last_error,
                     item_count: status.item_count,
+                    paused: self.is_paused(&p.id),
                 }
             })
             .collect()
