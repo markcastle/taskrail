@@ -90,18 +90,7 @@ Want the details, or to write a connector by hand? See [docs/connectors.md](docs
 
 ## 🗺️ Where it is going
 
-| | |
-| --- | --- |
-| ✅ | Docking on Windows and macOS, multi-monitor |
-| ✅ | Local tasks, gestures, quick-add, settings, tray |
-| ✅ | Generic MCP connector with model-assisted discovery, sign-in, and two-way sync |
-| ✅ | Releases and one-line install |
-| 🔜 | The rail as an MCP server, so your agents can read and add tasks |
-| 🔜 | Calendar events on the rail |
-| 🔜 | Ready-made profiles for Jira, Linear, Trello and friends |
-| 🔜 | Code signing and auto-update |
-
-The thinking behind the decisions is in [docs/plan.md](docs/plan.md).
+Next up: an auto-updater, pausing a connector, richer task details, and animation and sound that make every gesture feel acknowledged. The full list, with what is done and what is still a question, is the [roadmap](docs/roadmap.md). The thinking behind the decisions so far is in [docs/plan.md](docs/plan.md).
 
 ## 🛠️ Developing
 

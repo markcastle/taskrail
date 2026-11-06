@@ -77,8 +77,11 @@ export default function App() {
   useEffect(() => backend.onOpenSettings(() => setSettingsOpen(true)), [])
   useEffect(() => {
     if (searchOpen) searchInput.current?.focus()
-    else setQuery('')
   }, [searchOpen])
+  const toggleSearch = (open: boolean) => {
+    setSearchOpen(open)
+    if (!open) setQuery('')
+  }
 
   // Settings live inside the rail, which widens while they are open.
   const openSettings = () => {
@@ -231,7 +234,7 @@ export default function App() {
           title="Search"
           aria-label="Search"
           aria-pressed={searchOpen}
-          onClick={() => setSearchOpen((o) => !o)}
+          onClick={() => toggleSearch(!searchOpen)}
         >
           <SearchIcon />
         </button>
@@ -247,7 +250,7 @@ export default function App() {
             aria-label="Search tasks"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Escape' && setSearchOpen(false)}
+            onKeyDown={(e) => e.key === 'Escape' && toggleSearch(false)}
           />
         </div>
       )}

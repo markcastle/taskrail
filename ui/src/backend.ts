@@ -454,6 +454,7 @@ function browserBackend(): RailBackend {
       async(() => [
         { name: '\\\\.\\DISPLAY1', width: 2560, height: 1440, x: 0, y: 0, scale: 1, primary: true },
         { name: '\\\\.\\DISPLAY2', width: 1920, height: 1080, x: 2560, y: 0, scale: 1, primary: false },
+        { name: '\\\\.\\DISPLAY3', width: 3840, height: 1100, x: 4480, y: 0, scale: 1, primary: false },
       ]),
     onOpenSettings: () => () => undefined,
     readLog: () => async(() => devLog.join('\n')),

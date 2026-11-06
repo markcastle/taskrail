@@ -96,9 +96,22 @@ export default function Settings({ onClose }: { onClose: () => void }) {
   )
 }
 
-function Row({ label, help, children, trailing }: { label: string; help?: string; children: ReactNode; trailing?: ReactNode }) {
+function Row({
+  label,
+  help,
+  children,
+  trailing,
+  stack = false,
+}: {
+  label: string
+  help?: string
+  children: ReactNode
+  trailing?: ReactNode
+  /** Put the control on its own line under the label, for controls that need the width. */
+  stack?: boolean
+}) {
   return (
-    <div className="row">
+    <div className={stack ? 'row row--stack' : 'row'}>
       <div className="row__text">
         <span className="row__label">{label}</span>
         {help && <span className="row__help">{help}</span>}
@@ -113,9 +126,40 @@ function Row({ label, help, children, trailing }: { label: string; help?: string
 
 /* ------------------------------------------------------------------ rail */
 
-function monitorLabel(m: MonitorInfo, index: number) {
-  const which = m.primary ? 'Main display' : `Display ${index + 1}`
-  return `${which} · ${m.width}×${m.height}`
+function monitorName(m: MonitorInfo, index: number) {
+  return m.primary ? 'Main display' : `Display ${index + 1}`
+}
+
+/** The displays drawn as little screens, the way the Displays pane does it. The chosen one shows where the rail sits. */
+function Displays({ monitors, chosen, edge, onChoose }: { monitors: MonitorInfo[]; chosen: string; edge: 'left' | 'right'; onChoose: (name: string) => void }) {
+  return (
+    <div className="displays" role="radiogroup" aria-label="Monitor">
+      {monitors.map((m, i) => {
+        const on = m.name === chosen
+        return (
+          <button
+            key={m.name}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            aria-label={`${monitorName(m, i)} · ${m.width}×${m.height}`}
+            className={on ? 'display display--on' : 'display'}
+            onClick={() => onChoose(m.name)}
+          >
+            <span className="display__frame" aria-hidden="true">
+              <span className="display__screen" style={{ aspectRatio: `${m.width} / ${m.height}` }}>
+                {on && <span className={`display__rail display__rail--${edge}`} />}
+              </span>
+            </span>
+            <span className="display__name">{monitorName(m, i)}</span>
+            <span className="display__size">
+              {m.width}×{m.height}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 function RailPage({ fail }: { fail: (e: unknown) => void }) {
@@ -153,23 +197,13 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
         />
       </Row>
       {monitors.length > 1 && (
-        <Row label="Monitor" help="Which display the rail lives on. Unplug it and the rail moves to the main display until it is back.">
-          {monitors.length <= 3 ? (
-            <Segmented<string>
-              label="Monitor"
-              value={draft.monitor ?? monitors.find((m) => m.primary)?.name ?? monitors[0].name}
-              onChange={(v) => set('monitor', monitors.find((m) => m.name === v)?.primary ? null : v)}
-              options={monitors.map((m, i) => ({ value: m.name, label: monitorLabel(m, i) }))}
-            />
-          ) : (
-            <select aria-label="Monitor" value={draft.monitor ?? ''} onChange={(e) => set('monitor', e.target.value || null)}>
-              {monitors.map((m, i) => (
-                <option key={m.name} value={m.primary ? '' : m.name}>
-                  {monitorLabel(m, i)}
-                </option>
-              ))}
-            </select>
-          )}
+        <Row label="Monitor" help="Which display the rail lives on. Unplug it and the rail moves to the main display until it is back." stack>
+          <Displays
+            monitors={monitors}
+            chosen={draft.monitor ?? monitors.find((m) => m.primary)?.name ?? monitors[0].name}
+            edge={draft.edge}
+            onChoose={(name) => set('monitor', monitors.find((m) => m.name === name)?.primary ? null : name)}
+          />
         </Row>
       )}
       <Row label="Dock to" help="Windows shrinks the desktop work area to make room.">

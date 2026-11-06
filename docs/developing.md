@@ -130,6 +130,7 @@ The builds are not code-signed. When a Windows certificate and an Apple Develope
 
 ## Conventions
 
+- For anything a person sees or touches, ask what Apple would do. Fewer controls, better defaults, feedback for every action, nothing that needs explaining. If a feature needs a paragraph of help text, the design is not finished.
 - Commit messages say what changed and why, in sentences. The first line is the headline.
 - Tests describe behaviour: `a_profile_can_fan_out_over_boards`, not `test_fan_out`.
 - Comments explain why, never what. If a what needs a comment, rename the thing.

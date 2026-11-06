@@ -1029,6 +1029,104 @@ button {
   min-width: 0;
 }
 
+/* A control that needs the width sits under its label instead of beside it. */
+.row--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.row--stack .row__control {
+  flex: none;
+  justify-content: flex-start;
+}
+
+/* displays, drawn as little screens */
+.displays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 128px;
+  padding: 12px 14px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.display:hover {
+  border-color: color-mix(in srgb, var(--progress) 50%, var(--line));
+}
+
+.display:focus-visible {
+  outline: 2px solid var(--progress);
+  outline-offset: 2px;
+}
+
+.display--on {
+  border-color: var(--progress);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--progress) 20%, transparent);
+}
+
+/* Every screen sits in the same slot, so the labels line up across tiles. */
+.display__frame {
+  display: flex;
+  align-items: center;
+  height: 60px;
+  margin-bottom: 4px;
+}
+
+.display__screen {
+  position: relative;
+  width: 96px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg-deep);
+  overflow: hidden;
+}
+
+.display--on .display__screen {
+  border-color: color-mix(in srgb, var(--progress) 60%, var(--line));
+  background: color-mix(in srgb, var(--progress) 14%, var(--bg-deep));
+}
+
+.display__rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12%;
+  background: var(--progress);
+}
+
+.display__rail--right {
+  right: 0;
+}
+
+.display__rail--left {
+  left: 0;
+}
+
+.display__name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.display__size {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .row__control input[type='text'],
 .row__control input[type='url'],
 .row__control input[type='password'] {
