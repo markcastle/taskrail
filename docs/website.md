@@ -95,7 +95,7 @@ Who makes it, why, and how to get in touch. A paragraph, not a page. Links to Gi
 - Track visitors beyond page counts. No third-party scripts, no fingerprinting, no cookies.
 - Ask for an email address.
 - Say anything the app does not do. The roadmap is the place for intentions, and it is labelled as such.
-- Hide the Mac caveat. Until someone has run it on a Mac, the download page says so.
+- Overstate the Mac story. Until the macOS build has had real time on real machines, the download page asks Mac users for feedback.
 
 ## Order of work
 

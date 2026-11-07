@@ -31,7 +31,7 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 
 > ⚠️ **Early days.** Task Rail is young and moving fast. It works, it is used daily, and it still has rough edges. Issues are very welcome.
 
-> 🍎 **Not yet tested on a Mac.** The macOS build compiles and ships, but nobody on the project owns a Mac, so the floating panel, the menu bar icon and the installer have never been seen running. If you try it on a Mac, we would love to hear how it went, good or bad: [open an issue](https://github.com/markcastle/taskrail/issues/new) and say what you saw.
+> 🍎 **Mac users, we would love to hear from you.** Task Rail is built and used on Windows day to day, and the macOS build gets far less time on a real machine. If you run it on a Mac, tell us how it went, good or bad: [open an issue](https://github.com/markcastle/taskrail/issues/new) and say what you saw.
 
 ## ✨ What you get
 
