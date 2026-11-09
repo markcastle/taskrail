@@ -17,10 +17,17 @@ permissions:
 
 jobs:
   submission:
-    if: contains(github.event.issue.labels.*.name, 'blueprint')
+    # The form applies the label, but an issue written by hand with the
+    # form's title still counts, and the label is added here either way.
+    if: contains(github.event.issue.labels.*.name, 'blueprint') || startsWith(github.event.issue.title, 'Blueprint:')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Label the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue edit "${{ github.event.issue.number }}" --add-label blueprint || true
 
       - uses: actions/setup-node@v4
         with:

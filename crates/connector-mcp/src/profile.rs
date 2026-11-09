@@ -54,19 +54,19 @@ fn empty_object() -> serde_json::Value {
 pub struct FieldPaths {
     pub external_id: String,
     pub title: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub due: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub end: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_at: Option<String>,
 }
 
@@ -134,7 +134,7 @@ pub struct ListSpec {
     /// JSONPath to the array of items in the result, such as `$.tickets[*]`.
     pub items: String,
     pub fields: FieldPaths,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub for_each: Option<ForEach>,
     /// Keep only the items that pass every condition. This is how a profile
     /// narrows a list to one person's work when the tool itself cannot.
@@ -156,9 +156,9 @@ pub struct ConnectorProfile {
     /// How to learn who the person is, when the profile uses `{me}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<Identity>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub set_status: Option<ToolSpec>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub create: Option<ToolSpec>,
     #[serde(default)]
     pub status_map: StatusMap,
