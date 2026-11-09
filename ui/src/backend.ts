@@ -197,6 +197,8 @@ export interface RailBackend {
   discoverConnector(request: DiscoverRequest): Promise<DiscoveryResult>
   /** A saved connector's profile as a blueprint: no server, no secrets, pretty JSON. */
   exportBlueprint(id: string): Promise<string>
+  /** What the connector's server really returns for its list call, trimmed. */
+  connectorSample(id: string): Promise<string>
   /** Open one of the project's GitHub pages in the browser. Refuses anything else. */
   openProjectPage(url: string): Promise<void>
   /** Run the MCP sign-in flow in the browser for a server. Resolves when the browser comes back. */
@@ -267,6 +269,7 @@ function tauriBackend(): RailBackend {
     testModel: () => call('test_model'),
     discoverConnector: (request) => call('discover_connector', { request }),
     exportBlueprint: (id) => call('export_blueprint', { id }),
+    connectorSample: (id) => call('connector_sample', { id }),
     openProjectPage: (url) => call('open_project_page', { url }),
     signIn: (url) => call('sign_in', { url }),
   }
@@ -669,6 +672,12 @@ function browserBackend(): RailBackend {
           null,
           2,
         ),
+      ),
+    connectorSample: (id) =>
+      async(
+        () =>
+          `=== list_tickets (${id}) ===\n` +
+          JSON.stringify({ tickets: [{ ticket_id: 'T-101', summary: 'Prepare board deck', state: 'Selected', assignee: 'mark', board: { id: 'b-1111', name: 'Work' } }] }, null, 2),
       ),
     openProjectPage: (url) =>
       async(() => {

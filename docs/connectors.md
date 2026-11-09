@@ -16,7 +16,7 @@ Open ⚙️ and find **Connectors**.
 
 A small fake issue tracker ships inside the app. Adding it gives you seven tickets on two boards, assigned to two people, so there is something to drag around and a status change to watch happen. It is also what the test suite runs against. Remove it from the same box when you are done.
 
-### Add server
+### Add connector
 
 Give the server a URL (or a command for a server that runs locally over stdio) and optionally a hint. The name is optional too: left blank, the blueprint's title or what the server calls itself in the MCP handshake is used, and the id is kept clear of connectors you already have ("tuesday-2"). Press **Discover**.
 
@@ -27,7 +27,7 @@ What happens next:
 3. A language model reads the tool list and your hint, and may ask to explore: call a few read-only tools to see real data, such as which boards exist or what an id looks like. Only tools the server marks read-only, or whose names clearly read (`list_`, `get_`, `search_`, `whoami`), are allowed. Everything else is refused.
 4. The model writes a **Connector Profile**: which tool lists your items, how to read each field out of the result, which tool changes a status, and how the system's status words map onto To do, In progress and Done.
 5. Task Rail runs that profile against the live server. If it fails, the model gets the error and a sample of what the server really returned, and tries again. Up to eight rounds.
-6. You see the first few items it pulled and the profile itself. Edit it if you like, then **Add connector**.
+6. It worked against the live server, so it is connected at once. You see the first few items it pulled, with **Undo** beside them if this was not what you meant, and the profile under a disclosure for the curious.
 
 If the model picks a list tool the server does not promise is read-only, discovery stops and asks you first.
 
@@ -152,6 +152,10 @@ A profile that filters on your user id works for you alone. With `identity`, it 
 ```
 
 On every connection the tool is called once, the id is read from the result, and `{me}` is filled in wherever it appears: list and parent arguments, and the values conditions compare against. Discovery writes profiles this way when a whoami-style tool exists, which is what makes a discovered profile shareable as a blueprint.
+
+## Raw sample
+
+**Raw sample** on a connector shows what the server actually returned for the list call, trimmed: the parent call's result when there is a fan-out, then the list call for the first element. It is for working out which fields hold what when writing a profile or adding context fields to a blueprint.
 
 ## Pausing a connector
 

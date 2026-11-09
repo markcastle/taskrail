@@ -23,9 +23,9 @@ type Page = 'rail' | 'model' | 'connectors' | 'logs'
 
 const PAGES: { id: Page; label: string; blurb: string }[] = [
   { id: 'rail', label: 'Rail', blurb: 'Where it sits and how much it shows. Changes apply as you make them.' },
-  { id: 'connectors', label: 'Connectors', blurb: 'The systems your cards come from.' },
-  { id: 'model', label: 'Model', blurb: 'Used once per connector, to work out what a server is.' },
+  { id: 'connectors', label: 'Connectors', blurb: 'The systems your tasks come from.' },
   { id: 'logs', label: 'Logs', blurb: 'What the app has been doing, for when something is wrong.' },
+  { id: 'model', label: 'Model', blurb: 'Only needed the first time anyone connects a new kind of system. Most people never set this up.' },
 ]
 
 export interface Toast {
@@ -82,7 +82,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
         </header>
         {page === 'rail' && <RailPage fail={fail} />}
         {page === 'model' && <ModelPage notify={notify} fail={fail} />}
-        {page === 'connectors' && <ConnectorsPage notify={notify} fail={fail} />}
+        {page === 'connectors' && <ConnectorsPage notify={notify} fail={fail} onOpenModel={() => setPage('model')} />}
         {page === 'logs' && <LogsPage notify={notify} fail={fail} />}
         {toast && (
           <div className={`toast toast--${toast.tone}`} role={toast.tone === 'error' ? 'alert' : 'status'} data-testid="toast">
@@ -500,16 +500,23 @@ function ModelPage({ notify, fail }: { notify: (tone: Tone, text: string) => voi
 
 /* ------------------------------------------------------------ connectors */
 
-function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
+function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void; onOpenModel: () => void }) {
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
   const [mode, setMode] = useState<'none' | 'server' | 'profile'>('none')
   const [blueprint, setBlueprint] = useState<{ id: string; json: string } | null>(null)
+  const [sample, setSample] = useState<{ id: string; text: string } | null>(null)
   const showBlueprint = (id: string) => {
+    setSample(null)
     if (blueprint?.id === id) return setBlueprint(null)
     backend
       .exportBlueprint(id)
       .then((json) => setBlueprint({ id, json }))
       .catch(fail)
+  }
+  const showSample = (id: string) => {
+    setBlueprint(null)
+    if (sample?.id === id) return setSample(null)
+    run(`sample-${id}`, () => backend.connectorSample(id), (text) => setSample({ id, text: String(text) }))
   }
   const [profileJson, setProfileJson] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -544,41 +551,60 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
         )}
         {connectors.map((c) => (
           <div className="connector" key={c.id} data-testid={`connector-${c.id}`}>
-            <span className={`connector__dot${c.last_error ? ' connector__dot--error' : c.paused ? ' connector__dot--paused' : ''}`} aria-hidden="true" />
-            <div className="connector__main">
-              <span className="connector__name">
-                {c.name}
-                {c.paused && <span className="connector__tag">Paused</span>}
+            <div className="connector__head">
+              <span className={`connector__dot${c.last_error ? ' connector__dot--error' : c.paused ? ' connector__dot--paused' : ''}`} aria-hidden="true" />
+              <span className="connector__name">{c.name}</span>
+              {c.paused && <span className="connector__tag">Paused</span>}
+              <span className="connector__count">
+                {c.item_count} {c.item_count === 1 ? 'task' : 'tasks'}
               </span>
-              <span className="connector__meta">
-                {c.item_count} {c.item_count === 1 ? 'item' : 'items'} · {c.capabilities.write_status ? 'changes sync back' : 'read-only'} ·{' '}
-                {c.paused ? 'not refreshing' : `refreshes every ${c.poll_seconds}s`}
-              </span>
-              <span className="connector__meta connector__meta--quiet">{c.server}</span>
-              {c.last_error && <span className="connector__error">{c.last_error}</span>}
             </div>
-            {c.paused ? (
-              <button type="button" className="button" disabled={busy !== null} onClick={() => run(`pause-${c.id}`, () => backend.setConnectorPaused(c.id, false), () => notify('success', `${c.name} resumed`))}>
-                {busy === `pause-${c.id}` ? <Spinner label="Resuming…" /> : 'Resume'}
+            <span className="connector__meta">
+              {c.capabilities.write_status ? 'Changes sync back' : 'Read-only'} · {c.paused ? 'not refreshing' : `refreshes every ${c.poll_seconds}s`} ·{' '}
+              <span className="connector__host" title={c.server}>
+                {hostOf(c.server)}
+              </span>
+            </span>
+            {c.last_error && <span className="connector__error">{c.last_error}</span>}
+            <div className="connector__actions">
+              {c.paused ? (
+                <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`pause-${c.id}`, () => backend.setConnectorPaused(c.id, false), () => notify('success', `${c.name} resumed`))}>
+                  {busy === `pause-${c.id}` ? <Spinner label="Resuming…" /> : 'Resume'}
+                </button>
+              ) : (
+                <>
+                  <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`sync-${c.id}`, () => backend.syncConnector(c.id), (n) => notify('success', `Pulled ${n} tasks from ${c.name}`))}>
+                    {busy === `sync-${c.id}` ? <Spinner label="Syncing…" /> : 'Sync now'}
+                  </button>
+                  <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`pause-${c.id}`, () => backend.setConnectorPaused(c.id, true), () => notify('info', `${c.name} paused`))}>
+                    Pause
+                  </button>
+                </>
+              )}
+              <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showBlueprint(c.id)} aria-expanded={blueprint?.id === c.id}>
+                Blueprint
               </button>
-            ) : (
-              <>
-                <button type="button" className="button" disabled={busy !== null} onClick={() => run(`sync-${c.id}`, () => backend.syncConnector(c.id), (n) => notify('success', `Pulled ${n} items from ${c.name}`))}>
-                  {busy === `sync-${c.id}` ? <Spinner label="Syncing…" /> : 'Sync now'}
-                </button>
-                <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`pause-${c.id}`, () => backend.setConnectorPaused(c.id, true), () => notify('info', `${c.name} paused`))}>
-                  Pause
-                </button>
-              </>
-            )}
-            <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => run(`remove-${c.id}`, () => backend.removeConnector(c.id), () => notify('info', `Removed ${c.name}`))}>
-              Remove
-            </button>
-            <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showBlueprint(c.id)} aria-expanded={blueprint?.id === c.id}>
-              Blueprint
-            </button>
+              <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showSample(c.id)} aria-expanded={sample?.id === c.id}>
+                {busy === `sample-${c.id}` ? <Spinner label="Fetching…" /> : 'Raw sample'}
+              </button>
+              <span className="connector__spacer" />
+              <button type="button" className="button button--quiet button--danger-quiet" disabled={busy !== null} onClick={() => run(`remove-${c.id}`, () => backend.removeConnector(c.id), () => notify('info', `Removed ${c.name}`))}>
+                Remove
+              </button>
+            </div>
           </div>
         ))}
+        {sample && (
+          <div className="panel panel--form" data-testid={`sample-${sample.id}`}>
+            <p className="settings-muted">What the server returned for the list call, trimmed. For working out which fields hold what when writing or fixing a profile.</p>
+            <textarea aria-label="Raw sample" readOnly rows={14} value={sample.text} />
+            <div className="settings-actions settings-actions--end">
+              <button type="button" className="button button--quiet" onClick={() => setSample(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        )}
         {blueprint && (
           <BlueprintPanel id={blueprint.id} json={blueprint.json} onClose={() => setBlueprint(null)} notify={notify} />
         )}
@@ -587,16 +613,16 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
       <h2 className="settings-subhead">Add a connector</h2>
       <div className="choices">
         <button type="button" className={`choice${mode === 'server' ? ' choice--on' : ''}`} disabled={busy !== null} onClick={() => setMode(mode === 'server' ? 'none' : 'server')} aria-expanded={mode === 'server'}>
-          <span className="choice__title">Add server</span>
-          <span className="choice__text">Any MCP server. A model works out how to read it.</span>
+          <span className="choice__title">Add connector</span>
+          <span className="choice__text">Any system with an MCP server. Known ones connect on their own.</span>
         </button>
         <button type="button" className="choice" disabled={busy !== null} onClick={() => run('demo', () => backend.addDemoConnector(), () => notify('success', 'Demo tracker connected'))}>
           <span className="choice__title">{busy === 'demo' ? <Spinner label="Connecting…" /> : 'Add demo tracker'}</span>
           <span className="choice__text">A small fake issue tracker, to see two-way sync working.</span>
         </button>
         <button type="button" className={`choice${mode === 'profile' ? ' choice--on' : ''}`} disabled={busy !== null} onClick={() => setMode(mode === 'profile' ? 'none' : 'profile')} aria-expanded={mode === 'profile'}>
-          <span className="choice__title">Paste profile</span>
-          <span className="choice__text">You already have a Connector Profile as JSON.</span>
+          <span className="choice__title">Paste a profile</span>
+          <span className="choice__text">For the technical: a Connector Profile as JSON.</span>
         </button>
       </div>
 
@@ -605,6 +631,7 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
           <AddServer
             notify={notify}
             fail={fail}
+            onOpenModel={onOpenModel}
             onAdded={() => {
               setMode('none')
               reload()
@@ -623,7 +650,7 @@ function ConnectorsPage({ notify, fail }: { notify: (tone: Tone, text: string) =
                 disabled={busy !== null || !profileJson.trim()}
                 onClick={() => {
                   if (looksLikeBlueprint(profileJson)) {
-                    notify('info', 'That is a blueprint, not a profile. Use Add server: enter the address, paste the blueprint in its Blueprint box, and press Discover.')
+                    notify('info', 'That is a blueprint, not a profile. Use Add connector: enter the address, paste the blueprint in its Blueprint box, and press Discover.')
                     return
                   }
                   run('profile', () => backend.addConnectorProfile(profileJson), () => {
@@ -653,8 +680,24 @@ function looksLikeBlueprint(json: string): boolean {
   }
 }
 
-/** Describe a server, let the model write a profile, check the sample it pulled, then save. */
-function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void; onAdded: () => void }) {
+/** The host of a URL, or the command, for the one-line summary on a card. */
+function hostOf(server: string): string {
+  const m = server.match(/^https?:\/\/([^/]+)/)
+  return m ? m[1] : server
+}
+
+/** Describe a server, let a blueprint or the model work it out, and it is connected; Undo if it was not what you meant. */
+function AddServer({
+  notify,
+  fail,
+  onAdded,
+  onOpenModel,
+}: {
+  notify: (tone: Tone, text: string) => void
+  fail: (e: unknown) => void
+  onAdded: () => void
+  onOpenModel: () => void
+}) {
   const [name, setName] = useState('')
   const [transport, setTransport] = useState<'http' | 'stdio'>('http')
   const [url, setUrl] = useState('')
@@ -668,6 +711,7 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
   const [result, setResult] = useState<DiscoveryResult | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [profileJson, setProfileJson] = useState('')
+  const [added, setAdded] = useState<{ id: string; name: string; count: number } | null>(null)
 
   const id = name
     .trim()
@@ -695,12 +739,30 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
     setProblem(null)
     backend
       .discoverConnector({ id, name: name.trim(), server, kind, hint, allow_unannotated_list: allow, bearer: bearer.trim() || null, blueprint: blueprint.trim() || null })
-      .then((r) => {
+      .then(async (r) => {
         setResult(r)
-        if (r.status === 'ok') setProfileJson(JSON.stringify(r.profile, null, 2))
+        if (r.status !== 'ok') return
+        // It worked against the live server, so it is a connector now. Undo is right there if it was not what was meant.
+        const json = JSON.stringify(r.profile, null, 2)
+        setProfileJson(json)
+        setPhase('adding')
+        const summary = await backend.addConnectorProfile(json, bearer.trim() || undefined)
+        setAdded({ id: summary.id, name: summary.name, count: summary.item_count || r.sample.length })
       })
       .catch((e) => setProblem(String(e)))
       .finally(() => setPhase('idle'))
+  }
+  const undo = () => {
+    if (!added) return
+    const { id: removeId, name: removedName } = added
+    backend
+      .removeConnector(removeId)
+      .then(() => {
+        setAdded(null)
+        setResult(null)
+        notify('info', `${removedName} removed`)
+      })
+      .catch(fail)
   }
   const signIn = () => {
     if (!server || server.transport !== 'http') return
@@ -717,17 +779,6 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
         setProblem(String(e))
         setPhase('idle')
       })
-  }
-  const add = () => {
-    setPhase('adding')
-    backend
-      .addConnectorProfile(profileJson, bearer.trim() || undefined)
-      .then(() => {
-        notify('success', `${(result?.status === 'ok' && String(result.profile.name)) || name.trim() || 'Server'} connected`)
-        onAdded()
-      })
-      .catch(fail)
-      .finally(() => setPhase('idle'))
   }
 
   return (
@@ -787,6 +838,13 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
       {problem && (
         <Result tone="error">
           <strong>Couldn't connect.</strong> {problem}
+          {/no API key/i.test(problem) && (
+            <div className="settings-actions">
+              <button type="button" className="button" onClick={onOpenModel}>
+                Set up a model
+              </button>
+            </div>
+          )}
         </Result>
       )}
       {result?.status === 'sign_in_required' && (
@@ -822,13 +880,15 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
       {result?.status === 'ok' && (
         <div className="discovery" data-testid="discovery-result">
           <Result tone="success">
-            {result.blueprint ? (
+            {added ? (
               <>
-                <strong>Found {result.sample.length} items</strong> on {String(result.profile.name)} using the {result.blueprint} blueprint. No model was needed.
+                <strong>{added.name} connected.</strong> {added.count} {added.count === 1 ? 'task' : 'tasks'} on the rail
+                {result.blueprint ? `, from the ${result.blueprint} blueprint. No model was needed.` : '.'}
               </>
             ) : (
               <>
-                <strong>Found {result.sample.length} items</strong> on {String(result.profile.name)} in {result.rounds} {result.rounds === 1 ? 'round' : 'rounds'}, from {result.tools.length} tools.
+                <strong>Found {result.sample.length} items</strong> on {String(result.profile.name)}
+                {result.blueprint ? ` using the ${result.blueprint} blueprint.` : '.'} Connecting…
               </>
             )}
             {result.notes.length > 0 && <span className="connector__meta"> Earlier tries: {result.notes.join('; ')}</span>}
@@ -843,14 +903,19 @@ function AddServer({ notify, fail, onAdded }: { notify: (tone: Tone, text: strin
             {result.sample.length > 6 && <li className="connector__meta">and {result.sample.length - 6} more</li>}
           </ul>
           <details className="disclosure">
-            <summary>Profile the model wrote</summary>
-            <textarea aria-label="Discovered profile JSON" rows={12} value={profileJson} onChange={(e) => setProfileJson(e.target.value)} />
+            <summary>{result.blueprint ? 'The profile' : 'Profile the model wrote'}</summary>
+            <textarea aria-label="Discovered profile JSON" rows={12} readOnly value={profileJson} />
           </details>
-          <div className="settings-actions">
-            <button type="button" className="button button--primary" disabled={busy || !profileJson.trim()} onClick={add}>
-              {phase === 'adding' ? <Spinner label="Adding…" /> : 'Add connector'}
-            </button>
-          </div>
+          {added && (
+            <div className="settings-actions settings-actions--spread">
+              <button type="button" className="button button--quiet" onClick={undo} data-testid="undo-add">
+                Undo
+              </button>
+              <button type="button" className="button button--primary" onClick={onAdded} data-testid="done-add">
+                Done
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

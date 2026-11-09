@@ -33,6 +33,55 @@ impl McpConnector {
         &self.profile
     }
 
+    /// What the server actually returns, for people writing or fixing a
+    /// profile: the parent call's result when there is a fan-out, and the
+    /// list call's result for the first element. Trimmed, as JSON text.
+    pub async fn raw_sample(&self, max_chars: usize) -> ConnectorResult<String> {
+        let list = &self.profile.list;
+        let trim = |value: &serde_json::Value| {
+            let text = serde_json::to_string_pretty(value).unwrap_or_default();
+            if text.chars().count() > max_chars {
+                let cut: String = text.chars().take(max_chars).collect();
+                format!("{cut}\n... (cut at {max_chars} characters)")
+            } else {
+                text
+            }
+        };
+        let mut out = String::new();
+        let arguments = match &list.for_each {
+            Some(each) => {
+                let parent = self.call(&each.tool, &each.arguments).await?;
+                out.push_str(&format!("=== {} ===\n{}\n\n", each.tool, trim(&parent)));
+                let first = crate::extract::first(&parent, &each.items)
+                    .ok()
+                    .flatten()
+                    .and_then(|element| {
+                        crate::extract::first(element, &each.id)
+                            .ok()
+                            .flatten()
+                            .map(|id| match id {
+                                serde_json::Value::String(s) => s.clone(),
+                                other => other.to_string(),
+                            })
+                    });
+                match first {
+                    Some(id) => crate::extract::fill_placeholders(
+                        &list.call.arguments,
+                        &[(each.placeholder.as_str(), id.as_str())],
+                    ),
+                    None => {
+                        out.push_str("(no element found to fan out over)\n");
+                        return Ok(out);
+                    }
+                }
+            }
+            None => list.call.arguments.clone(),
+        };
+        let raw = self.call(&list.call.tool, &arguments).await?;
+        out.push_str(&format!("=== {} ===\n{}\n", list.call.tool, trim(&raw)));
+        Ok(out)
+    }
+
     /// Call a tool on a connected session, connecting first if needed. A
     /// transport failure drops the session so the next call reconnects.
     async fn call(

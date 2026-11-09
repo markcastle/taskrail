@@ -265,6 +265,16 @@ async fn add_and_pull(
         .ok_or_else(|| "connector vanished".to_owned())
 }
 
+/// What a connector's server really returns, trimmed, for anyone writing
+/// or fixing a profile.
+#[tauri::command]
+pub async fn connector_sample(state: State<'_, AppState>, id: String) -> CommandResult<String> {
+    let connector = lock(&state.connectors)
+        .live(&id)
+        .ok_or_else(|| format!("no connector {id}"))?;
+    connector.raw_sample(6_000).await.map_err(|e| e.to_string())
+}
+
 /// Pause or resume a connector. Resuming pulls straight away.
 #[tauri::command]
 pub async fn set_connector_paused(

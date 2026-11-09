@@ -50,6 +50,7 @@ pub fn run() {
             commands::add_demo_connector,
             commands::remove_connector,
             commands::set_connector_paused,
+            commands::connector_sample,
             commands::sync_connector,
             commands::get_model_settings,
             commands::save_model_settings,
