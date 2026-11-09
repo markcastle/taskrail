@@ -220,6 +220,44 @@ button {
   text-wrap: balance;
 }
 
+/* When something is past due the headline is the way to it. */
+.hero__line--button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--priority);
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.hero__line--button .chevron {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.hero__line--button:hover .chevron {
+  opacity: 1;
+}
+
+.hero__line--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.hero__filter {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.hero__filter .link {
+  font-size: 13px;
+}
+
 .toolbar {
   display: flex;
   align-items: center;

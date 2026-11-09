@@ -318,7 +318,7 @@ function browserBackend(): RailBackend {
     event('team-sync', 'Team sync', 240, 30),
     task('prepare-board-deck', 'Prepare board deck', 'todo', 'highest', minutes(360)),
     task('reply-to-supplier', 'Reply to supplier', 'todo', 'high', minutes(480)),
-    task('book-venue', 'Book venue', 'todo'),
+    task('book-venue', 'Book venue', 'todo', 'normal', minutes(-24 * 60)),
     task('update-docs', 'Update docs', 'todo', 'low'),
     task('plan-next-sprint', 'Plan next sprint', 'todo'),
     task('release-notes', 'Release notes', 'todo'),

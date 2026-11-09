@@ -30,6 +30,7 @@ export default function App() {
   const [scope, setScope] = useState<Scope>('today')
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
+  const [pastDueOnly, setPastDueOnly] = useState(false)
   const [openCard, setOpenCard] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
@@ -128,8 +129,14 @@ export default function App() {
 
   // What each section shows, after the scope and the search have had their say.
   const needle = query.trim().toLowerCase()
-  const matches = useCallback((item: Item) => needle === '' || item.title.toLowerCase().includes(needle), [needle])
-  const showAll = scope === 'all' || needle !== ''
+  const isOverdue = (item: Item) => item.kind === 'task' && item.status !== 'done' && !!item.due && dueWord(item.due).overdue
+  const matches = useCallback(
+    (item: Item) => (needle === '' || item.title.toLowerCase().includes(needle)) && (!pastDueOnly || isOverdue(item)),
+    [needle, pastDueOnly],
+  )
+  // Search and the past-due view both look past the fold.
+  const filtering = needle !== '' || pastDueOnly
+  const showAll = scope === 'all' || filtering
   const priorities = useMemo(() => {
     if (!view) return []
     const list = showAll ? [...view.top, ...view.later] : view.top
@@ -201,7 +208,9 @@ export default function App() {
   // The day in numbers: every open task plus what was finished today.
   const openTasks = [...view.top, ...view.later, ...view.in_progress].filter((i) => i.kind === 'task')
   const total = openTasks.length + view.done_today.length
-  const overdue = openTasks.filter((i) => i.due && dueWord(i.due).overdue).length
+  const overdue = openTasks.filter(isOverdue).length
+  // The past-due view has nothing to show once those tasks are dealt with.
+  if (pastDueOnly && overdue === 0) setPastDueOnly(false)
 
   // The one thing to do next: what is being focused on, else the next event,
   // else the first thing in progress, else the top priority.
@@ -228,7 +237,28 @@ export default function App() {
 
       <div className="hero">
         <span className="hero__date">{todayLine()}</span>
-        <h2 className="hero__line">{headline(openTasks.length, view.done_today.length, overdue)}</h2>
+        {overdue > 0 ? (
+          <button
+            type="button"
+            className={`hero__line hero__line--button${pastDueOnly ? ' hero__line--on' : ''}`}
+            onClick={() => setPastDueOnly((on) => !on)}
+            aria-pressed={pastDueOnly}
+            title={pastDueOnly ? 'Show everything' : 'Show only what is past due'}
+          >
+            {headline(openTasks.length, view.done_today.length, overdue)}
+            <ChevronIcon open={pastDueOnly} />
+          </button>
+        ) : (
+          <h2 className="hero__line">{headline(openTasks.length, view.done_today.length, overdue)}</h2>
+        )}
+        {pastDueOnly && (
+          <span className="hero__filter">
+            Showing what is past due.{' '}
+            <button type="button" className="link" onClick={() => setPastDueOnly(false)}>
+              Show everything
+            </button>
+          </span>
+        )}
       </div>
 
       <div className="toolbar">
@@ -295,7 +325,7 @@ export default function App() {
         </div>
       )}
 
-      {upNext && needle === '' && (
+      {upNext && !filtering && (
         <UpNext
           item={upNext}
           focused={activeItem?.id === upNext.id}
@@ -435,7 +465,7 @@ function SyncStatus({ connectors }: { connectors: ConnectorSummary[] }) {
   const running = connectors.filter((c) => !c.paused)
   const failing = running.filter((c) => c.last_error)
   let tone: 'ok' | 'off' | 'error' = 'ok'
-  let text = 'Everything is up to date'
+  let text = 'Up to date'
   if (connectors.length === 0) {
     tone = 'off'
     text = 'Local tasks only'

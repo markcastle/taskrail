@@ -58,6 +58,14 @@ await page.evaluate(async () => {
 })
 await page.locator('[data-testid="section-later"] .section__count', { hasText: '3' }).waitFor()
 
+// 2a2. "One task past due." is a button: it narrows the rail to what is overdue, and back.
+await page.getByRole('button', { name: 'One task past due.', exact: true }).click()
+assert.deepEqual(await titles('priority'), ['Book venue'], 'only the overdue task shows')
+assert.equal(await page.getByTestId('upnext').count(), 0, 'up next steps aside while filtering')
+await page.getByRole('button', { name: 'Show everything', exact: true }).click()
+await page.getByTestId('upnext').waitFor()
+assert.equal((await titles('priority')).length, 5)
+
 // 2b. Search filters every section and ignores the fold.
 await page.getByRole('button', { name: 'Search', exact: true }).click()
 await page.getByLabel('Search tasks').fill('deploy')
@@ -199,7 +207,7 @@ await settings.getByTestId('connector-demo-tracker').waitFor()
 assert.equal(await settings.getByTestId('toast').getAttribute('class'), 'toast toast--success', 'a success is green, not red')
 await page.locator('.card__source', { hasText: 'Demo tracker' }).first().waitFor()
 assert.ok((await page.locator('.card__source').count()) >= 2, 'remote rows carry their source')
-await page.locator('[data-testid="sync-status"]', { hasText: 'Everything is up to date' }).waitFor()
+await page.locator('[data-testid="sync-status"]', { hasText: 'Up to date' }).waitFor()
 if (shots) await page.screenshot({ path: `${shots}/05-rail-with-connector.png` })
 // 9a. Pause: the card says so, a demo task refuses to move, resume brings it back.
 await settings.getByRole('button', { name: 'Pause', exact: true }).click()
@@ -210,7 +218,7 @@ await page.getByRole('button', { name: 'Complete', exact: true }).click()
 await page.locator('.toast--error', { hasText: 'Demo tracker is paused' }).waitFor()
 await settings.getByRole('button', { name: 'Resume', exact: true }).click()
 await settings.locator('[data-testid="connector-demo-tracker"] .connector__tag').waitFor({ state: 'detached' })
-await page.locator('[data-testid="sync-status"]', { hasText: 'Everything is up to date' }).waitFor()
+await page.locator('[data-testid="sync-status"]', { hasText: 'Up to date' }).waitFor()
 await settings.getByRole('button', { name: 'Blueprint', exact: true }).click()
 await settings.getByTestId('blueprint-demo-tracker').waitFor()
 assert.match(await settings.getByLabel('Blueprint JSON').inputValue(), /"match"/, 'the blueprint carries a fingerprint')
