@@ -43,6 +43,9 @@ pub struct RemoteItem {
     pub url: Option<String>,
     #[serde(default)]
     pub updated_at: Option<DateTime<Utc>>,
+    /// Where it sits in the source system, outermost first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trail: Vec<String>,
 }
 
 fn default_kind() -> ItemKind {
@@ -96,6 +99,7 @@ impl RemoteItem {
             due: self.due,
             completed_at,
             updated_at: self.updated_at.unwrap_or(now),
+            trail: self.trail.clone(),
         }
     }
 }
@@ -221,6 +225,7 @@ mod tests {
             window: None,
             url: Some(format!("https://example.test/{id}")),
             updated_at: None,
+            trail: vec![],
         }
     }
 

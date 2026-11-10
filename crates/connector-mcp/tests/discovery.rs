@@ -80,7 +80,7 @@ async fn a_correct_first_answer_is_validated_against_the_live_server() {
     assert_eq!(outcome.rounds, 1);
     assert_eq!(
         outcome.sample.len(),
-        5,
+        7,
         "the demo profile asks for \"me\", so Sam's tickets stay out"
     );
     assert_eq!(outcome.profile.id, "fake");
@@ -163,7 +163,7 @@ async fn the_model_can_explore_before_writing_and_fan_out_over_boards() {
     let llm = Scripted::new(&[explore, &board_profile_answer()]);
     let outcome = discover(&request(), &llm).await.unwrap();
     assert_eq!(outcome.rounds, 2);
-    assert_eq!(outcome.sample.len(), 7, "tickets from both boards");
+    assert_eq!(outcome.sample.len(), 9, "tickets from both boards");
     assert!(outcome.profile.list.for_each.is_some());
     let prompts = llm.prompts.lock().unwrap();
     assert!(

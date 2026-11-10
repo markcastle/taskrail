@@ -52,7 +52,11 @@ async fn list_then_transition_then_create() {
     assert!(info.capabilities.write_status && info.capabilities.create);
 
     let items = connector.list().await.unwrap();
-    assert_eq!(items.len(), 5, "the demo profile asks for \"me\"");
+    assert_eq!(
+        items.len(),
+        7,
+        "the demo profile asks for \"me\"; the subtask and the archived one count too"
+    );
     let first = &items[0];
     assert_eq!(first.external_id, "T-101");
     assert_eq!(first.title, "Prepare board deck");
@@ -73,7 +77,7 @@ async fn list_then_transition_then_create() {
     assert_eq!(created.status.as_deref(), Some("Backlog"));
 
     let again = connector.list().await.unwrap();
-    assert_eq!(again.len(), 6, "the new ticket is Mark's too");
+    assert_eq!(again.len(), 8, "the new ticket is Mark's too");
     let moved = again.iter().find(|i| i.external_id == "T-104").unwrap();
     assert_eq!(moved.status.as_deref(), Some("In Progress"));
     assert_eq!(
@@ -102,7 +106,7 @@ async fn a_profile_can_fan_out_over_boards() {
     assert!(profile.validate().is_empty());
     let connector = McpConnector::new(profile, SessionAuth::default());
     let items = connector.list().await.unwrap();
-    assert_eq!(items.len(), 7, "every ticket across both boards");
+    assert_eq!(items.len(), 9, "every ticket across both boards");
     assert!(items.iter().any(|i| i.external_id == "T-101"));
     assert!(items.iter().any(|i| i.external_id == "T-107"));
 }
@@ -137,7 +141,7 @@ async fn where_clauses_narrow_a_fan_out_to_one_board_and_one_person() {
     let ids: Vec<&str> = items.iter().map(|i| i.external_id.as_str()).collect();
     assert_eq!(
         ids,
-        ["T-101", "T-102", "T-104"],
+        ["T-101", "T-102", "T-104", "T-108", "T-109"],
         "the Work board only, without Sam's T-103"
     );
 }
@@ -147,7 +151,7 @@ async fn list_tickets_honours_the_assignee_argument() {
     let profile = fake_tracker_profile(server());
     let connector = McpConnector::new(profile, SessionAuth::default());
     let items = connector.list().await.unwrap();
-    assert_eq!(items.len(), 5, "\"me\" leaves out Sam's two tickets");
+    assert_eq!(items.len(), 7, "\"me\" leaves out Sam's two tickets");
     assert!(items
         .iter()
         .all(|i| i.external_id != "T-103" && i.external_id != "T-106"));
@@ -187,8 +191,8 @@ async fn the_demo_blueprint_connects_the_fake_tracker_with_no_model() {
     assert_eq!(outcome.rounds, 0, "no model rounds");
     assert_eq!(
         outcome.sample.len(),
-        5,
-        "{{me}} became mark, so Sam's tickets stay out"
+        6,
+        "{{me}} became mark, so Sam's tickets stay out, and the archived one too"
     );
     assert!(outcome.profile.identity.is_some());
     assert!(
@@ -199,7 +203,12 @@ async fn the_demo_blueprint_connects_the_fake_tracker_with_no_model() {
     // The saved profile keeps working through the connector, which resolves {me} on connect.
     let connector = McpConnector::new(outcome.profile, SessionAuth::default());
     let items = connector.list().await.unwrap();
-    assert_eq!(items.len(), 5);
+    assert_eq!(items.len(), 6);
+    assert_eq!(
+        items.iter().find(|i| i.external_id == "T-108").unwrap().trail,
+        ["Work", "Prepare board deck"],
+        "the blueprint's trail reaches the rail"
+    );
 }
 
 #[tokio::test]
@@ -223,4 +232,144 @@ async fn no_blueprint_and_no_model_is_a_clear_message() {
         .unwrap_err();
     assert!(matches!(err, DiscoveryError::NoModel(_)), "{err}");
     assert!(err.to_string().contains("no API key"), "{err}");
+}
+
+/// The Work and Home boards with a trail (board, group, parent) and the
+/// choices a person can make: only mine, which boards, which groups.
+fn board_profile_with_choices() -> taskrail_connector_mcp::ConnectorProfile {
+    use taskrail_connector_mcp::{Choice, Condition, ForEach, Identity, TrailStep};
+    let mut profile = fake_tracker_profile(server());
+    profile.list.call.tool = "get_board".into();
+    profile.list.call.arguments = serde_json::json!({ "board_id": "{board_id}" });
+    profile.list.items = "$.tasks[*]".into();
+    profile.list.filter = vec![Condition {
+        path: "$.archived_at".into(),
+        not: true,
+        ..Default::default()
+    }];
+    profile.list.for_each = Some(ForEach {
+        tool: "list_boards".into(),
+        arguments: serde_json::json!({}),
+        items: "$.boards[*]".into(),
+        id: "$.board_id".into(),
+        placeholder: "{board_id}".into(),
+        filter: vec![],
+    });
+    profile.list.trail = vec![
+        TrailStep {
+            name: "board".into(),
+            label: "$.board.name".into(),
+            key: None,
+            items: None,
+            id: None,
+        },
+        TrailStep {
+            name: "group".into(),
+            label: "$.name".into(),
+            key: Some("$.group_id".into()),
+            items: Some("$.groups[*]".into()),
+            id: Some("$.id".into()),
+        },
+        TrailStep {
+            name: "parent".into(),
+            label: "$.summary".into(),
+            key: Some("$.parent_id".into()),
+            items: Some("$.tasks[*]".into()),
+            id: Some("$.ticket_id".into()),
+        },
+    ];
+    profile.identity = Some(Identity {
+        tool: "whoami".into(),
+        arguments: serde_json::json!({}),
+        id: "$.id".into(),
+    });
+    profile.choices = vec![
+        Choice::Switch {
+            id: "mine".into(),
+            label: "Only tickets assigned to me".into(),
+            default: true,
+            filter: vec![Condition {
+                path: "$.assignee".into(),
+                equals: Some(serde_json::json!("{me}")),
+                ..Default::default()
+            }],
+        },
+        Choice::Pick {
+            id: "boards".into(),
+            label: "Boards".into(),
+            containers: Some("$.name".into()),
+            trail: None,
+        },
+        Choice::Pick {
+            id: "groups".into(),
+            label: "Groups".into(),
+            containers: None,
+            trail: Some("group".into()),
+        },
+    ];
+    assert!(profile.validate().is_empty(), "{:?}", profile.validate());
+    profile
+}
+
+#[tokio::test]
+async fn items_carry_a_trail_of_board_group_and_parent() {
+    let connector = McpConnector::new(board_profile_with_choices(), SessionAuth::default());
+    let items = connector.list().await.unwrap();
+    let by_id = |id: &str| items.iter().find(|i| i.external_id == id).unwrap();
+    assert_eq!(by_id("T-101").trail, ["Work", "Now"]);
+    assert_eq!(
+        by_id("T-108").trail,
+        ["Work", "Prepare board deck"],
+        "a subtask shows its board and its parent"
+    );
+    assert_eq!(
+        by_id("T-105").trail,
+        ["Home"],
+        "a board with no groups gives just the board"
+    );
+    assert!(
+        items.iter().all(|i| i.external_id != "T-109"),
+        "archived tickets are left out"
+    );
+    assert!(
+        items.iter().all(|i| i.external_id != "T-103"),
+        "the switch is on by default, so Sam's are out"
+    );
+}
+
+#[tokio::test]
+async fn a_scope_turns_switches_off_and_picks_boards_and_groups() {
+    use taskrail_connector_mcp::Scope;
+    let profile = board_profile_with_choices();
+
+    let options = McpConnector::new(profile.clone(), SessionAuth::default())
+        .scope_options()
+        .await
+        .unwrap();
+    assert_eq!(options["boards"], ["Work", "Home"]);
+    assert_eq!(options["groups"], ["Later", "Now"]);
+
+    let mut scope = Scope::default();
+    scope.switches.insert("mine".into(), false);
+    let all = McpConnector::with_scope(profile.clone(), SessionAuth::default(), scope.clone())
+        .list()
+        .await
+        .unwrap();
+    assert!(
+        all.iter().any(|i| i.external_id == "T-103"),
+        "switch off: Sam's tickets come in"
+    );
+
+    scope.picks.insert("boards".into(), vec!["Work".into()]);
+    scope.picks.insert("groups".into(), vec!["Later".into()]);
+    let narrow = McpConnector::with_scope(profile, SessionAuth::default(), scope)
+        .list()
+        .await
+        .unwrap();
+    let ids: Vec<&str> = narrow.iter().map(|i| i.external_id.as_str()).collect();
+    assert_eq!(
+        ids,
+        ["T-103", "T-104"],
+        "one group on one board, including the one not assigned to me"
+    );
 }

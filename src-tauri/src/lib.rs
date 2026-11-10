@@ -51,6 +51,8 @@ pub fn run() {
             commands::remove_connector,
             commands::set_connector_paused,
             commands::connector_sample,
+            commands::get_connector_scope,
+            commands::set_connector_scope,
             commands::sync_connector,
             commands::get_model_settings,
             commands::save_model_settings,

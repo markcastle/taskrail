@@ -31,7 +31,22 @@ struct Ticket {
     link: String,
     /// The person this ticket is assigned to. The signed-in user is "mark".
     assignee: String,
+    /// The group on the board this ticket sits in, if any. Subtasks have none.
+    group_id: Option<String>,
+    /// For a subtask, the ticket it belongs to.
+    parent_id: Option<String>,
+    /// Set when the ticket has been put away. Still returned, so clients learn to filter.
+    archived_at: Option<String>,
 }
+
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+struct Group {
+    id: String,
+    name: String,
+}
+
+const GROUP_NOW: &str = "g-now";
+const GROUP_LATER: &str = "g-later";
 
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 struct TicketList {
@@ -72,6 +87,7 @@ struct BoardParams {
 #[derive(Debug, Serialize, schemars::JsonSchema)]
 struct BoardView {
     board: Board,
+    groups: Vec<Group>,
     tasks: Vec<Ticket>,
 }
 
@@ -101,7 +117,7 @@ impl FakeTracker {
         let seed =
             |id: &str, summary: &str, state: &str, priority: &str, due: Option<&str>| Ticket {
                 ticket_id: id.into(),
-                board_id: if id < "T-105" {
+                board_id: if !("T-105".."T-108").contains(&id) {
                     BOARD_WORK.into()
                 } else {
                     BOARD_HOME.into()
@@ -118,6 +134,14 @@ impl FakeTracker {
                 } else {
                     "mark".into()
                 },
+                // Two groups on the Work board; the Home board has none.
+                group_id: match id {
+                    "T-101" | "T-102" => Some(GROUP_NOW.into()),
+                    "T-103" | "T-104" => Some(GROUP_LATER.into()),
+                    _ => None,
+                },
+                parent_id: None,
+                archived_at: None,
             };
         Self {
             tickets: Arc::new(Mutex::new(vec![
@@ -140,6 +164,16 @@ impl FakeTracker {
                 seed("T-105", "Design dashboard", "In Progress", "P2", None),
                 seed("T-106", "Review pull request", "In Progress", "P3", None),
                 seed("T-107", "Triage inbox", "Done", "P3", None),
+                // A subtask of T-101, and a ticket that was put away.
+                Ticket {
+                    parent_id: Some("T-101".into()),
+                    group_id: None,
+                    ..seed("T-108", "Draft the slides", "Selected", "P2", None)
+                },
+                Ticket {
+                    archived_at: Some("2026-10-01T09:00:00Z".into()),
+                    ..seed("T-109", "Old idea", "Backlog", "P4", None)
+                },
             ])),
             tool_router: Self::tool_router(),
         }
@@ -226,11 +260,26 @@ impl FakeTracker {
             .filter(|t| t.board_id == params.board_id)
             .cloned()
             .collect();
+        let groups = if params.board_id == BOARD_WORK {
+            vec![
+                Group {
+                    id: GROUP_NOW.into(),
+                    name: "Now".into(),
+                },
+                Group {
+                    id: GROUP_LATER.into(),
+                    name: "Later".into(),
+                },
+            ]
+        } else {
+            vec![]
+        };
         Ok(Json(BoardView {
             board: Board {
                 board_id: params.board_id,
                 name: name.into(),
             },
+            groups,
             tasks,
         }))
     }
@@ -288,6 +337,9 @@ impl FakeTracker {
             due_date: None,
             link: format!("https://tracker.example/tickets/{id}"),
             assignee: "mark".into(),
+            group_id: Some(GROUP_LATER.into()),
+            parent_id: None,
+            archived_at: None,
         };
         tickets.push(ticket.clone());
         Json(ticket)

@@ -558,6 +558,12 @@ function metaLine(item: Item, names: Map<string, string>): ReactNode {
         {names.get(item.origin.connector) ?? item.origin.connector}
       </span>,
     )
+  if (item.trail && item.trail.length > 0)
+    parts.push(
+      <span key="trail" className="card__trail" title={item.trail.join(' › ')}>
+        {item.trail.join(' › ')}
+      </span>,
+    )
   if (item.window) parts.push(<span key="when">{whenWord(item.window.start)}</span>)
   else if (item.due) {
     const due = dueWord(item.due)
@@ -669,6 +675,19 @@ function RowDetails(props: RowProps) {
           <dt>Source</dt>
           <dd>{item.origin?.url ? <a href={item.origin.url} target="_blank" rel="noreferrer">{source}</a> : source}</dd>
         </div>
+        {item.trail && item.trail.length > 0 && (
+          <div>
+            <dt>Where</dt>
+            <dd className="card__facts-trail">
+              {item.trail.map((step, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="meta__dot"> › </span>}
+                  {step}
+                </span>
+              ))}
+            </dd>
+          </div>
+        )}
         {item.due && (
           <div>
             <dt>Due</dt>

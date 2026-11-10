@@ -126,6 +126,105 @@ pub struct Identity {
 /// The placeholder [`Identity`] fills in.
 pub const ME: &str = "{me}";
 
+/// One step of an item's trail: where it sits in the source system, such as
+/// its board, its group or its parent task. Resolved against the list
+/// result, so nothing has to be on the item itself.
+///
+/// Without `key`, `label` is read from the whole result once: the board's
+/// name on a "get board" result. With `key`, the item's value at `key` is
+/// looked up among the `items` of the result, matching on `id`, and `label`
+/// is read from the element found: a task's `group_id` against the board's
+/// groups, or its `parent_id` against the other tasks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TrailStep {
+    /// What the step is, for picks and for people: "board", "group", "parent".
+    pub name: String,
+    /// JSONPath to the label, on the result or on the matched element.
+    pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub items: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}
+
+/// Something a person can decide about their own connector, declared by the
+/// profile and answered per connector in a [`Scope`]. This is how one
+/// blueprint serves people who use the same system differently.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Choice {
+    /// On or off. On, its conditions join the list's `where`.
+    Switch {
+        id: String,
+        label: String,
+        #[serde(default)]
+        default: bool,
+        #[serde(default, rename = "where", skip_serializing_if = "Vec::is_empty")]
+        filter: Vec<Condition>,
+    },
+    /// A set of values to keep. Nothing chosen means everything. Either
+    /// `containers` names the label path on a `for_each` element, so the
+    /// pick is among boards or projects, or `trail` names a trail step, so
+    /// the pick is among the values that step takes, such as group names.
+    Pick {
+        id: String,
+        label: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        containers: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        trail: Option<String>,
+    },
+}
+
+impl Choice {
+    pub fn id(&self) -> &str {
+        match self {
+            Choice::Switch { id, .. } | Choice::Pick { id, .. } => id,
+        }
+    }
+}
+
+/// One person's answers to a profile's choices. Lives on the connector,
+/// never in the profile or a blueprint.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Scope {
+    #[serde(default)]
+    pub switches: BTreeMap<String, bool>,
+    #[serde(default)]
+    pub picks: BTreeMap<String, Vec<String>>,
+}
+
+impl Scope {
+    /// Is a switch on, going by the answer or else the choice's default?
+    pub fn switch_on(&self, choice: &Choice) -> bool {
+        match choice {
+            Choice::Switch { id, default, .. } => {
+                self.switches.get(id).copied().unwrap_or(*default)
+            }
+            Choice::Pick { .. } => false,
+        }
+    }
+
+    /// The values chosen for a pick, empty meaning everything.
+    pub fn picked(&self, id: &str) -> &[String] {
+        self.picks.get(id).map(Vec::as_slice).unwrap_or(&[])
+    }
+
+    /// The widest view: every switch off, nothing picked. What the options
+    /// for the picks are collected from.
+    pub fn everything(profile: &ConnectorProfile) -> Self {
+        let mut scope = Self::default();
+        for choice in &profile.choices {
+            if let Choice::Switch { id, .. } = choice {
+                scope.switches.insert(id.clone(), false);
+            }
+        }
+        scope
+    }
+}
+
 /// The list call and how to read its result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListSpec {
@@ -140,6 +239,9 @@ pub struct ListSpec {
     /// narrows a list to one person's work when the tool itself cannot.
     #[serde(default, rename = "where", skip_serializing_if = "Vec::is_empty")]
     pub filter: Vec<Condition>,
+    /// Where each item sits, outermost first. See [`TrailStep`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trail: Vec<TrailStep>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,6 +258,9 @@ pub struct ConnectorProfile {
     /// How to learn who the person is, when the profile uses `{me}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<Identity>,
+    /// What each person may decide for themselves. See [`Choice`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<Choice>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub set_status: Option<ToolSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -194,6 +299,7 @@ impl ConnectorProfile {
     /// Does any part of the list call depend on knowing who the person is?
     pub fn uses_me(&self) -> bool {
         serde_json::to_string(&self.list).is_ok_and(|json| json.contains(ME))
+            || serde_json::to_string(&self.choices).is_ok_and(|json| json.contains(ME))
     }
 
     /// Problems a person should fix before the profile is used.
@@ -224,12 +330,58 @@ impl ConnectorProfile {
         {
             problems.push("a calendar profile needs list.fields.start and list.fields.end".into());
         }
-        let conditions = self.list.filter.iter().chain(
-            self.list
-                .for_each
-                .iter()
-                .flat_map(|each| each.filter.iter()),
-        );
+        for step in &self.list.trail {
+            let lookup = [step.key.is_some(), step.items.is_some(), step.id.is_some()];
+            if lookup.iter().any(|b| *b) && !lookup.iter().all(|b| *b) {
+                problems.push(format!(
+                    "trail step {:?} looks things up, so it needs key, items and id together",
+                    step.name
+                ));
+            }
+        }
+        let mut ids = std::collections::BTreeSet::new();
+        for choice in &self.choices {
+            if !ids.insert(choice.id()) {
+                problems.push(format!("two choices share the id {:?}", choice.id()));
+            }
+            if let Choice::Pick {
+                id,
+                containers,
+                trail,
+                ..
+            } = choice
+            {
+                match (containers, trail) {
+                    (Some(_), None) if self.list.for_each.is_none() => problems.push(format!(
+                        "pick {id:?} is over containers, but the list has no for_each"
+                    )),
+                    (None, Some(step)) if !self.list.trail.iter().any(|t| &t.name == step) => {
+                        problems.push(format!(
+                            "pick {id:?} is over trail step {step:?}, which the list does not have"
+                        ))
+                    }
+                    (None, None) | (Some(_), Some(_)) => {
+                        problems.push(format!("pick {id:?} needs either containers or trail"))
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let switch_conditions = self.choices.iter().flat_map(|c| match c {
+            Choice::Switch { filter, .. } => filter.iter(),
+            Choice::Pick { .. } => [].iter(),
+        });
+        let conditions = self
+            .list
+            .filter
+            .iter()
+            .chain(
+                self.list
+                    .for_each
+                    .iter()
+                    .flat_map(|each| each.filter.iter()),
+            )
+            .chain(switch_conditions);
         if self.identity.is_none() && self.uses_me() {
             problems.push(
                 "the profile uses {me} but has no \"identity\" saying which tool tells us who that is"
@@ -282,8 +434,10 @@ pub fn fake_tracker_profile(command: impl Into<String>) -> ConnectorProfile {
             },
             for_each: None,
             filter: vec![],
+            trail: vec![],
         },
         identity: None,
+        choices: vec![],
         set_status: Some(ToolSpec {
             tool: "transition_ticket".into(),
             arguments: serde_json::json!({ "ticket_id": "{external_id}", "state": "{status}" }),

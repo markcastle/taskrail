@@ -110,6 +110,10 @@ pub struct Item {
     pub due: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
+    /// Where the item sits in its source system, outermost first: a board,
+    /// then a group, then a parent task. Empty for local items.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trail: Vec<String>,
 }
 
 impl Item {
@@ -133,6 +137,7 @@ impl Item {
             due: None,
             completed_at: None,
             updated_at,
+            trail: Vec::new(),
         }
     }
 
@@ -155,6 +160,7 @@ impl Item {
             due: None,
             completed_at: None,
             updated_at,
+            trail: Vec::new(),
         }
     }
 

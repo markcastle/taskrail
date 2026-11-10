@@ -4,11 +4,12 @@
     {
       "id": "demo-tracker",
       "title": "Demo tracker",
-      "description": "The small fake issue tracker that ships inside Task Rail. Here as the worked example of a blueprint: a profile with {me} and an identity, so it works for whoever signs in.",
+      "description": "The small fake issue tracker that ships inside Task Rail. Here as the worked example of a blueprint: {me} with an identity, a trail of board, group and parent, and choices for only-mine, boards and groups.",
       "homepage": "https://github.com/markcastle/taskrail",
       "match": {
         "tools": [
-          "list_tickets",
+          "get_board",
+          "list_boards",
           "transition_ticket",
           "whoami"
         ]
@@ -16,11 +17,11 @@
       "profile": {
         "kind": "task",
         "list": {
-          "tool": "list_tickets",
+          "tool": "get_board",
           "arguments": {
-            "open_only": false
+            "board_id": "{board_id}"
           },
-          "items": "$.tickets[*]",
+          "items": "$.tasks[*]",
           "fields": {
             "external_id": "$.ticket_id",
             "title": "$.summary",
@@ -31,8 +32,35 @@
           },
           "where": [
             {
-              "path": "$.assignee",
-              "equals": "{me}"
+              "path": "$.archived_at",
+              "not": true
+            }
+          ],
+          "for_each": {
+            "tool": "list_boards",
+            "arguments": {},
+            "items": "$.boards[*]",
+            "id": "$.board_id",
+            "placeholder": "{board_id}"
+          },
+          "trail": [
+            {
+              "name": "board",
+              "label": "$.board.name"
+            },
+            {
+              "name": "group",
+              "label": "$.name",
+              "key": "$.group_id",
+              "items": "$.groups[*]",
+              "id": "$.id"
+            },
+            {
+              "name": "parent",
+              "label": "$.summary",
+              "key": "$.parent_id",
+              "items": "$.tasks[*]",
+              "id": "$.ticket_id"
             }
           ]
         },
@@ -73,13 +101,39 @@
           "P3": "normal",
           "P4": "low"
         },
-        "poll_seconds": 60
+        "poll_seconds": 60,
+        "choices": [
+          {
+            "kind": "switch",
+            "id": "mine",
+            "label": "Only tickets assigned to me",
+            "default": true,
+            "where": [
+              {
+                "path": "$.assignee",
+                "equals": "{me}"
+              }
+            ]
+          },
+          {
+            "kind": "pick",
+            "id": "boards",
+            "label": "Boards",
+            "containers": "$.name"
+          },
+          {
+            "kind": "pick",
+            "id": "groups",
+            "label": "Groups",
+            "trail": "group"
+          }
+        ]
       }
     },
     {
       "id": "tuesday",
       "title": "Tuesday",
-      "description": "Inovus Medical's Tuesday platform. Tasks assigned to you on every board you can see; moving one on the rail updates its status.",
+      "description": "Inovus Medical's Tuesday platform. Your tasks on the boards you can see, with their board, group and parent task. Scope lets you turn off \"only mine\" for a private board, or keep to one group on one board.",
       "match": {
         "tools": [
           "get_board",
@@ -121,8 +175,28 @@
           "tool": "get_board",
           "where": [
             {
-              "equals": "{me}",
-              "path": "$.assignees[*]"
+              "path": "$.archived_at",
+              "not": true
+            }
+          ],
+          "trail": [
+            {
+              "name": "board",
+              "label": "$.board.name"
+            },
+            {
+              "name": "group",
+              "label": "$.name",
+              "key": "$.group_id",
+              "items": "$.groups[*]",
+              "id": "$.id"
+            },
+            {
+              "name": "parent",
+              "label": "$.name",
+              "key": "$.parent_id",
+              "items": "$.tasks[*]",
+              "id": "$.id"
             }
           ]
         },
@@ -153,7 +227,33 @@
             "stuck": "in_progress",
             "working_on_it": "in_progress"
           }
-        }
+        },
+        "choices": [
+          {
+            "kind": "switch",
+            "id": "mine",
+            "label": "Only tasks assigned to me",
+            "default": true,
+            "where": [
+              {
+                "path": "$.assignees[*]",
+                "equals": "{me}"
+              }
+            ]
+          },
+          {
+            "kind": "pick",
+            "id": "boards",
+            "label": "Boards",
+            "containers": "$.name"
+          },
+          {
+            "kind": "pick",
+            "id": "groups",
+            "label": "Groups",
+            "trail": "group"
+          }
+        ]
       },
       "homepage": "https://tuesday.inovusmedical.com"
     }

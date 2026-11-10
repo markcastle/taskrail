@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use taskrail_connector_api::{Capabilities, Connector};
 use taskrail_connector_mcp::profile::fake_tracker_profile;
-use taskrail_connector_mcp::{ConnectorProfile, McpConnector, ServerSpec};
+use taskrail_connector_mcp::{ConnectorProfile, McpConnector, Scope, ServerSpec};
 use taskrail_core::ports::{KeyValueStore, SecretStore};
 
 use crate::secrets::{KeychainCredentials, OsSecrets};
@@ -20,6 +20,8 @@ use taskrail_connector_mcp::{CredentialPersistence, SessionAuth};
 pub const PROFILES_KEY: &str = "connector_profiles";
 /// The ids of connectors the person has paused, as a JSON list.
 pub const PAUSED_KEY: &str = "connector_paused";
+/// Each connector's answers to its profile's choices, as a JSON map by id.
+pub const SCOPES_KEY: &str = "connector_scopes";
 
 /// What the UI shows for each connector.
 #[derive(Debug, Clone, Serialize)]
@@ -49,6 +51,7 @@ pub struct ConnectorRegistry {
     live: HashMap<String, Arc<McpConnector>>,
     status: HashMap<String, SyncStatus>,
     paused: Vec<String>,
+    scopes: HashMap<String, Scope>,
 }
 
 impl ConnectorRegistry {
@@ -65,9 +68,16 @@ impl ConnectorRegistry {
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_default();
+        let scopes = store
+            .get_value(SCOPES_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
         Self {
             profiles,
             paused,
+            scopes,
             ..Default::default()
         }
     }
@@ -80,7 +90,27 @@ impl ConnectorRegistry {
         let paused = serde_json::to_string(&self.paused).map_err(|e| e.to_string())?;
         store
             .set_value(PAUSED_KEY, &paused)
+            .map_err(|e| e.to_string())?;
+        let scopes = serde_json::to_string(&self.scopes).map_err(|e| e.to_string())?;
+        store
+            .set_value(SCOPES_KEY, &scopes)
             .map_err(|e| e.to_string())
+    }
+
+    /// One connector's answers to its choices, or the defaults.
+    pub fn scope(&self, id: &str) -> Scope {
+        self.scopes.get(id).cloned().unwrap_or_default()
+    }
+
+    /// Replace a connector's answers. The live connector is rebuilt so the
+    /// next pull sees them.
+    pub fn set_scope(&mut self, id: &str, scope: Scope) {
+        self.scopes.insert(id.to_owned(), scope);
+        self.live.remove(id);
+    }
+
+    pub fn profile(&self, id: &str) -> Option<&ConnectorProfile> {
+        self.profiles.iter().find(|p| p.id == id)
     }
 
     pub fn is_paused(&self, id: &str) -> bool {
@@ -136,6 +166,7 @@ impl ConnectorRegistry {
         self.live.remove(id);
         self.status.remove(id);
         self.paused.retain(|p| p != id);
+        self.scopes.remove(id);
         self.profiles.len() != before
     }
 
@@ -146,7 +177,8 @@ impl ConnectorRegistry {
         }
         let profile = self.profiles.iter().find(|p| p.id == id)?.clone();
         let auth = session_auth(&profile.server);
-        let connector = Arc::new(McpConnector::new(profile, auth));
+        let scope = self.scope(id);
+        let connector = Arc::new(McpConnector::with_scope(profile, auth, scope));
         self.live.insert(id.to_owned(), connector.clone());
         Some(connector)
     }

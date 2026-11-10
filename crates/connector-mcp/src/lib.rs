@@ -34,6 +34,7 @@ pub use discovery::{
     discover, discover_or_blueprint, DiscoveryError, DiscoveryOutcome, DiscoveryRequest,
 };
 pub use profile::{
-    Condition, ConnectorProfile, FieldPaths, ForEach, Identity, ListSpec, ServerSpec, ToolSpec,
+    Choice, Condition, ConnectorProfile, FieldPaths, ForEach, Identity, ListSpec, Scope,
+    ServerSpec, ToolSpec, TrailStep,
 };
 pub use session::{McpSession, ToolSummary};

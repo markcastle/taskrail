@@ -93,6 +93,8 @@ Field by field:
 | `list.where` | Keeps only items that pass every condition. See below. |
 | `list.for_each` | For systems that keep work in containers: call `list_boards` once, then the list tool once per board. See below. |
 | `identity` | Which tool says who the signed-in person is, and where their id sits in its result. Lets the profile say `{me}` instead of carrying a user id. See below. |
+| `list.trail` | Where an item sits, outermost first: board, group, parent task. Shown on the rail as `Board › Group › Parent`. See below. |
+| `choices` | What each person may decide for themselves: switches and picks, answered on their own connector under **Scope**. See below. |
 | `set_status` | The tool that changes a status. `{external_id}` and `{status}` are filled in at call time. Leave it out and the connector is read-only. |
 | `create` | The tool that makes a new item from a `{title}`. Optional. |
 | `status_map.to_section` | Every status word the server might return, mapped onto `todo`, `in_progress` or `done`. |
@@ -156,6 +158,41 @@ On every connection the tool is called once, the id is read from the result, and
 ## Raw sample
 
 **Raw sample** on a connector shows what the server actually returned for the list call, trimmed: the parent call's result when there is a fan-out, then the list call for the first element. It is for working out which fields hold what when writing a profile or adding context fields to a blueprint.
+
+### Where a task sits
+
+Most systems keep a task's board, group or parent somewhere other than on the task itself. A `trail` says how to find each, resolved against the list result:
+
+```json
+"trail": [
+  { "name": "board", "label": "$.board.name" },
+  { "name": "group", "label": "$.name", "key": "$.group_id", "items": "$.groups[*]", "id": "$.id" },
+  { "name": "parent", "label": "$.name", "key": "$.parent_id", "items": "$.tasks[*]", "id": "$.id" }
+]
+```
+
+A step with only `label` reads it from the whole result once. A step with `key`, `items` and `id` takes the item's value at `key`, finds the element among `items` whose `id` matches, and reads `label` from it. The rail shows the steps the item has, in order, under the title: *Tuesday · Mark's Priorities › Now*, or for a subtask *Tuesday · Mark's Priorities › VideoLib go-live*. Tapping the task shows each on its own line.
+
+### Choices, and the Scope panel
+
+People use the same system differently. One keeps a private board with nothing assigned; another wants one group on one board. A profile declares `choices`, and each person answers them on their own connector under **Scope**, with toggles and tick lists. The answers live on the connector, never in the profile or the blueprint.
+
+```json
+"choices": [
+  { "kind": "switch", "id": "mine", "label": "Only tasks assigned to me", "default": true,
+    "where": [ { "path": "$.assignees[*]", "equals": "{me}" } ] },
+  { "kind": "pick", "id": "boards", "label": "Boards", "containers": "$.name" },
+  { "kind": "pick", "id": "groups", "label": "Groups", "trail": "group" }
+]
+```
+
+| Choice | What it does |
+| --- | --- |
+| `switch` | On, its `where` conditions join the list's. Off, they do not. Put "assigned to me" here rather than in the list's own `where`, so it can be turned off. |
+| `pick` with `containers` | A tick list of the fan-out's elements by the label path, such as board names. Only ticked ones are fetched. Nothing ticked means all. |
+| `pick` with `trail` | A tick list of the values a trail step takes, such as group names. Only items with a ticked value stay. Nothing ticked means all. |
+
+Changing anything in Scope saves at once and pulls again. The tick lists are filled from the live server: boards from the fan-out, groups from the tasks seen with every switch off.
 
 ## Pausing a connector
 

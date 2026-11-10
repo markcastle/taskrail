@@ -33,6 +33,23 @@ export interface Item {
   due: string | null
   completed_at: string | null
   updated_at: string
+  /** Where it sits in its source system, outermost first: board, group, parent. Absent for local items. */
+  trail?: string[]
+}
+
+export type Choice =
+  | { kind: 'switch'; id: string; label: string; default?: boolean }
+  | { kind: 'pick'; id: string; label: string; containers?: string; trail?: string }
+
+export interface Scope {
+  switches: Record<string, boolean>
+  picks: Record<string, string[]>
+}
+
+export interface ConnectorScope {
+  choices: Choice[]
+  scope: Scope
+  options: Record<string, string[]>
 }
 
 export interface RailView {
@@ -199,6 +216,10 @@ export interface RailBackend {
   exportBlueprint(id: string): Promise<string>
   /** What the connector's server really returns for its list call, trimmed. */
   connectorSample(id: string): Promise<string>
+  /** The choices a connector offers, the person's answers, and what each pick can be chosen from. */
+  getConnectorScope(id: string): Promise<ConnectorScope>
+  /** Save the answers and pull with them straight away. */
+  setConnectorScope(id: string, scope: Scope): Promise<void>
   /** Open one of the project's GitHub pages in the browser. Refuses anything else. */
   openProjectPage(url: string): Promise<void>
   /** Run the MCP sign-in flow in the browser for a server. Resolves when the browser comes back. */
@@ -270,6 +291,8 @@ function tauriBackend(): RailBackend {
     discoverConnector: (request) => call('discover_connector', { request }),
     exportBlueprint: (id) => call('export_blueprint', { id }),
     connectorSample: (id) => call('connector_sample', { id }),
+    getConnectorScope: (id) => call('get_connector_scope', { id }),
+    setConnectorScope: (id, scope) => call('set_connector_scope', { id, scope }),
     openProjectPage: (url) => call('open_project_page', { url }),
     signIn: (url) => call('sign_in', { url }),
   }
@@ -339,6 +362,7 @@ function browserBackend(): RailBackend {
   const devLog: string[] = [`${new Date().toISOString()} [info] browser stand-in started`]
   const changedListeners = new Set<() => void>()
   const updateListeners = new Set<(update: AvailableUpdate) => void>()
+  const scopes: Record<string, Scope> = {}
   const quickAddListeners = new Set<() => void>()
   const syncErrorListeners = new Set<(e: SyncError) => void>()
 
@@ -560,8 +584,8 @@ function browserBackend(): RailBackend {
         const origin = (id: string) => ({ connector: 'demo-tracker', external_id: id, url: `https://tracker.example/tickets/${id}` })
         items = [
           ...items,
-          { ...task('demo-tracker:T-201', 'Fix login timeout', 'todo', 'highest'), origin: origin('T-201') },
-          { ...task('demo-tracker:T-202', 'Write release notes', 'todo'), origin: origin('T-202') },
+          { ...task('demo-tracker:T-201', 'Fix login timeout', 'todo', 'highest'), origin: origin('T-201'), trail: ['Work', 'Now'] },
+          { ...task('demo-tracker:T-202', 'Write release notes', 'todo'), origin: origin('T-202'), trail: ['Work', 'Now', 'Fix login timeout'] },
           { ...task('demo-tracker:T-203', 'Migrate billing job', 'in_progress'), origin: origin('T-203') },
         ]
         notify()
@@ -673,6 +697,21 @@ function browserBackend(): RailBackend {
           2,
         ),
       ),
+    getConnectorScope: (id) =>
+      async(() => ({
+        choices: [
+          { kind: 'switch', id: 'mine', label: 'Only tasks assigned to me', default: true },
+          { kind: 'pick', id: 'boards', label: 'Boards', containers: '$.name' },
+          { kind: 'pick', id: 'groups', label: 'Groups', trail: 'group' },
+        ],
+        scope: scopes[id] ?? { switches: {}, picks: {} },
+        options: { boards: ['Work', 'Home'], groups: ['Later', 'Now'] },
+      })),
+    setConnectorScope: (id, scope) =>
+      async(() => {
+        scopes[id] = scope
+        notify()
+      }),
     connectorSample: (id) =>
       async(
         () =>

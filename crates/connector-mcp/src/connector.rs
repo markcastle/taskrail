@@ -10,22 +10,47 @@ use tokio::sync::Mutex;
 use crate::auth::SessionAuth;
 use crate::extract::{extract_items, fill_arguments};
 
-use crate::profile::ConnectorProfile;
+use crate::profile::{ConnectorProfile, Scope};
 use crate::session::McpSession;
 
 pub struct McpConnector {
     profile: ConnectorProfile,
     auth: SessionAuth,
+    scope: Scope,
     session: Mutex<Option<McpSession>>,
 }
 
 impl McpConnector {
     /// Nothing is connected until the first call, so building one is free.
     pub fn new(profile: ConnectorProfile, auth: SessionAuth) -> Self {
+        Self::with_scope(profile, auth, Scope::default())
+    }
+
+    /// A connector seen through one person's answers to the profile's choices.
+    pub fn with_scope(profile: ConnectorProfile, auth: SessionAuth, scope: Scope) -> Self {
         Self {
             profile,
             auth,
+            scope,
             session: Mutex::new(None),
+        }
+    }
+
+    pub fn scope(&self) -> &Scope {
+        &self.scope
+    }
+
+    /// What the person could pick from, for each pick the profile declares.
+    pub async fn scope_options(
+        &self,
+    ) -> ConnectorResult<std::collections::BTreeMap<String, Vec<String>>> {
+        let mut guard = self.session.lock().await;
+        if guard.is_none() {
+            *guard = Some(McpSession::connect(&self.profile.server, &self.auth).await?);
+        }
+        match guard.as_ref() {
+            Some(session) => crate::extract::scope_options(session, &self.profile).await,
+            None => Err(ConnectorError::Transport("no session".into())),
         }
     }
 
@@ -134,7 +159,9 @@ impl Connector for McpConnector {
             *guard = Some(McpSession::connect(&self.profile.server, &self.auth).await?);
         }
         let outcome = match guard.as_ref() {
-            Some(session) => crate::extract::fetch_items(session, &self.profile).await,
+            Some(session) => {
+                crate::extract::fetch_items_with(session, &self.profile, &self.scope).await
+            }
             None => Err(ConnectorError::Transport("no session".into())),
         };
         if matches!(

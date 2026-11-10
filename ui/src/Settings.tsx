@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   createBackend,
+  type ConnectorScope,
   type ConnectorSummary,
   type DiscoveryResult,
   type ItemKind,
   type ModelSettings,
   type MonitorInfo,
   type Provider,
+  type Scope,
   type RailBackend,
   type RailSettings,
   type ServerSpec,
@@ -505,8 +507,23 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
   const [mode, setMode] = useState<'none' | 'server' | 'profile'>('none')
   const [blueprint, setBlueprint] = useState<{ id: string; json: string } | null>(null)
   const [sample, setSample] = useState<{ id: string; text: string } | null>(null)
+  const [scope, setScope] = useState<{ id: string; data: ConnectorScope } | null>(null)
+  const showScope = (id: string) => {
+    setBlueprint(null)
+    setSample(null)
+    if (scope?.id === id) return setScope(null)
+    run(`scope-${id}`, () => backend.getConnectorScope(id), (data) => setScope({ id, data: data as ConnectorScope }))
+  }
+  const changeScope = (id: string, next: Scope) => {
+    setScope((cur) => (cur && cur.id === id ? { ...cur, data: { ...cur.data, scope: next } } : cur))
+    backend
+      .setConnectorScope(id, next)
+      .then(() => reload())
+      .catch(fail)
+  }
   const showBlueprint = (id: string) => {
     setSample(null)
+    setScope(null)
     if (blueprint?.id === id) return setBlueprint(null)
     backend
       .exportBlueprint(id)
@@ -515,6 +532,7 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
   }
   const showSample = (id: string) => {
     setBlueprint(null)
+    setScope(null)
     if (sample?.id === id) return setSample(null)
     run(`sample-${id}`, () => backend.connectorSample(id), (text) => setSample({ id, text: String(text) }))
   }
@@ -581,6 +599,9 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
                   </button>
                 </>
               )}
+              <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showScope(c.id)} aria-expanded={scope?.id === c.id}>
+                {busy === `scope-${c.id}` ? <Spinner label="Looking…" /> : 'Scope'}
+              </button>
               <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showBlueprint(c.id)} aria-expanded={blueprint?.id === c.id}>
                 Blueprint
               </button>
@@ -594,6 +615,7 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
             </div>
           </div>
         ))}
+        {scope && <ScopePanel id={scope.id} data={scope.data} onChange={(next) => changeScope(scope.id, next)} onClose={() => setScope(null)} />}
         {sample && (
           <div className="panel panel--form" data-testid={`sample-${sample.id}`}>
             <p className="settings-muted">What the server returned for the list call, trimmed. For working out which fields hold what when writing or fixing a profile.</p>
@@ -678,6 +700,53 @@ function looksLikeBlueprint(json: string): boolean {
   } catch {
     return false
   }
+}
+
+/** What one person sees from a connector: the profile's switches as toggles and its picks as tick lists. Saves as you go. */
+function ScopePanel({ id, data, onChange, onClose }: { id: string; data: ConnectorScope; onChange: (next: Scope) => void; onClose: () => void }) {
+  const { choices, scope, options } = data
+  const toggle = (choiceId: string, on: boolean) => onChange({ ...scope, switches: { ...scope.switches, [choiceId]: on } })
+  const tick = (choiceId: string, value: string) => {
+    const current = scope.picks[choiceId] ?? []
+    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
+    onChange({ ...scope, picks: { ...scope.picks, [choiceId]: next } })
+  }
+  return (
+    <div className="panel panel--form scope" data-testid={`scope-${id}`}>
+      {choices.length === 0 && <p className="settings-muted">This connector has nothing to choose. Its blueprint decides what you see.</p>}
+      {choices.map((choice) =>
+        choice.kind === 'switch' ? (
+          <div className="scope__switch" key={choice.id}>
+            <span className="scope__label">{choice.label}</span>
+            <Toggle checked={scope.switches[choice.id] ?? choice.default ?? false} onChange={(on) => toggle(choice.id, on)} label={choice.label} />
+          </div>
+        ) : (
+          <div className="scope__group" key={choice.id}>
+            <span className="scope__label">
+              {choice.label} <span className="settings-muted">· none ticked means all</span>
+            </span>
+            <div className="scope__ticks" role="group" aria-label={choice.label}>
+              {(options[choice.id] ?? []).map((value) => {
+                const on = (scope.picks[choice.id] ?? []).includes(value)
+                return (
+                  <button type="button" role="checkbox" aria-checked={on} key={value} className={`tick${on ? ' tick--on' : ''}`} onClick={() => tick(choice.id, value)}>
+                    {on ? '✓ ' : ''}
+                    {value}
+                  </button>
+                )
+              })}
+              {(options[choice.id] ?? []).length === 0 && <span className="settings-muted">Nothing to pick from yet.</span>}
+            </div>
+          </div>
+        ),
+      )}
+      <div className="settings-actions settings-actions--end">
+        <button type="button" className="button button--quiet" onClick={onClose}>
+          Close
+        </button>
+      </div>
+    </div>
+  )
 }
 
 /** The host of a URL, or the command, for the one-line summary on a card. */

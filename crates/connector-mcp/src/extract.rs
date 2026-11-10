@@ -7,7 +7,9 @@ use serde_json_path::JsonPath;
 use taskrail_connector_api::RemoteItem;
 use taskrail_core::domain::{ItemKind, TimeWindow};
 
-use crate::profile::{Condition, ConnectorProfile, FieldPaths, ListSpec, ME};
+use crate::profile::{
+    Choice, Condition, ConnectorProfile, FieldPaths, ListSpec, Scope, TrailStep, ME,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExtractError {
@@ -163,12 +165,46 @@ pub fn extract_with(
     list: &ListSpec,
     result: &Value,
 ) -> Result<Vec<RemoteItem>, ExtractError> {
+    extract_scoped(profile, list, result, &Scope::default())
+}
+
+/// `extract_with`, keeping only items that pass the person's picks.
+pub fn extract_scoped(
+    profile: &ConnectorProfile,
+    list: &ListSpec,
+    result: &Value,
+    scope: &Scope,
+) -> Result<Vec<RemoteItem>, ExtractError> {
+    Ok(extract_aligned(profile, list, result, scope)?
+        .into_iter()
+        .map(|(item, _)| item)
+        .collect())
+}
+
+/// `extract_scoped` keeping each item's per-step trail values, for the
+/// scope options.
+fn extract_aligned(
+    profile: &ConnectorProfile,
+    list: &ListSpec,
+    result: &Value,
+    scope: &Scope,
+) -> Result<Vec<Aligned>, ExtractError> {
     let items = path(&list.items)?.query(result).all();
+    let resolved = resolve_steps(&list.trail, result)?;
     let mut out = Vec::new();
     for (index, item) in items.into_iter().enumerate() {
-        if passes(item, &list.filter)? {
-            out.push(extract_item(profile, &list.fields, item, index)?);
+        if !passes(item, &list.filter)? {
+            continue;
         }
+        let steps = steps_of(&resolved, item)?;
+        if !passes_picks(profile, scope, &steps) {
+            continue;
+        }
+        let trail = steps.iter().flatten().cloned().collect();
+        out.push((
+            extract_item(profile, &list.fields, item, index, trail)?,
+            steps,
+        ));
     }
     Ok(out)
 }
@@ -178,6 +214,7 @@ fn extract_item(
     fields: &FieldPaths,
     item: &Value,
     index: usize,
+    trail: Vec<String>,
 ) -> Result<RemoteItem, ExtractError> {
     let required = |field: &'static str, expr: &str| {
         string_at(item, expr)?.ok_or_else(|| ExtractError::MissingField {
@@ -216,6 +253,96 @@ fn extract_item(
         window,
         url: optional(&fields.url)?,
         updated_at: optional_time(&fields.updated_at)?,
+        trail,
+    })
+}
+
+/// An item with its value for every trail step, in step order.
+type Aligned = (RemoteItem, Vec<Option<String>>);
+
+/// The lookup tables a result holds for the trail: for each step, the
+/// constant label (no key) or the id-to-label map built from its elements.
+enum Resolved {
+    Constant(Option<String>),
+    Lookup {
+        key: String,
+        table: std::collections::HashMap<String, String>,
+    },
+}
+
+fn resolve_steps(steps: &[TrailStep], result: &Value) -> Result<Vec<Resolved>, ExtractError> {
+    steps
+        .iter()
+        .map(|step| match (&step.key, &step.items, &step.id) {
+            (Some(key), Some(items), Some(id)) => {
+                let mut table = std::collections::HashMap::new();
+                for element in path(items)?.query(result).all() {
+                    if let (Some(k), Some(label)) =
+                        (string_at(element, id)?, string_at(element, &step.label)?)
+                    {
+                        table.insert(k, label);
+                    }
+                }
+                Ok(Resolved::Lookup {
+                    key: key.clone(),
+                    table,
+                })
+            }
+            _ => Ok(Resolved::Constant(string_at(result, &step.label)?)),
+        })
+        .collect()
+}
+
+/// One item's value for every trail step, in step order, `None` where it
+/// has nothing. The item's trail is these with the gaps dropped; picks match
+/// by position.
+fn steps_of(resolved: &[Resolved], item: &Value) -> Result<Vec<Option<String>>, ExtractError> {
+    resolved
+        .iter()
+        .map(|step| match step {
+            Resolved::Constant(label) => Ok(label.clone()),
+            Resolved::Lookup { key, table } => {
+                Ok(string_at(item, key)?.and_then(|k| table.get(&k).cloned()))
+            }
+        })
+        .collect()
+}
+
+/// The list spec with the person's switches folded into its conditions.
+pub fn list_for_scope(profile: &ConnectorProfile, scope: &Scope) -> ListSpec {
+    let mut list = profile.list.clone();
+    for choice in &profile.choices {
+        if let Choice::Switch { filter, .. } = choice {
+            if scope.switch_on(choice) {
+                list.filter.extend(filter.iter().cloned());
+            }
+        }
+    }
+    list
+}
+
+/// Does an item pass the person's picks over trail steps? A pick over a
+/// step keeps items whose value for that step is one of the chosen.
+fn passes_picks(profile: &ConnectorProfile, scope: &Scope, steps: &[Option<String>]) -> bool {
+    profile.choices.iter().all(|choice| match choice {
+        Choice::Pick {
+            id,
+            trail: Some(step),
+            ..
+        } => {
+            let chosen = scope.picked(id);
+            if chosen.is_empty() {
+                return true;
+            }
+            let Some(position) = profile.list.trail.iter().position(|t| &t.name == step) else {
+                return true;
+            };
+            steps
+                .get(position)
+                .and_then(|v| v.as_ref())
+                .is_some_and(|value| chosen.contains(value))
+        }
+        _ => true,
     })
 }
 
@@ -308,20 +435,53 @@ pub async fn fetch_items(
     session: &crate::session::McpSession,
     profile: &ConnectorProfile,
 ) -> Result<Vec<RemoteItem>, taskrail_connector_api::ConnectorError> {
+    fetch_items_with(session, profile, &Scope::default()).await
+}
+
+/// `fetch_items` seen through one person's scope: their switches join the
+/// conditions, their container picks narrow the fan-out, their trail picks
+/// narrow the items.
+pub async fn fetch_items_with(
+    session: &crate::session::McpSession,
+    profile: &ConnectorProfile,
+    scope: &Scope,
+) -> Result<Vec<RemoteItem>, taskrail_connector_api::ConnectorError> {
+    Ok(fetch_aligned(session, profile, scope)
+        .await?
+        .into_iter()
+        .map(|(item, _)| item)
+        .collect())
+}
+
+async fn fetch_aligned(
+    session: &crate::session::McpSession,
+    profile: &ConnectorProfile,
+    scope: &Scope,
+) -> Result<Vec<Aligned>, taskrail_connector_api::ConnectorError> {
     use taskrail_connector_api::ConnectorError;
-    let resolved;
-    let list = match resolve_me(session, profile).await? {
-        Some(me) if profile.uses_me() => {
-            resolved = list_for(&profile.list, &me);
-            &resolved
-        }
-        _ => &profile.list,
+    let scoped = list_for_scope(profile, scope);
+    let list = &match resolve_me(session, profile).await? {
+        Some(me) if profile.uses_me() => list_for(&scoped, &me),
+        _ => scoped,
     };
     let Some(each) = &list.for_each else {
         let raw = session.call(&list.call.tool, &list.call.arguments).await?;
-        return extract_with(profile, list, &raw)
+        return extract_aligned(profile, list, &raw, scope)
             .map_err(|e| ConnectorError::Protocol(e.to_string()));
     };
+    // Container picks: the label path and chosen values, if any pick applies.
+    let container_picks: Vec<(&str, &[String])> = profile
+        .choices
+        .iter()
+        .filter_map(|c| match c {
+            Choice::Pick {
+                id,
+                containers: Some(label),
+                ..
+            } if !scope.picked(id).is_empty() => Some((label.as_str(), scope.picked(id))),
+            _ => None,
+        })
+        .collect();
     let parent = session.call(&each.tool, &each.arguments).await?;
     let elements = path(&each.items)
         .map_err(|e| ConnectorError::Invalid(e.to_string()))?
@@ -331,6 +491,18 @@ pub async fn fetch_items(
     let mut skipped = 0;
     for element in elements {
         if !passes(element, &each.filter).map_err(|e| ConnectorError::Invalid(e.to_string()))? {
+            skipped += 1;
+            continue;
+        }
+        let mut picked_out = false;
+        for (label_path, chosen) in &container_picks {
+            let label = string_at(element, label_path)
+                .map_err(|e| ConnectorError::Invalid(e.to_string()))?;
+            if !label.is_some_and(|l| chosen.contains(&l)) {
+                picked_out = true;
+            }
+        }
+        if picked_out {
             skipped += 1;
             continue;
         }
@@ -346,7 +518,7 @@ pub async fn fetch_items(
         each.tool,
         ids.len(),
         if skipped > 0 {
-            format!(" ({skipped} left out by the where clause)")
+            format!(" ({skipped} left out by the where clause or the picks)")
         } else {
             String::new()
         }
@@ -358,11 +530,82 @@ pub async fn fetch_items(
             &[(each.placeholder.as_str(), id.as_str())],
         );
         let raw = session.call(&list.call.tool, &arguments).await?;
-        let mut items = extract_with(profile, list, &raw)
+        let mut items = extract_aligned(profile, list, &raw, scope)
             .map_err(|e| ConnectorError::Protocol(e.to_string()))?;
         all.append(&mut items);
     }
     Ok(all)
+}
+
+/// What a person can pick from: for each pick, the values seen with every
+/// switch off and nothing picked. Containers come from the parent call,
+/// trail values from the items themselves.
+pub async fn scope_options(
+    session: &crate::session::McpSession,
+    profile: &ConnectorProfile,
+) -> Result<std::collections::BTreeMap<String, Vec<String>>, taskrail_connector_api::ConnectorError>
+{
+    use taskrail_connector_api::ConnectorError;
+    let mut options = std::collections::BTreeMap::new();
+    let wants_trail = profile
+        .choices
+        .iter()
+        .any(|c| matches!(c, Choice::Pick { trail: Some(_), .. }));
+    let items = if wants_trail {
+        fetch_aligned(session, profile, &Scope::everything(profile)).await?
+    } else {
+        Vec::new()
+    };
+    for choice in &profile.choices {
+        match choice {
+            Choice::Pick {
+                id,
+                containers: Some(label),
+                ..
+            } => {
+                let Some(each) = &profile.list.for_each else {
+                    continue;
+                };
+                let parent = session.call(&each.tool, &each.arguments).await?;
+                let mut names: Vec<String> = Vec::new();
+                for element in path(&each.items)
+                    .map_err(|e| ConnectorError::Invalid(e.to_string()))?
+                    .query(&parent)
+                    .all()
+                {
+                    if let Some(name) = string_at(element, label)
+                        .map_err(|e| ConnectorError::Invalid(e.to_string()))?
+                    {
+                        if !names.contains(&name) {
+                            names.push(name);
+                        }
+                    }
+                }
+                options.insert(id.clone(), names);
+            }
+            Choice::Pick {
+                id,
+                trail: Some(step),
+                ..
+            } => {
+                let Some(position) = profile.list.trail.iter().position(|t| &t.name == step) else {
+                    continue;
+                };
+                let mut values: Vec<String> = Vec::new();
+                for (_, steps) in &items {
+                    if let Some(Some(v)) = steps.get(position) {
+                        if !values.contains(v) {
+                            values.push(v.clone());
+                        }
+                    }
+                }
+                values.sort();
+                options.insert(id.clone(), values);
+            }
+            _ => {}
+        }
+    }
+    Ok(options)
 }
 
 #[cfg(test)]

@@ -717,6 +717,18 @@ button {
   color: color-mix(in srgb, var(--text-muted) 60%, transparent);
 }
 
+/* Where a task sits: board › group › parent. One line, cut with an ellipsis. */
+.card__trail {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card__facts-trail {
+  text-transform: none;
+}
+
 .meta--overdue {
   color: var(--priority);
   font-weight: 600;
@@ -1598,6 +1610,62 @@ button {
 
 .connector__spacer {
   flex: 1;
+}
+
+.scope {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.scope__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scope__label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.scope__switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scope__ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tick--on {
+  border-color: var(--progress);
+  background: color-mix(in srgb, var(--progress) 12%, var(--bg-raised));
+  color: var(--progress);
+  font-weight: 600;
+}
+
+.tick:focus-visible {
+  outline: 2px solid var(--progress);
+  outline-offset: 2px;
 }
 
 .button--danger-quiet {

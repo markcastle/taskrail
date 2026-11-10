@@ -17,12 +17,14 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - Blueprints: a registry of ready-made profiles in the repository, matched by a server's tools before any model is asked, with `{me}` and `identity` so one profile serves everyone, and a Blueprint button on each connector to share yours.
 - Blueprint submissions: Submit for review opens a prefilled form, a workflow checks the blueprint and turns it into a pull request, a maintainer merges, and running apps pick it up within the hour.
 - Pause a connector: its tasks stay on the rail marked paused, nothing is pulled or written back, a task from it refuses to change status until it is resumed, and resuming pulls straight away.
+- A trail on every task from a connector, board › group › parent, shown under the title and in the details, resolved by lookups a profile declares.
+- Choices: a blueprint declares switches and picks, each person answers them under Scope on their own connector, so "only mine" can be turned off for a private board and one group on one board is two ticks.
 
 ## 🔜 Next
 
 ### More on a task
 
-Tapping a task should show everything worth knowing: the description, who else is on it, the labels, a link straight to it in the source system, when it last changed. The profile learns to carry those fields, discovery learns to find them, and the details panel learns to lay them out without becoming a form.
+Tapping a task should show everything worth knowing: the description, who else is on it, the labels, a link straight to it in the source system, when it last changed. The profile learns to carry those fields, discovery learns to find them, and the details panel learns to lay them out without becoming a form. Where a task sits is done: see the trail, below.
 
 ### Slicker interaction, with animation and sound
 

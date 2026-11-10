@@ -275,6 +275,64 @@ pub async fn connector_sample(state: State<'_, AppState>, id: String) -> Command
     connector.raw_sample(6_000).await.map_err(|e| e.to_string())
 }
 
+/// What a person can decide about one connector: the profile's choices,
+/// their current answers, and what each pick can be chosen from.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConnectorScope {
+    pub choices: Vec<taskrail_connector_mcp::Choice>,
+    pub scope: taskrail_connector_mcp::Scope,
+    pub options: std::collections::BTreeMap<String, Vec<String>>,
+}
+
+#[tauri::command]
+pub async fn get_connector_scope(
+    state: State<'_, AppState>,
+    id: String,
+) -> CommandResult<ConnectorScope> {
+    let (choices, scope, connector) = {
+        let mut registry = lock(&state.connectors);
+        let profile = registry
+            .profile(&id)
+            .ok_or_else(|| format!("no connector {id}"))?;
+        let choices = profile.choices.clone();
+        let scope = registry.scope(&id);
+        let connector = registry
+            .live(&id)
+            .ok_or_else(|| format!("no connector {id}"))?;
+        (choices, scope, connector)
+    };
+    let options = if choices.is_empty() {
+        Default::default()
+    } else {
+        connector.scope_options().await.map_err(|e| e.to_string())?
+    };
+    Ok(ConnectorScope {
+        choices,
+        scope,
+        options,
+    })
+}
+
+/// Save a person's answers for a connector and pull with them straight away.
+#[tauri::command]
+pub async fn set_connector_scope(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    scope: taskrail_connector_mcp::Scope,
+) -> CommandResult<()> {
+    {
+        let mut registry = lock(&state.connectors);
+        registry.set_scope(&id, scope);
+        let mut rail = lock(&state.rail);
+        registry.save(rail.service.repository_mut())?;
+    }
+    log::info!("scope for {id} changed; pulling");
+    crate::sync::pull(&app, &id).await?;
+    changed(&app);
+    Ok(())
+}
+
 /// Pause or resume a connector. Resuming pulls straight away.
 #[tauri::command]
 pub async fn set_connector_paused(
