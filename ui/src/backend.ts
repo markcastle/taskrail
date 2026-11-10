@@ -330,7 +330,8 @@ function browserBackend(): RailBackend {
     origin: null,
     window: null,
     due,
-    completed_at: status === 'done' ? minutes(-120) : null,
+    // Two hours ago, but never before today began: the day's count must hold whatever the clock says.
+    completed_at: status === 'done' ? new Date(Math.max(new Date().setHours(0, 0, 0, 0) + 60_000, now - 120 * 60_000)).toISOString() : null,
     updated_at: minutes(0),
   })
   const event = (id: string, title: string, startsIn: number, lasts: number): Item => ({
