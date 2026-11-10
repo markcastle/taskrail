@@ -15,6 +15,13 @@ name: Release
 #
 # The build runs in this same workflow rather than off the tag push, because
 # a tag pushed with the workflow's own token does not start other workflows.
+#
+# The release itself is created as a draft before the builds start and
+# published after both have uploaded. Two reasons. "latest" never points at a
+# release with no installers on it. And the workflow token may only create a
+# release for a commit that matches the head of main in its workflow files,
+# so the release is created the moment the tag is fresh, not fifteen minutes
+# later when main may have moved on (that is how 0.8.1 failed).
 
 on:
   workflow_dispatch:
@@ -152,6 +159,7 @@ jobs:
       # the app opens from "Release notes" when it offers the update, so it is
       # written for the person using the app. A hand-pushed tag with no
       # section falls back to the commit headlines since the previous release.
+      # Written to a file for gh and to an output for tauri-action's fallback.
       - name: Write the release notes
         id: notes
         run: |
@@ -164,14 +172,34 @@ jobs:
             notes=$(git log "$range" --no-merges --pretty=format:'- %s' | grep -v -- '- Release v' | grep -v -i -- '- Merge ' || true)
           fi
           if [ -z "$notes" ]; then notes="- Small fixes and improvements."; fi
+          notes="$notes
+
+          Every version's notes are in [CHANGELOG.md](https://github.com/markcastle/taskrail/blob/main/CHANGELOG.md). Download below, or install and update in one line from https://taskrail.uk"
+          printf '%s\n' "$notes" > "$RUNNER_TEMP/release-notes.md"
           {
             echo "notes<<EOF"
             echo "$notes"
-            echo ""
-            echo "Every version's notes are in [CHANGELOG.md](https://github.com/markcastle/taskrail/blob/main/CHANGELOG.md). Download below, or install and update in one line from https://taskrail.uk"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
           echo "$notes"
+
+      # A draft, so nothing sees it until the installers are on it. The build
+      # jobs find it by tag and upload to it; the publish job opens it.
+      - name: Create the release as a draft
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          if gh release view "v$version" --json isDraft >/dev/null 2>&1; then
+            echo "Release v$version already exists; the builds will upload to it."
+            exit 0
+          fi
+          if ! gh release create "v$version" --draft --title "Task Rail v$version" --notes-file "$RUNNER_TEMP/release-notes.md"; then
+            echo "::error::GitHub refused to create the release. This happens when main has moved on with workflow changes since the tag was made. Create it by hand, published, from a checkout: gh release create v$version --title \"Task Rail v$version\" --notes-file <(node scripts/changelog.mjs section $version) and then re-run the failed jobs."
+            exit 1
+          fi
+          echo "Created draft release v$version."
 
   build:
     name: Build (${{ matrix.name }})
@@ -220,6 +248,35 @@ jobs:
           tagName: v${{ needs.prepare.outputs.version }}
           releaseName: 'Task Rail v${{ needs.prepare.outputs.version }}'
           releaseBody: ${{ needs.prepare.outputs.notes }}
-          releaseDraft: false
+          # true makes tauri-action look through the release list, which is
+          # the only way it finds the draft that prepare made. The publish
+          # job opens it once every installer is on it.
+          releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+  publish:
+    name: Publish
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Open the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version="${{ needs.prepare.outputs.version }}"
+          assets=$(gh release view "v$version" --json assets --jq '.assets | map(.name) | join(", ")')
+          echo "Assets on v$version: $assets"
+          for needed in setup.exe .dmg latest.json; do
+            case "$assets" in
+              *"$needed"*) ;;
+              *) echo "::error::v$version has no $needed on it, so it stays a draft. Check the build jobs."; exit 1 ;;
+            esac
+          done
+          if ! gh release edit "v$version" --draft=false --latest; then
+            echo "::error::Every installer is on the draft but GitHub refused to publish it. Open https://github.com/${GH_REPO}/releases and press Publish release on v$version."
+            exit 1
+          fi
+          echo "Task Rail v$version is published: https://github.com/${GH_REPO}/releases/tag/v$version"
+          echo "Running apps will see it within the hour."

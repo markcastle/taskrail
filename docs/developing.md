@@ -118,8 +118,11 @@ On GitHub, open **Actions**, pick **Release** on the left, press **Run workflow*
 
 1. Refuses if the version is not higher than the last release, if CI has not passed on the latest commit to main, or if the changelog has nothing under Unreleased.
 2. Dates the Unreleased section as the version and opens a fresh one, sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.conf.json`, updates `Cargo.lock`, commits and tags.
-3. Builds a Windows installer (NSIS, per-user, no admin prompt) and a universal macOS disk image.
-4. Publishes a GitHub Release with both attached and the changelog section as the notes.
+3. Creates the GitHub Release as a draft, with the changelog section as the notes.
+4. Builds a Windows installer (NSIS, per-user, no admin prompt) and a universal macOS disk image, and uploads them to the draft.
+5. Publishes the release once both installers and the updater manifest are on it, so "latest" never points at a release with nothing to download.
+
+The draft is made first for a second reason: the workflow's token can only create a release for a commit that matches the head of main in its workflow files, so it has to happen while the tag is fresh. Pushing to main while a release is building is fine.
 
 Tick **Rehearse** to see steps 1 and 2 in the log without anything being pushed, built or published. A rehearsal can run from any branch.
 
