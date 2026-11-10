@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use taskrail_connector_api::{Capabilities, Connector};
+use taskrail_connector_ics::IcsCalendar;
 use taskrail_connector_mcp::profile::fake_tracker_profile;
 use taskrail_connector_mcp::{ConnectorProfile, McpConnector, Scope, ServerSpec};
 use taskrail_core::ports::{KeyValueStore, SecretStore};
@@ -22,12 +23,36 @@ pub const PROFILES_KEY: &str = "connector_profiles";
 pub const PAUSED_KEY: &str = "connector_paused";
 /// Each connector's answers to its profile's choices, as a JSON map by id.
 pub const SCOPES_KEY: &str = "connector_scopes";
+/// Calendar feeds, as a JSON list. Their addresses live in the credential store.
+pub const FEEDS_KEY: &str = "calendar_feeds";
+
+/// A calendar that publishes an iCalendar feed. The address is the secret
+/// (whoever has it can read the calendar), so only its credential-store
+/// name is kept here.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CalendarFeed {
+    pub id: String,
+    pub name: String,
+    pub url_secret: String,
+    #[serde(default = "default_feed_poll")]
+    pub poll_seconds: u32,
+}
+
+fn default_feed_poll() -> u32 {
+    300
+}
+
+pub fn calendar_secret_name(id: &str) -> String {
+    format!("calendar:{id}:url")
+}
 
 /// What the UI shows for each connector.
 #[derive(Debug, Clone, Serialize)]
 pub struct ConnectorSummary {
     pub id: String,
     pub name: String,
+    /// "mcp" for a profile-driven server, "calendar" for a feed.
+    pub kind: String,
     pub server: String,
     pub capabilities: Capabilities,
     pub poll_seconds: u32,
@@ -52,6 +77,8 @@ pub struct ConnectorRegistry {
     status: HashMap<String, SyncStatus>,
     paused: Vec<String>,
     scopes: HashMap<String, Scope>,
+    feeds: Vec<CalendarFeed>,
+    live_feeds: HashMap<String, Arc<IcsCalendar>>,
 }
 
 impl ConnectorRegistry {
@@ -74,10 +101,17 @@ impl ConnectorRegistry {
             .flatten()
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_default();
+        let feeds = store
+            .get_value(FEEDS_KEY)
+            .ok()
+            .flatten()
+            .and_then(|json| serde_json::from_str(&json).ok())
+            .unwrap_or_default();
         Self {
             profiles,
             paused,
             scopes,
+            feeds,
             ..Default::default()
         }
     }
@@ -94,7 +128,41 @@ impl ConnectorRegistry {
         let scopes = serde_json::to_string(&self.scopes).map_err(|e| e.to_string())?;
         store
             .set_value(SCOPES_KEY, &scopes)
+            .map_err(|e| e.to_string())?;
+        let feeds = serde_json::to_string(&self.feeds).map_err(|e| e.to_string())?;
+        store
+            .set_value(FEEDS_KEY, &feeds)
             .map_err(|e| e.to_string())
+    }
+
+    pub fn feeds(&self) -> &[CalendarFeed] {
+        &self.feeds
+    }
+
+    pub fn add_feed(&mut self, feed: CalendarFeed) -> Result<(), String> {
+        if self.ids().iter().any(|id| id == &feed.id) {
+            return Err(format!("a connector with id {:?} already exists", feed.id));
+        }
+        self.feeds.push(feed);
+        Ok(())
+    }
+
+    /// Any connector, MCP or calendar, behind the one trait sync speaks.
+    pub fn live_any(&mut self, id: &str) -> Option<Arc<dyn Connector>> {
+        if let Some(c) = self.live(id) {
+            return Some(c);
+        }
+        if let Some(c) = self.live_feeds.get(id) {
+            return Some(c.clone());
+        }
+        let feed = self.feeds.iter().find(|f| f.id == id)?.clone();
+        let url = crate::secrets::OsSecrets
+            .get(&feed.url_secret)
+            .ok()
+            .flatten()?;
+        let calendar = Arc::new(IcsCalendar::new(feed.id.clone(), feed.name.clone(), url));
+        self.live_feeds.insert(id.to_owned(), calendar.clone());
+        Some(calendar)
     }
 
     /// One connector's answers to its choices, or the defaults.
@@ -134,6 +202,12 @@ impl ConnectorRegistry {
             .iter()
             .find(|p| p.id == id)
             .map(|p| p.name.clone())
+            .or_else(|| {
+                self.feeds
+                    .iter()
+                    .find(|f| f.id == id)
+                    .map(|f| f.name.clone())
+            })
             .unwrap_or_else(|| id.to_owned())
     }
 
@@ -142,7 +216,11 @@ impl ConnectorRegistry {
     }
 
     pub fn ids(&self) -> Vec<String> {
-        self.profiles.iter().map(|p| p.id.clone()).collect()
+        self.profiles
+            .iter()
+            .map(|p| p.id.clone())
+            .chain(self.feeds.iter().map(|f| f.id.clone()))
+            .collect()
     }
 
     pub fn add(&mut self, profile: ConnectorProfile) -> Result<(), String> {
@@ -161,13 +239,18 @@ impl ConnectorRegistry {
     }
 
     pub fn remove(&mut self, id: &str) -> bool {
-        let before = self.profiles.len();
+        let before = self.profiles.len() + self.feeds.len();
         self.profiles.retain(|p| p.id != id);
+        if let Some(feed) = self.feeds.iter().find(|f| f.id == id) {
+            let _ = crate::secrets::OsSecrets.delete(&feed.url_secret);
+        }
+        self.feeds.retain(|f| f.id != id);
         self.live.remove(id);
+        self.live_feeds.remove(id);
         self.status.remove(id);
         self.paused.retain(|p| p != id);
         self.scopes.remove(id);
-        self.profiles.len() != before
+        self.profiles.len() + self.feeds.len() != before
     }
 
     /// The live connector for a profile, built on first use.
@@ -196,18 +279,24 @@ impl ConnectorRegistry {
     }
 
     pub fn due_for_sync(&self, now: DateTime<Utc>) -> Vec<String> {
+        let due = |id: &str, poll: u32| {
+            !self.is_paused(id)
+                && self
+                    .status
+                    .get(id)
+                    .and_then(|s| s.last_sync)
+                    .map_or(true, |last| (now - last).num_seconds() >= i64::from(poll))
+        };
         self.profiles
             .iter()
-            .filter(|p| !self.is_paused(&p.id))
-            .filter(|p| {
-                self.status
-                    .get(&p.id)
-                    .and_then(|s| s.last_sync)
-                    .map_or(true, |last| {
-                        (now - last).num_seconds() >= i64::from(p.poll_seconds)
-                    })
-            })
+            .filter(|p| due(&p.id, p.poll_seconds))
             .map(|p| p.id.clone())
+            .chain(
+                self.feeds
+                    .iter()
+                    .filter(|f| due(&f.id, f.poll_seconds))
+                    .map(|f| f.id.clone()),
+            )
             .collect()
     }
 
@@ -220,6 +309,7 @@ impl ConnectorRegistry {
                 ConnectorSummary {
                     id: p.id.clone(),
                     name: p.name.clone(),
+                    kind: "mcp".into(),
                     server: taskrail_connector_mcp::session::describe(&p.server),
                     capabilities: live.map(|c| c.info().capabilities).unwrap_or(Capabilities {
                         read: true,
@@ -233,6 +323,25 @@ impl ConnectorRegistry {
                     paused: self.is_paused(&p.id),
                 }
             })
+            .chain(self.feeds.iter().map(|f| {
+                let status = self.status.get(&f.id).cloned().unwrap_or_default();
+                ConnectorSummary {
+                    id: f.id.clone(),
+                    name: f.name.clone(),
+                    kind: "calendar".into(),
+                    server: "iCalendar feed".into(),
+                    capabilities: Capabilities {
+                        read: true,
+                        write_status: false,
+                        create: false,
+                    },
+                    poll_seconds: f.poll_seconds,
+                    last_sync: status.last_sync,
+                    last_error: status.last_error,
+                    item_count: status.item_count,
+                    paused: self.is_paused(&f.id),
+                }
+            }))
             .collect()
     }
 }

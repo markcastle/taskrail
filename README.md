@@ -39,6 +39,7 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 - 🗓️ **Your day at a glance.** Today's date, how many tasks are done, what is up next, and your priorities in the order you set.
 - 🖐️ **Gestures, not menus.** Drag to reorder, pull into In progress, flick to complete, tap for details.
 - 🔁 **Two-way sync.** Moving a task on the rail moves it in the system it came from.
+- 📅 **Your calendar too.** Paste a calendar's iCalendar address and today's meetings join the rail, the next one up top.
 - 🔌 **Any MCP server.** Known systems connect from a shared blueprint with nothing to set up. For a new one, a model reads its tools and writes the connector, then it is out of the loop.
 - 🎯 **One thing in focus.** Mark the task you are on. It sits at the top as Up next.
 - ⌨️ **Quick-add anywhere.** Ctrl+Shift+Space from any window.

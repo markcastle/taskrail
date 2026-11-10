@@ -19,6 +19,7 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - Pause a connector: its tasks stay on the rail marked paused, nothing is pulled or written back, a task from it refuses to change status until it is resumed, and resuming pulls straight away.
 - A trail on every task from a connector, board › group › parent, shown under the title and in the details, resolved by lookups a profile declares.
 - Choices: a blueprint declares switches and picks, each person answers them under Scope on their own connector, so "only mine" can be turned off for a private board and one group on one board is two ticks.
+- Calendars: any iCalendar feed, which covers Google, Outlook and Apple, added by its address with no MCP server involved. Repeating events expanded, today's events in a Today section, the next one as Up next. The address lives in the credential store.
 - Animation and sound, both optional. A ticked task slides away and the gap closes, a new task arrives, Up next fades in, the progress bar fills. Animation is on by default and off with one switch or the system's reduce-motion setting. Sound is a quiet tick on complete and a softer one on start, off until turned on, with the same switch in Settings and as **Silence Task Rail** in the tray.
 
 ## 🔜 Next
@@ -42,10 +43,6 @@ The API key stays as the last resort, clearly labelled as such, for a server non
 A Windows code-signing certificate and an Apple Developer ID, stored as repository secrets and used by the Release workflow. Until then the one-line install clears the first-run warnings, but anyone who downloads an installer by hand from the releases page meets SmartScreen or Gatekeeper.
 
 ## 🧭 On the list
-
-### Calendar events
-
-Events from your calendar on the rail, timed, with the next one as Up next when it is close. A calendar is a connector whose items carry a time instead of a status, so most of the plumbing exists; the open question is whether Google Calendar comes through an MCP server or a first-party connector.
 
 ### Ready-made profiles
 

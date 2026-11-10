@@ -61,6 +61,8 @@ export interface RailView {
   in_progress: Item[]
   active: string | null
   done_today: Item[]
+  /** Today's calendar events that have not ended, soonest first. */
+  events_today: Item[]
 }
 
 export type Theme = 'system' | 'light' | 'dark'
@@ -104,6 +106,8 @@ export interface MonitorInfo {
 export interface ConnectorSummary {
   id: string
   name: string
+  /** "mcp" for a profile-driven server, "calendar" for an iCalendar feed. */
+  kind: 'mcp' | 'calendar'
   server: string
   capabilities: { read: boolean; write_status: boolean; create: boolean }
   poll_seconds: number
@@ -203,6 +207,8 @@ export interface RailBackend {
   addConnectorProfile(profileJson: string, bearer?: string): Promise<ConnectorSummary>
   /** Add the built-in demo tracker, then pull from it. */
   addDemoConnector(): Promise<ConnectorSummary>
+  /** Add a calendar by its iCalendar address. Read once to check it, then pulled. */
+  addCalendar(name: string, url: string): Promise<ConnectorSummary>
   removeConnector(id: string): Promise<void>
   /** Pause or resume a connector. Resuming pulls straight away. */
   setConnectorPaused(id: string, paused: boolean): Promise<ConnectorSummary>
@@ -283,6 +289,7 @@ function tauriBackend(): RailBackend {
     listConnectors: () => call('list_connectors'),
     addConnectorProfile: (profileJson, bearer) => call('add_connector_profile', { profileJson, bearer: bearer ?? null }),
     addDemoConnector: () => call('add_demo_connector'),
+    addCalendar: (name, url) => call('add_calendar', { name, url }),
     removeConnector: (id) => call('remove_connector', { id }),
     setConnectorPaused: (id, paused) => call('set_connector_paused', { id, paused }),
     syncConnector: (id) => call('sync_connector', { id }),
@@ -422,6 +429,7 @@ function browserBackend(): RailBackend {
   const demoSummary = (): ConnectorSummary => ({
     id: 'demo-tracker',
     name: 'Demo tracker',
+    kind: 'mcp',
     server: 'taskrail --fake-mcp-server',
     capabilities: { read: true, write_status: true, create: true },
     poll_seconds: 30,
@@ -491,7 +499,10 @@ function browserBackend(): RailBackend {
         const done_today = items
           .filter((i) => i.kind === 'task' && i.status === 'done' && i.completed_at && Date.parse(i.completed_at) >= midnight)
           .sort((a, b) => Date.parse(b.completed_at!) - Date.parse(a.completed_at!))
+        const endOfToday = new Date().setHours(24, 0, 0, 0)
+        const events_today = upcoming.filter((i) => Date.parse(i.window!.start) < endOfToday)
         return {
+          events_today,
           up_next: upcoming[0] ?? null,
           top,
           top_hidden,
@@ -583,8 +594,26 @@ function browserBackend(): RailBackend {
         }
         if (!profile.id || !profile.name) throw new Error('a profile needs an id and a name')
         if (connectors.some((c) => c.id === profile.id)) throw new Error(`a connector with id "${profile.id}" already exists`)
-        const summary = { ...demoSummary(), id: profile.id, name: profile.name, item_count: 0 }
+        const summary: ConnectorSummary = { ...demoSummary(), id: profile.id, name: profile.name, item_count: 0 }
         connectors = [...connectors, summary]
+        notify()
+        return summary
+      }),
+    addCalendar: (name, url) =>
+      async(() => {
+        if (!/^(https?|webcal):\/\//.test(url.trim())) throw new Error('a calendar address starts with https:// or webcal://')
+        if (url.includes('broken')) throw new Error('that address did not return a calendar: not an iCalendar feed')
+        const title = name.trim() || 'Calendar'
+        const id = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'calendar'
+        if (connectors.some((c) => c.id === id)) throw new Error(`a connector with id "${id}" already exists`)
+        const summary: ConnectorSummary = { ...demoSummary(), id, name: title, kind: 'calendar', server: 'iCalendar feed', capabilities: { read: true, write_status: false, create: false }, poll_seconds: 300, item_count: 2 }
+        connectors = [...connectors, summary]
+        const origin = (ext: string) => ({ connector: id, external_id: ext, url: null })
+        items = [
+          ...items,
+          { ...task(`${id}:ev-1`, 'Design review', 'todo'), kind: 'event', window: { start: minutes(90), end: minutes(150) }, origin: origin('ev-1') },
+          { ...task(`${id}:ev-2`, 'Dentist', 'todo'), kind: 'event', window: { start: minutes(24 * 60 + 60), end: minutes(24 * 60 + 120) }, origin: origin('ev-2') },
+        ]
         notify()
         return summary
       }),

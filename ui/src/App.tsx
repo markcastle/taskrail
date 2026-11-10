@@ -164,6 +164,7 @@ export default function App() {
   const progressFolded = !showAll && !moreProgress && inProgress.length > foldLimit
   const progressShown = progressFolded ? inProgress.slice(0, foldLimit) : inProgress
   const done = useMemo(() => view?.done_today.filter(matches) ?? [], [view, matches])
+  const eventsToday = useMemo(() => view?.events_today.filter(matches) ?? [], [view, matches])
   const sortableTodo = useMemo(() => priorities.filter((i) => i.kind === 'task'), [priorities])
   // Rows seen before do not animate in; a new one does. The first view counts
   // as seen at once, so the opening screen is still; later views catch up
@@ -373,6 +374,14 @@ export default function App() {
         />
       )}
 
+      {eventsToday.length > 0 && (
+        <Section title="Today" tone="today" count={eventsToday.length}>
+          {eventsToday.map((item) => (
+            <Row key={item.id} {...rowProps(item)} />
+          ))}
+        </Section>
+      )}
+
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
         <Section title="Priorities" tone="priority" count={priorities.length} dropId={`${SECTION_DROP_PREFIX}todo`}>
           <SortableContext items={sortableTodo.map((i) => i.id)} strategy={verticalListSortingStrategy}>
@@ -552,7 +561,7 @@ function Section({
   children,
 }: {
   title: string
-  tone: 'priority' | 'progress' | 'later' | 'done'
+  tone: 'priority' | 'progress' | 'later' | 'done' | 'today'
   count: number
   collapsed?: boolean
   dropId?: string

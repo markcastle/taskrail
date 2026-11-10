@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use taskrail_connector_api::Connector;
-use taskrail_connector_mcp::McpConnector;
 use taskrail_core::domain::{Origin, Status};
 use taskrail_sync::apply_remote;
 use tauri::{AppHandle, Emitter, Manager};
@@ -37,7 +36,7 @@ pub fn start(app: AppHandle) {
 /// One pull: list without holding any lock, then merge under the rail lock.
 pub async fn pull(app: &AppHandle, id: &str) -> Result<usize, String> {
     let state = app.state::<AppState>();
-    let Some(connector) = lock(&state.connectors).live(id) else {
+    let Some(connector) = lock(&state.connectors).live_any(id) else {
         return Err(format!("no connector {id}"));
     };
     let outcome = pull_with(app, connector).await;
@@ -48,7 +47,7 @@ pub async fn pull(app: &AppHandle, id: &str) -> Result<usize, String> {
     outcome
 }
 
-async fn pull_with(app: &AppHandle, connector: Arc<McpConnector>) -> Result<usize, String> {
+async fn pull_with(app: &AppHandle, connector: Arc<dyn Connector>) -> Result<usize, String> {
     let remote = connector.list().await.map_err(|e| e.to_string())?;
     let count = remote.len();
     let state = app.state::<AppState>();
@@ -87,7 +86,7 @@ pub fn write_back(app: &AppHandle, origin: Option<Origin>, status: Status) {
     tauri::async_runtime::spawn(async move {
         let id = origin.connector.as_str().to_owned();
         let state = app.state::<AppState>();
-        let Some(connector) = lock(&state.connectors).live(&id) else {
+        let Some(connector) = lock(&state.connectors).live_any(&id) else {
             return;
         };
         if !connector.info().capabilities.write_status {

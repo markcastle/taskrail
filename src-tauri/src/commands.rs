@@ -3,6 +3,7 @@
 //! `rail:changed` event so every view refreshes.
 
 use serde::{Deserialize, Serialize};
+use taskrail_connector_api::Connector;
 use taskrail_core::domain::{Item, ItemId, Status};
 use taskrail_core::ports::ItemRepository;
 use taskrail_core::settings::RailSettings;
@@ -379,6 +380,77 @@ pub async fn set_connector_paused(
         .into_iter()
         .find(|s| s.id == id)
         .ok_or_else(|| format!("no connector {id}"))
+}
+
+/// Add a calendar by its iCalendar address. The feed is read once first, so
+/// a wrong address fails here rather than quietly later; the address then
+/// goes into the credential store and the calendar onto the rail.
+#[tauri::command]
+pub async fn add_calendar(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+    url: String,
+) -> CommandResult<ConnectorSummary> {
+    use taskrail_core::ports::SecretStore;
+    let url = url.trim().to_owned();
+    if !(url.starts_with("https://") || url.starts_with("http://") || url.starts_with("webcal://"))
+    {
+        return Err("a calendar address starts with https:// or webcal://".into());
+    }
+    let name = {
+        let trimmed = name.trim();
+        if trimmed.is_empty() {
+            "Calendar".to_owned()
+        } else {
+            trimmed.to_owned()
+        }
+    };
+    let id = {
+        let registry = lock(&state.connectors);
+        taskrail_connector_mcp::discovery::unique_id(
+            &taskrail_connector_mcp::discovery::slug(&name),
+            &registry.ids(),
+        )
+    };
+    let probe = taskrail_connector_ics::IcsCalendar::new(id.clone(), name.clone(), url.clone());
+    let found = probe.list().await.map_err(|e| match e {
+        taskrail_connector_api::ConnectorError::Protocol(m) => {
+            format!("that address did not return a calendar: {m}")
+        }
+        other => format!("could not read the calendar: {other}"),
+    })?;
+    log::info!(
+        "calendar {name:?} read: {} events in the next {} days",
+        found.len(),
+        taskrail_connector_ics::DAYS_AHEAD
+    );
+    let secret = crate::connectors::calendar_secret_name(&id);
+    crate::secrets::OsSecrets
+        .set(&secret, &url)
+        .map_err(|e| e.to_string())?;
+    {
+        let mut registry = lock(&state.connectors);
+        registry.add_feed(crate::connectors::CalendarFeed {
+            id: id.clone(),
+            name,
+            url_secret: secret,
+            poll_seconds: 300,
+        })?;
+        let mut rail = lock(&state.rail);
+        registry.save(rail.service.repository_mut())?;
+        let retired = crate::seed::retire(&mut rail.service).map_err(|e| e.to_string())?;
+        if retired > 0 {
+            log::info!("took {retired} welcome cards off the rail now that a connector is set up");
+        }
+    }
+    crate::sync::pull(&app, &id).await?;
+    changed(&app);
+    lock(&state.connectors)
+        .summaries()
+        .into_iter()
+        .find(|s| s.id == id)
+        .ok_or_else(|| "connector vanished".to_owned())
 }
 
 /// Remove a connector and every card that came from it.

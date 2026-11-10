@@ -267,6 +267,27 @@ await settings.getByTestId('done-add').click()
 await settings.getByTestId('connector-demo-tracker').getByRole('button', { name: 'Remove', exact: true }).click()
 await settings.getByText('Nothing connected yet.').waitFor()
 
+// 10c. A calendar: a bad address is refused with a reason, a good one lands today's events on the rail.
+await settings.getByRole('button', { name: /^Add a calendar/ }).click()
+await settings.getByLabel('Calendar address').fill('https://cal.example/broken.ics')
+await settings.getByTestId('add-calendar-go').click()
+await settings.locator('.result--error', { hasText: 'did not return a calendar' }).waitFor()
+await settings.getByLabel('Calendar name').fill('Work')
+await settings.getByLabel('Calendar address').fill('https://cal.example/work.ics')
+await settings.getByTestId('add-calendar-go').click()
+await settings.getByTestId('connector-work').waitFor()
+assert.match(await settings.getByTestId('connector-work').textContent(), /Calendar/, 'the card says it is a calendar')
+assert.equal(await settings.getByTestId('connector-work').getByRole('button', { name: 'Blueprint', exact: true }).count(), 0, 'no blueprint for a calendar')
+await page.getByTestId('section-today').waitFor()
+{
+  const today = await titles('today')
+  assert.ok(today.includes('Design review'), `today's event shows: ${today.join(', ')}`)
+  assert.ok(!today.includes('Dentist'), "tomorrow's does not")
+}
+await settings.getByTestId('connector-work').getByRole('button', { name: 'Remove', exact: true }).click()
+await settings.getByText('Nothing connected yet.').waitFor()
+await page.waitForFunction(() => ![...document.querySelectorAll('[data-testid="section-today"] .card__title')].some((n) => n.textContent === 'Design review'))
+
 // 10b. A pasted blueprint is used instead of the registry, and Paste profile knows one when it sees it.
 await settings.getByRole('button', { name: /^Paste a profile/ }).click()
 await settings.getByLabel('Connector profile JSON').fill('{"id": "x", "title": "Pasted thing", "match": {"tools": ["a"]}, "profile": {"list": {"tool": "a"}}}')

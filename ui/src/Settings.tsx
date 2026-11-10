@@ -511,7 +511,7 @@ function ModelPage({ notify, fail }: { notify: (tone: Tone, text: string) => voi
 
 function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void; onOpenModel: () => void }) {
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
-  const [mode, setMode] = useState<'none' | 'server' | 'profile'>('none')
+  const [mode, setMode] = useState<'none' | 'server' | 'profile' | 'calendar'>('none')
   const [blueprint, setBlueprint] = useState<{ id: string; json: string } | null>(null)
   const [sample, setSample] = useState<{ id: string; text: string } | null>(null)
   const [scope, setScope] = useState<{ id: string; data: ConnectorScope } | null>(null)
@@ -579,13 +579,14 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
             <div className="connector__head">
               <span className={`connector__dot${c.last_error ? ' connector__dot--error' : c.paused ? ' connector__dot--paused' : ''}`} aria-hidden="true" />
               <span className="connector__name">{c.name}</span>
+              {c.kind === 'calendar' && <span className="connector__tag">Calendar</span>}
               {c.paused && <span className="connector__tag">Paused</span>}
               <span className="connector__count">
-                {c.item_count} {c.item_count === 1 ? 'task' : 'tasks'}
+                {c.item_count} {c.kind === 'calendar' ? (c.item_count === 1 ? 'event' : 'events') : c.item_count === 1 ? 'task' : 'tasks'}
               </span>
             </div>
             <span className="connector__meta">
-              {c.capabilities.write_status ? 'Changes sync back' : 'Read-only'} · {c.paused ? 'not refreshing' : `refreshes every ${c.poll_seconds}s`} ·{' '}
+              {c.kind === 'calendar' ? 'The next 14 days' : c.capabilities.write_status ? 'Changes sync back' : 'Read-only'} · {c.paused ? 'not refreshing' : `refreshes every ${c.poll_seconds}s`} ·{' '}
               <span className="connector__host" title={c.server}>
                 {hostOf(c.server)}
               </span>
@@ -606,15 +607,19 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
                   </button>
                 </>
               )}
-              <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showScope(c.id)} aria-expanded={scope?.id === c.id}>
-                {busy === `scope-${c.id}` ? <Spinner label="Looking…" /> : 'Scope'}
-              </button>
-              <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showBlueprint(c.id)} aria-expanded={blueprint?.id === c.id}>
-                Blueprint
-              </button>
-              <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showSample(c.id)} aria-expanded={sample?.id === c.id}>
-                {busy === `sample-${c.id}` ? <Spinner label="Fetching…" /> : 'Raw sample'}
-              </button>
+              {c.kind !== 'calendar' && (
+                <>
+                  <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showScope(c.id)} aria-expanded={scope?.id === c.id}>
+                    {busy === `scope-${c.id}` ? <Spinner label="Looking…" /> : 'Scope'}
+                  </button>
+                  <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showBlueprint(c.id)} aria-expanded={blueprint?.id === c.id}>
+                    Blueprint
+                  </button>
+                  <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showSample(c.id)} aria-expanded={sample?.id === c.id}>
+                    {busy === `sample-${c.id}` ? <Spinner label="Fetching…" /> : 'Raw sample'}
+                  </button>
+                </>
+              )}
               <span className="connector__spacer" />
               <button type="button" className="button button--quiet button--danger-quiet" disabled={busy !== null} onClick={() => run(`remove-${c.id}`, () => backend.removeConnector(c.id), () => notify('info', `Removed ${c.name}`))}>
                 Remove
@@ -649,11 +654,26 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
           <span className="choice__title">{busy === 'demo' ? <Spinner label="Connecting…" /> : 'Add demo tracker'}</span>
           <span className="choice__text">A small fake issue tracker, to see two-way sync working.</span>
         </button>
+        <button type="button" className={`choice${mode === 'calendar' ? ' choice--on' : ''}`} disabled={busy !== null} onClick={() => setMode(mode === 'calendar' ? 'none' : 'calendar')} aria-expanded={mode === 'calendar'}>
+          <span className="choice__title">Add a calendar</span>
+          <span className="choice__text">Google, Outlook, Apple or any other: paste its iCalendar address.</span>
+        </button>
         <button type="button" className={`choice${mode === 'profile' ? ' choice--on' : ''}`} disabled={busy !== null} onClick={() => setMode(mode === 'profile' ? 'none' : 'profile')} aria-expanded={mode === 'profile'}>
           <span className="choice__title">Paste a profile</span>
           <span className="choice__text">For the technical: a Connector Profile as JSON.</span>
         </button>
       </div>
+      {mode === 'calendar' && (
+        <section className="group">
+          <AddCalendar
+            notify={notify}
+            onAdded={() => {
+              setMode('none')
+              reload()
+            }}
+          />
+        </section>
+      )}
 
       {mode === 'server' && (
         <section className="group">
@@ -752,6 +772,51 @@ function ScopePanel({ id, data, onChange, onClose }: { id: string; data: Connect
           Close
         </button>
       </div>
+    </div>
+  )
+}
+
+/** A calendar by its iCalendar address. Read once to check it, then on the rail. */
+function AddCalendar({ notify, onAdded }: { notify: (tone: Tone, text: string) => void; onAdded: () => void }) {
+  const [name, setName] = useState('')
+  const [url, setUrl] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const add = () => {
+    setBusy(true)
+    setProblem(null)
+    backend
+      .addCalendar(name, url)
+      .then((summary) => {
+        notify('success', `${summary.name} added · ${summary.item_count} ${summary.item_count === 1 ? 'event' : 'events'} in the next 14 days`)
+        onAdded()
+      })
+      .catch((e) => setProblem(String(e).replace(/^Error: /, '')))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <div className="panel panel--form" data-testid="add-calendar">
+      <Row label="Name" help="Optional. How the calendar is named on the rail.">
+        <input type="text" aria-label="Calendar name" placeholder="Work" value={name} onChange={(e) => setName(e.target.value)} />
+      </Row>
+      <Row
+        label="Calendar address"
+        help="The private iCalendar link. Google: calendar settings, Integrate calendar, Secret address in iCal format. Outlook: Shared calendars, Publish, ICS link. Apple: share the calendar publicly and copy its link."
+        stack
+      >
+        <input type="url" aria-label="Calendar address" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" value={url} onChange={(e) => setUrl(e.target.value)} />
+      </Row>
+      <p className="settings-muted">Anyone with this address can read the calendar, so it is kept in your credential store, not in a file.</p>
+      <div className="settings-actions settings-actions--end">
+        <button type="button" className="button button--primary" disabled={busy || !url.trim()} onClick={add} data-testid="add-calendar-go">
+          {busy ? <Spinner label="Reading the calendar…" /> : 'Add calendar'}
+        </button>
+      </div>
+      {problem && (
+        <Result tone="error">
+          <strong>Couldn't add it.</strong> {problem}
+        </Result>
+      )}
     </div>
   )
 }

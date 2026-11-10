@@ -194,6 +194,20 @@ People use the same system differently. One keeps a private board with nothing a
 
 Changing anything in Scope saves at once and pulls again. The tick lists are filled from the live server: boards from the fan-out, groups from the tasks seen with every switch off.
 
+## Calendars
+
+A calendar is a connector too, but it needs no MCP server and no profile: almost every calendar publishes an iCalendar feed. **Add a calendar** takes the feed's address, reads it once to make sure it is a calendar, and puts the next fourteen days of events on the rail. Repeating events are expanded, moved and cancelled occurrences are honoured, all-day events span the day.
+
+Where the address is:
+
+- **Google Calendar**: the calendar's settings, *Integrate calendar*, *Secret address in iCal format*.
+- **Outlook**: *Shared calendars*, *Publish a calendar*, copy the ICS link.
+- **Apple Calendar**: share the calendar publicly and copy the link it gives you.
+
+The address is the secret: anyone holding it can read the calendar. The app keeps it in your credential store and never in a file. Resetting the address in the calendar's own settings cuts off anything that had the old one.
+
+On the rail, today's remaining events sit in a **Today** section with their times, and an event about to start joins Priorities and becomes Up next. Events are read-only; nothing on the rail changes them.
+
 ## Pausing a connector
 
 **Pause** on a connector keeps its tasks on the rail, marked paused, and stops pulling and writing back. A task from a paused connector refuses to change status, with a note saying why, because the change would not reach the system and the next pull after resuming would undo it. **Resume** pulls straight away. The rail's footer says when every connector is paused.

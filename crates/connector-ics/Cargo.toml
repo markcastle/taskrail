@@ -1,0 +1,22 @@
+[package]
+name = "taskrail-connector-ics"
+description = "Task Rail's calendar connector: any calendar that publishes an iCalendar (.ics) feed."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait = "0.1"
+chrono = { workspace = true }
+chrono-tz = "0.10"
+log = "0.4"
+reqwest = { version = "0.13", default-features = false, features = ["rustls"] }
+rrule = "0.14"
+taskrail-connector-api = { path = "../connector-api" }
+taskrail-core = { path = "../core" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

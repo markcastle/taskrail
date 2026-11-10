@@ -31,7 +31,8 @@ pub use auth::{CredentialPersistence, SessionAuth};
 pub use blueprint::{Blueprint, Registry};
 pub use connector::McpConnector;
 pub use discovery::{
-    discover, discover_or_blueprint, DiscoveryError, DiscoveryOutcome, DiscoveryRequest,
+    discover, discover_or_blueprint, slug, unique_id, DiscoveryError, DiscoveryOutcome,
+    DiscoveryRequest,
 };
 pub use profile::{
     Choice, Condition, ConnectorProfile, FieldPaths, ForEach, Identity, ListSpec, Scope,

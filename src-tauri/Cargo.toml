@@ -30,6 +30,7 @@ tauri-plugin-global-shortcut = "2"
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2"
 taskrail-connector-api = { path = "../crates/connector-api" }
+taskrail-connector-ics = { path = "../crates/connector-ics" }
 taskrail-connector-mcp = { path = "../crates/connector-mcp" }
 taskrail-core = { path = "../crates/core" }
 taskrail-llm = { path = "../crates/llm" }

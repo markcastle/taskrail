@@ -29,6 +29,10 @@ pub struct RailView {
     pub active: Option<ItemId>,
     /// Completed since midnight UTC, newest first.
     pub done_today: Vec<Item>,
+    /// Calendar events that start today (local day, as the caller's `now`
+    /// defines it) and have not ended, soonest first. The day's shape.
+    #[serde(default)]
+    pub events_today: Vec<Item>,
 }
 
 /// `expand_top` lifts the fold, for when the person taps "more".
@@ -48,6 +52,15 @@ pub fn build_rail_view(
         .collect();
     upcoming.sort_by_key(|item| item.window.map(|w| w.start));
     let up_next = upcoming.first().map(|item| (*item).clone());
+    let end_of_today = (now.date_naive() + Duration::days(1))
+        .and_hms_opt(0, 0, 0)
+        .map(|n| n.and_utc())
+        .unwrap_or(now);
+    let events_today: Vec<Item> = upcoming
+        .iter()
+        .filter(|item| item.window.is_some_and(|w| w.start < end_of_today))
+        .map(|item| (*item).clone())
+        .collect();
 
     let mut top: Vec<Item> = upcoming
         .iter()
@@ -102,6 +115,7 @@ pub fn build_rail_view(
         in_progress,
         active,
         done_today,
+        events_today,
     }
 }
 
@@ -185,6 +199,22 @@ mod tests {
         let v = view(&items, None);
         assert_eq!(v.top.len(), 1);
         assert_eq!(v.up_next.as_ref().map(|i| i.id.as_str()), Some("review"));
+    }
+
+    #[test]
+    fn todays_events_are_listed_and_tomorrows_are_not() {
+        // now() is 10:00 UTC on 4 Nov: a 30-minute meeting at 10:30, one at 16:00,
+        // one that finished at 09:00, and one tomorrow morning.
+        let items = vec![
+            event("soon", 30, 30),
+            event("afternoon", 6 * 60, 60),
+            event("earlier", -90, 30),
+            event("tomorrow", 24 * 60, 30),
+        ];
+        let v = view(&items, None);
+        let today: Vec<&str> = v.events_today.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(today, ["soon", "afternoon"]);
+        assert_eq!(v.up_next.as_ref().map(|i| i.id.as_str()), Some("soon"));
     }
 
     #[test]

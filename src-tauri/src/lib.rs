@@ -48,6 +48,7 @@ pub fn run() {
             commands::list_connectors,
             commands::add_connector_profile,
             commands::add_demo_connector,
+            commands::add_calendar,
             commands::remove_connector,
             commands::set_connector_paused,
             commands::connector_sample,
