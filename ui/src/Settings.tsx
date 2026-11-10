@@ -260,12 +260,6 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
           ]}
         />
       </Row>
-      <Row label="Animation" help="Rows slide away, arrive and settle. Off here, or when your system asks for reduced motion.">
-        <Toggle checked={draft.animations} onChange={(v) => set('animations', v)} label="Animation" />
-      </Row>
-      <Row label="Sounds" help="A quiet tick when you complete something, a softer one when you start. The tray has Silence Task Rail for the same switch.">
-        <Toggle checked={draft.sounds} onChange={(v) => set('sounds', v)} label="Sounds" />
-      </Row>
       {monitors.length > 1 && (
         <Row label="Monitor" help="Which display the rail lives on. Unplug it and the rail moves to the main display until it is back." stack>
           <Displays
@@ -297,6 +291,13 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
         <Slider label="Pull in events starting within" value={draft.event_lead_minutes} min={0} max={240} step={5} unit="min" onChange={(v) => set('event_lead_minutes', v)} />
       </Row>
       <Updates autoUpdate={draft.auto_update} onAutoUpdate={(v) => set('auto_update', v)} fail={fail} />
+      <div className="settings-subhead">Feedback</div>
+      <Row label="Animation" help="Rows slide away, arrive and settle. Off here, or when your system asks for reduced motion.">
+        <Toggle checked={draft.animations} onChange={(v) => set('animations', v)} label="Animation" />
+      </Row>
+      <Row label="Sounds" help="A quiet tick when you complete something, a softer one when you start. The tray has Silence Task Rail for the same switch.">
+        <Toggle checked={draft.sounds} onChange={(v) => set('sounds', v)} label="Sounds" />
+      </Row>
     </section>
   )
 }
