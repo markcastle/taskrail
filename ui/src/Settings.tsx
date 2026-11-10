@@ -1021,7 +1021,11 @@ function AddServer({
       {result?.status === 'ok' && (
         <div className="discovery" data-testid="discovery-result">
           <Result tone="success">
-            {added ? (
+            {added && added.count === 0 ? (
+              <>
+                <strong>{added.name} connected.</strong> Nothing is on the rail yet: nothing there is assigned to you. Open <b>Scope</b> on the connector to include unassigned tasks or other boards.
+              </>
+            ) : added ? (
               <>
                 <strong>{added.name} connected.</strong> {added.count} {added.count === 1 ? 'task' : 'tasks'} on the rail
                 {result.blueprint ? `, from the ${result.blueprint} blueprint. No model was needed.` : '.'}
@@ -1032,7 +1036,9 @@ function AddServer({
                 {result.blueprint ? ` using the ${result.blueprint} blueprint.` : '.'} Connecting…
               </>
             )}
-            {result.notes.length > 0 && <span className="connector__meta"> Earlier tries: {result.notes.join('; ')}</span>}
+            {result.notes.filter((n) => !n.startsWith('nothing is on the rail')).length > 0 && (
+              <span className="connector__meta"> Earlier tries: {result.notes.filter((n) => !n.startsWith('nothing is on the rail')).join('; ')}</span>
+            )}
           </Result>
           <ul className="discovery__sample">
             {result.sample.slice(0, 6).map((item) => (

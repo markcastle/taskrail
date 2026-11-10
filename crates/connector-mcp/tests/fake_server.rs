@@ -377,3 +377,37 @@ async fn a_scope_turns_switches_off_and_picks_boards_and_groups() {
         "one group on one board, including the one not assigned to me"
     );
 }
+
+#[tokio::test]
+async fn a_blueprint_that_finds_nothing_for_this_person_still_connects() {
+    use taskrail_connector_mcp::{discover_or_blueprint, Blueprint, DiscoveryRequest, Registry};
+    // The demo blueprint, but with the only-mine switch comparing against someone who has no tickets.
+    let mut registry = Registry::bundled();
+    let demo: &mut Blueprint = registry
+        .blueprints
+        .iter_mut()
+        .find(|b| b.id == "demo-tracker")
+        .unwrap();
+    let choices = demo.profile["choices"].as_array_mut().unwrap();
+    choices[0]["where"][0]["equals"] = serde_json::json!("nobody");
+    let request = DiscoveryRequest {
+        id: "demo".into(),
+        name: "Demo".into(),
+        server: fake_tracker_profile(server()).server,
+        kind: taskrail_core::domain::ItemKind::Task,
+        hint: String::new(),
+        allow_unannotated_list: false,
+        auth: SessionAuth::default(),
+        taken_ids: vec![],
+    };
+    let outcome = discover_or_blueprint(&request, &registry, None)
+        .await
+        .expect("an empty result is a connection, not a failure");
+    assert_eq!(outcome.blueprint.as_deref(), Some("Demo tracker"));
+    assert!(outcome.sample.is_empty());
+    assert!(
+        outcome.notes[0].contains("nothing is on the rail yet"),
+        "{:?}",
+        outcome.notes
+    );
+}

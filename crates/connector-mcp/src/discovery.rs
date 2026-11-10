@@ -240,22 +240,32 @@ async fn try_blueprint(
     let sample = fetch_items(session, &profile)
         .await
         .map_err(|e| e.to_string())?;
-    if sample.is_empty() {
-        return Err("it found no items for you".into());
-    }
-    log::info!(
-        "discovery for {:?}: {} items through the {:?} blueprint",
-        request.name,
-        sample.len(),
-        blueprint.title
-    );
+    // Nothing back is still a working profile: the server answered, the
+    // identity resolved, the containers were visited. The person may simply
+    // have nothing assigned yet, and Scope is where they widen the view.
+    let notes = if sample.is_empty() {
+        log::info!(
+            "discovery for {:?}: the {:?} blueprint works but found nothing for this person yet",
+            request.name,
+            blueprint.title
+        );
+        vec!["nothing is on the rail yet: nothing matched the blueprint's default scope".into()]
+    } else {
+        log::info!(
+            "discovery for {:?}: {} items through the {:?} blueprint",
+            request.name,
+            sample.len(),
+            blueprint.title
+        );
+        vec![]
+    };
     Ok(DiscoveryOutcome {
         blueprint: Some(blueprint.title.clone()),
         profile,
         sample,
         tools: tools.to_vec(),
         rounds: 0,
-        notes: vec![],
+        notes,
     })
 }
 
