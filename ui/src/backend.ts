@@ -74,6 +74,10 @@ export interface RailSettings {
   monitor: string | null
   /** Install new releases without asking. */
   auto_update: boolean
+  /** Motion on the rail. The system's reduce-motion setting also turns it off. */
+  animations: boolean
+  /** A quiet tick on complete, a softer one on start. */
+  sounds: boolean
 }
 
 export interface AvailableUpdate {
@@ -356,7 +360,7 @@ function browserBackend(): RailBackend {
     task('update-project-plan', 'Update project plan', 'done'),
   ]
   let active: string | null = 'design-dashboard'
-  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, auto_update: false }
+  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, auto_update: false, animations: true, sounds: false }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
@@ -374,7 +378,14 @@ function browserBackend(): RailBackend {
       const state = JSON.parse(raw) as DevState
       items = state.items
       active = state.active
-      settings = { ...state.settings, theme: state.settings.theme ?? 'system', monitor: state.settings.monitor ?? null, auto_update: state.settings.auto_update ?? false }
+      settings = {
+        ...state.settings,
+        theme: state.settings.theme ?? 'system',
+        monitor: state.settings.monitor ?? null,
+        auto_update: state.settings.auto_update ?? false,
+        animations: state.settings.animations ?? true,
+        sounds: state.settings.sounds ?? false,
+      }
       connectors = state.connectors
       modelSettings = state.modelSettings
       signedIn = state.signedIn ?? []

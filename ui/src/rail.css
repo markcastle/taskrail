@@ -632,6 +632,84 @@ button {
   background: color-mix(in srgb, var(--done) 16%, transparent);
 }
 
+/* Motion. Everything here is behind data-motion="on", which the app sets
+   from the setting and the system's reduce-motion preference together. */
+
+@keyframes row-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes row-leave {
+  to {
+    opacity: 0;
+    transform: translateX(56px);
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    margin: 0;
+    border-color: transparent;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+:root[data-motion='on'] .card--entering {
+  animation: row-arrive 260ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+:root[data-motion='on'] .card--leaving {
+  max-height: 120px;
+  overflow: hidden;
+  animation: row-leave 220ms ease-in forwards;
+  pointer-events: none;
+}
+
+:root[data-motion='on'] .card--leaving .card__body {
+  background: color-mix(in srgb, var(--done) 16%, transparent);
+}
+
+:root[data-motion='on'] .upnext__card--arrive {
+  animation: fade-up 260ms ease-out both;
+}
+
+:root[data-motion='on'] .update,
+:root[data-motion='on'] .toast--inline {
+  animation: fade-up 220ms ease-out both;
+}
+
+:root[data-motion='on'] .progress__seg--on {
+  transition: background 320ms ease;
+}
+
+:root[data-motion='on'] .check--on {
+  animation: fade-up 180ms ease-out both;
+}
+
+/* With motion off, nothing moves on its own: no transitions either. */
+:root[data-motion='off'] .card,
+:root[data-motion='off'] .card__body,
+:root[data-motion='off'] .progress__seg,
+:root[data-motion='off'] .progress__fill,
+:root[data-motion='off'] .check {
+  transition: none !important;
+}
+
 .card--done .card__title {
   color: var(--text-muted);
   text-decoration: line-through;

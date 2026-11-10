@@ -186,8 +186,24 @@ pub fn update_settings(
         crate::dock::redock(&app).map_err(|e| e.to_string())?;
     }
     crate::theme::apply(&app);
+    crate::tray::reflect_sounds(lock(&state.rail).settings.sounds);
     changed(&app);
     Ok(lock(&state.rail).settings.clone())
+}
+
+/// Sounds on or off, from the tray. The settings page shows the same switch.
+pub fn set_sounds(app: AppHandle, sounds: bool) -> CommandResult<()> {
+    {
+        let state = app.state::<AppState>();
+        let mut rail = lock(&state.rail);
+        let mut settings = rail.settings.clone();
+        settings.sounds = sounds;
+        rail.save_settings(settings)?;
+    }
+    log::info!("sounds {}", if sounds { "on" } else { "off" });
+    crate::tray::reflect_sounds(sounds);
+    changed(&app);
+    Ok(())
 }
 
 #[tauri::command]

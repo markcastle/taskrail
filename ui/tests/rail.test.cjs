@@ -355,6 +355,21 @@ await settings.reload()
 await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
 assert.equal(await settings.getByRole('switch', { name: 'Update automatically' }).getAttribute('aria-checked'), 'true', 'auto-update persisted')
 
+// 11c. Animation and sound are both switches. Motion off reaches the rail as a document attribute.
+assert.equal(await page.evaluate(() => document.documentElement.dataset.motion), 'on', 'motion on by default')
+assert.equal(await settings.getByRole('switch', { name: 'Sounds' }).getAttribute('aria-checked'), 'false', 'sounds off by default')
+await settings.getByRole('switch', { name: 'Animation' }).click()
+await page.waitForFunction(() => document.documentElement.dataset.motion === 'off')
+await settings.getByRole('switch', { name: 'Sounds' }).click()
+// The save is debounced; wait for it to reach the stand-in's storage before reloading.
+await settings.waitForFunction(() => JSON.parse(localStorage.getItem('taskrail-dev-state') ?? '{}').settings?.sounds === true)
+await settings.reload()
+await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
+assert.equal(await settings.getByRole('switch', { name: 'Animation' }).getAttribute('aria-checked'), 'false', 'animation stays off')
+assert.equal(await settings.getByRole('switch', { name: 'Sounds' }).getAttribute('aria-checked'), 'true', 'sounds stay on')
+await settings.getByRole('switch', { name: 'Animation' }).click()
+await page.waitForFunction(() => document.documentElement.dataset.motion === 'on')
+
 // 12. The Logs page shows the stand-in's log, including this page's own start line.
 await settings.getByRole('button', { name: 'Logs', exact: true }).click()
 await settings.getByTestId('log').waitFor()

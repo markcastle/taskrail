@@ -19,18 +19,13 @@ One rule shapes every item that touches the screen: **ask what Apple would do.**
 - Pause a connector: its tasks stay on the rail marked paused, nothing is pulled or written back, a task from it refuses to change status until it is resumed, and resuming pulls straight away.
 - A trail on every task from a connector, board › group › parent, shown under the title and in the details, resolved by lookups a profile declares.
 - Choices: a blueprint declares switches and picks, each person answers them under Scope on their own connector, so "only mine" can be turned off for a private board and one group on one board is two ticks.
+- Animation and sound, both optional. A ticked task slides away and the gap closes, a new task arrives, Up next fades in, the progress bar fills. Animation is on by default and off with one switch or the system's reduce-motion setting. Sound is a quiet tick on complete and a softer one on start, off until turned on, with the same switch in Settings and as **Silence Task Rail** in the tray.
 
 ## 🔜 Next
 
 ### More on a task
 
 Tapping a task should show everything worth knowing: the description, who else is on it, the labels, a link straight to it in the source system, when it last changed. The profile learns to carry those fields, discovery learns to find them, and the details panel learns to lay them out without becoming a form. Where a task sits is done: see the trail, below.
-
-### Slicker interaction, with animation and sound
-
-Every gesture gets an answer. A completed task slides away and the ones below close the gap. A drag lifts the row and settles it. A new task arrives rather than appearing. Up next changes with a crossfade, and the day's progress bar fills a segment as you finish something.
-
-Sound is part of this. A short, quiet tick on complete, a softer one on start, nothing on anything routine. Sound is off until you turn it on, there is one switch for it in Settings, and the tray menu has **Silence Task Rail** so it can be quietened in one click.
 
 ### Discovery without an API key
 

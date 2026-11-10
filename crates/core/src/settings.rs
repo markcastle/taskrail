@@ -52,6 +52,18 @@ pub struct RailSettings {
     /// on: an update that changes things under you is a surprise.
     #[serde(default)]
     pub auto_update: bool,
+    /// Motion on the rail: rows sliding away, arriving, settling. On by
+    /// default; off here or through the system's reduce-motion setting.
+    #[serde(default = "yes")]
+    pub animations: bool,
+    /// A quiet tick on complete and a softer one on start. Off until asked
+    /// for: sound from an app nobody expected to make a sound is a jolt.
+    #[serde(default)]
+    pub sounds: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Default for RailSettings {
@@ -64,6 +76,8 @@ impl Default for RailSettings {
             theme: Theme::System,
             monitor: None,
             auto_update: false,
+            animations: true,
+            sounds: false,
         }
     }
 }

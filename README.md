@@ -42,7 +42,7 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 - 🔌 **Any MCP server.** Known systems connect from a shared blueprint with nothing to set up. For a new one, a model reads its tools and writes the connector, then it is out of the loop.
 - 🎯 **One thing in focus.** Mark the task you are on. It sits at the top as Up next.
 - ⌨️ **Quick-add anywhere.** Ctrl+Shift+Space from any window.
-- 🌗 **Light, dark, or follow the system.**
+- 🌗 **Light, dark, or follow the system.** Motion and sound are each a switch, and off means off.
 - 🔄 **Keeps itself current.** A signed update arrives as a quiet banner with Install now, or installs by itself if you say so.
 - 🔐 **Your keys stay yours.** API keys and sign-in tokens live in your operating system's credential store, never in a file.
 

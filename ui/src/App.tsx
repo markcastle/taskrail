@@ -15,6 +15,7 @@ import { createBackend, type AvailableUpdate, type ConnectorSummary, type Item, 
 import { Segmented } from './controls'
 import { agoWord, dueWord, formatTime, relativeStart, shortcutHint, todayLine, whenWord } from './format'
 import Settings from './Settings'
+import { play, setSoundsEnabled } from './sound'
 import { followTheme } from './theme'
 import { useSwipe } from './useSwipe'
 
@@ -36,6 +37,7 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [connectors, setConnectors] = useState<ConnectorSummary[]>([])
   const [foldLimit, setFoldLimit] = useState(5)
+  const [animations, setAnimations] = useState(true)
   const [update, setUpdate] = useState<AvailableUpdate | null>(null)
   const [installing, setInstalling] = useState(false)
   const [moreProgress, setMoreProgress] = useState(false)
@@ -53,7 +55,11 @@ export default function App() {
       .catch(() => {})
     backend
       .getSettings()
-      .then((s) => setFoldLimit(Math.max(1, s.top_limit)))
+      .then((s) => {
+        setFoldLimit(Math.max(1, s.top_limit))
+        setAnimations(s.animations)
+        setSoundsEnabled(s.sounds)
+      })
       .catch(() => {})
   }, [])
 
@@ -63,6 +69,16 @@ export default function App() {
 
   useEffect(() => backend.onChanged(refresh), [refresh])
   useEffect(() => followTheme(backend), [])
+  // Motion is off when the person said so, or when the system asks for less of it.
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const apply = () => {
+      document.documentElement.dataset.motion = animations && !media.matches ? 'on' : 'off'
+    }
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
+  }, [animations])
   useEffect(
     () =>
       backend.onSyncError((e: SyncError) => {
@@ -149,6 +165,17 @@ export default function App() {
   const progressShown = progressFolded ? inProgress.slice(0, foldLimit) : inProgress
   const done = useMemo(() => view?.done_today.filter(matches) ?? [], [view, matches])
   const sortableTodo = useMemo(() => priorities.filter((i) => i.kind === 'task'), [priorities])
+  // Rows seen before do not animate in; a new one does. The first view counts
+  // as seen at once, so the opening screen is still; later views catch up
+  // after the arrival has played.
+  const [seen, setSeen] = useState<Set<string> | null>(null)
+  useEffect(() => {
+    if (!view) return
+    const ids = new Set([...view.top, ...view.later, ...view.in_progress, ...view.done_today].map((i) => i.id))
+    const t = window.setTimeout(() => setSeen(ids), seen === null ? 0 : 500)
+    return () => window.clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view])
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
@@ -194,11 +221,18 @@ export default function App() {
   const rowProps = (item: Item) => ({
     item,
     names: connectorNames,
+    entering: seen !== null && !seen.has(item.id),
     open: openCard === item.id,
     active: view.active === item.id,
     onToggle: () => setOpenCard((cur) => (cur === item.id ? null : item.id)),
-    onStart: () => act(() => backend.start(item.id)),
-    onComplete: () => act(() => backend.complete(item.id)),
+    onStart: () => {
+      play('start')
+      act(() => backend.start(item.id))
+    },
+    onComplete: () => {
+      play('complete')
+      act(() => backend.complete(item.id))
+    },
     onReopen: () => act(() => backend.reopen(item.id)),
     onBackToTodo: () => act(() => backend.moveTask(item.id, 'todo', 0)),
     onSetActive: () => act(() => backend.setActive(view.active === item.id ? null : item.id)),
@@ -491,7 +525,7 @@ function UpNext({ item, focused, names, onFocus }: { item: Item; focused: boolea
   return (
     <section className="upnext" data-testid="upnext">
       <h3 className="section__title section__title--bar">Up next</h3>
-      <div className={`upnext__card${focused ? ' upnext__card--focused' : ''}`}>
+      <div key={item.id} className={`upnext__card upnext__card--arrive${focused ? ' upnext__card--focused' : ''}`}>
         <span className="upnext__title">{item.title}</span>
         <div className="upnext__foot">
           <span className="upnext__meta">{metaLine(item, names) ?? statusWord(item)}</span>
@@ -588,6 +622,8 @@ interface RowProps {
   item: Item
   /** Connector id to display name, so a row says "Tuesday" rather than "tuesday". */
   names: Map<string, string>
+  /** New since the last view: it arrives rather than appears. */
+  entering: boolean
   open: boolean
   active: boolean
   onToggle: () => void
@@ -605,8 +641,16 @@ function Row(props: RowProps) {
   const isDone = item.status === 'done'
   const sortable = isTask && !isDone
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: !sortable })
+  const [leaving, setLeaving] = useState(false)
 
   const swipe = useSwipe(isTask && !isDone && !isDragging, () => props.onComplete(), onToggle)
+
+  // Ticking the circle: the row slides off and the gap closes, then the change is made.
+  const completeFromCheck = () => {
+    if (document.documentElement.dataset.motion !== 'on') return props.onComplete()
+    setLeaving(true)
+    window.setTimeout(props.onComplete, 220)
+  }
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -623,6 +667,8 @@ function Row(props: RowProps) {
   if (open) classes.push('card--open')
   if (isDragging) classes.push('card--dragging')
   if (Math.abs(swipe.dx) > 60 || swipe.leaving) classes.push('card--will-complete')
+  if (props.entering) classes.push('card--entering')
+  if (leaving || swipe.leaving) classes.push('card--leaving')
 
   const meta = metaLine(item, props.names)
 
@@ -644,7 +690,7 @@ function Row(props: RowProps) {
             onClick={(e) => {
               e.stopPropagation()
               if (isDone) props.onReopen()
-              else props.onComplete()
+              else completeFromCheck()
             }}
           >
             {isDone && <TickIcon />}

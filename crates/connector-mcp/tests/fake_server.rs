@@ -205,7 +205,11 @@ async fn the_demo_blueprint_connects_the_fake_tracker_with_no_model() {
     let items = connector.list().await.unwrap();
     assert_eq!(items.len(), 6);
     assert_eq!(
-        items.iter().find(|i| i.external_id == "T-108").unwrap().trail,
+        items
+            .iter()
+            .find(|i| i.external_id == "T-108")
+            .unwrap()
+            .trail,
         ["Work", "Prepare board deck"],
         "the blueprint's trail reaches the rail"
     );
