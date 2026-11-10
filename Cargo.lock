@@ -4191,7 +4191,7 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "taskrail-app"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "ctrlc",
@@ -4218,7 +4218,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-connector-api"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4230,7 +4230,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-connector-ics"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4246,7 +4246,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-connector-mcp"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "chrono",
@@ -4265,7 +4265,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "serde",
@@ -4275,7 +4275,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-llm"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -4288,7 +4288,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-platform"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "objc2",
  "objc2-app-kit",
@@ -4300,7 +4300,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-store-sqlite"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "chrono",
  "rusqlite",
@@ -4312,7 +4312,7 @@ dependencies = [
 
 [[package]]
 name = "taskrail-sync"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "async-trait",
  "chrono",
