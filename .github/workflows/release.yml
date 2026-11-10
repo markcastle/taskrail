@@ -1,52 +1,166 @@
 name: Release
 
-# Pushing a tag such as v0.1.0 builds the installers and publishes a GitHub
-# Release carrying them. install.ps1 and install.sh fetch "latest" from there.
+# Two ways in.
+#
+# The button: Actions → Release → Run workflow, type the version, press Run.
+# This workflow then dates the changelog, sets the version, commits, tags,
+# builds the installers and publishes the GitHub Release. Only people with
+# write access to the repository can press it. Tick "Rehearse" to see what
+# it would do without pushing, building or publishing anything.
+#
+# The terminal: npm run release -- x.y.z and a tag push, which lands here at
+# the build step with the commit and tag already made.
+#
+# The Roll back workflow calls this one for the roll-forward release.
+#
+# The build runs in this same workflow rather than off the tag push, because
+# a tag pushed with the workflow's own token does not start other workflows.
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, such as 0.9.0. It must be higher than the last one, and CHANGELOG.md must say what it holds under Unreleased.'
+        required: true
+        type: string
+      dry_run:
+        description: 'Rehearse: do everything except push, build and publish'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      skip_ci_check:
+        description: 'The tree on main was released before, so CI need not have run on this commit'
+        type: boolean
+        default: false
   push:
     tags: ['v*']
-  workflow_dispatch:
 
 permissions:
   contents: write
+
+# One release at a time, and never cancel one that has started.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: Tag matches the app version
+  prepare:
+    name: Prepare ${{ inputs.version || github.ref_name }}
     runs-on: ubuntu-latest
     outputs:
+      version: ${{ steps.version.outputs.version }}
       notes: ${{ steps.notes.outputs.notes }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Compare the tag with tauri.conf.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Decide the version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
-          tag="${GITHUB_REF_NAME#v}"
-          if [ "${{ github.event_name }}" = "push" ] && [ "$tag" != "$version" ]; then
-            echo "Tag v$tag does not match tauri.conf.json version $version. Run: npm run release -- $tag"
-            exit 1
+          if [ "${{ github.event_name }}" = "push" ]; then
+            # A tag someone pushed by hand: the commit is already cut.
+            version="${GITHUB_REF_NAME#v}"
+            conf=$(node -p "require('./src-tauri/tauri.conf.json').version")
+            if [ "$version" != "$conf" ]; then
+              echo "::error::Tag v$version does not match tauri.conf.json version $conf. Run: npm run release -- $version"
+              exit 1
+            fi
+            echo "cut=false" >> "$GITHUB_OUTPUT"
+          else
+            version="$INPUT_VERSION"
+            if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::\"$version\" is not a version. Use major.minor.patch, such as 0.9.0."
+              exit 1
+            fi
+            if [ "$GITHUB_REF" != "refs/heads/main" ] && [ "$DRY_RUN" != "true" ]; then
+              echo "::error::Releases are cut from main, not from $GITHUB_REF_NAME. Pick main under \"Use workflow from\"."
+              exit 1
+            fi
+            if git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+              echo "::error::v$version already exists."
+              exit 1
+            fi
+            highest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
+            if [ -n "$highest" ] && [ "$(printf '%s\n%s\n' "$highest" "$version" | sort -V | tail -1)" != "$version" ]; then
+              echo "::error::$version is not higher than $highest. Running apps only ever install a higher version, so a release must go up."
+              exit 1
+            fi
+            echo "cut=true" >> "$GITHUB_OUTPUT"
           fi
-          echo "Building Task Rail $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Releasing Task Rail $version"
+
+      # The commit being released must have passed CI. A rehearsal skips this
+      # so it can run from any branch; a roll back skips it because the tree
+      # it releases was released before.
+      - name: CI must be green on this commit
+        if: steps.version.outputs.cut == 'true' && !inputs.dry_run && !inputs.skip_ci_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          state=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --limit 1 --json status,conclusion --jq '.[0] | "\(.status) \(.conclusion)"')
+          case "$state" in
+            "completed success") echo "CI passed on ${GITHUB_SHA:0:7}." ;;
+            "") echo "::error::CI has not run on ${GITHUB_SHA:0:7}. Push a commit to main and wait for CI before releasing."; exit 1 ;;
+            "completed "*) echo "::error::CI did not pass on ${GITHUB_SHA:0:7} (${state#completed }). Fix main first."; exit 1 ;;
+            *) echo "::error::CI is still running on ${GITHUB_SHA:0:7} ($state). Wait for it, then press Run again."; exit 1 ;;
+          esac
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: steps.version.outputs.cut == 'true'
+
+      # The same command a person runs in the terminal, so the two routes
+      # cannot drift: it dates the changelog, sets the version everywhere,
+      # commits and tags. It refuses an empty changelog.
+      - name: Cut the release
+        if: steps.version.outputs.cut == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npm run release -- "${{ steps.version.outputs.version }}"
+          echo
+          git show --stat --format='%h %s' HEAD
+
+      - name: Push the commit and the tag
+        if: steps.version.outputs.cut == 'true' && !inputs.dry_run
+        run: |
+          git push origin HEAD:main
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Rehearsal only
+        if: inputs.dry_run
+        run: |
+          echo "Rehearsal: nothing was pushed, built or published."
+          echo "A real run would push the commit above and the tag v${{ steps.version.outputs.version }}, then build and publish."
+
       # The version's section of CHANGELOG.md is the release body. It is what
       # the app opens from "Release notes" when it offers the update, so it is
-      # written for the person using the app. A tag with no section, which
-      # should not happen since npm run release writes one, falls back to the
-      # commit headlines since the previous release.
+      # written for the person using the app. A hand-pushed tag with no
+      # section falls back to the commit headlines since the previous release.
       - name: Write the release notes
         id: notes
         run: |
-          tag="${GITHUB_REF_NAME#v}"
-          notes=$(node scripts/changelog.mjs section "$tag")
+          version="${{ steps.version.outputs.version }}"
+          notes=$(node scripts/changelog.mjs section "$version")
           if [ -z "$notes" ]; then
-            echo "CHANGELOG.md has no section for $tag; using the commit headlines instead."
-            previous=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
-            if [ -n "$previous" ]; then range="$previous..${GITHUB_REF_NAME}"; else range="${GITHUB_REF_NAME}"; fi
+            echo "CHANGELOG.md has no section for $version; using the commit headlines instead."
+            previous=$(git describe --tags --abbrev=0 "v$version^" 2>/dev/null || true)
+            if [ -n "$previous" ]; then range="$previous..v$version"; else range="v$version"; fi
             notes=$(git log "$range" --no-merges --pretty=format:'- %s' | grep -v -- '- Release v' | grep -v -i -- '- Merge ' || true)
           fi
           if [ -z "$notes" ]; then notes="- Small fixes and improvements."; fi
@@ -61,7 +175,8 @@ jobs:
 
   build:
     name: Build (${{ matrix.name }})
-    needs: check
+    needs: prepare
+    if: ${{ !inputs.dry_run }}
     strategy:
       fail-fast: false
       matrix:
@@ -75,6 +190,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/v${{ needs.prepare.outputs.version }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -100,9 +217,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           includeUpdaterJson: true
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Task Rail ${{ github.ref_name }}'
-          releaseBody: ${{ needs.check.outputs.notes }}
+          tagName: v${{ needs.prepare.outputs.version }}
+          releaseName: 'Task Rail v${{ needs.prepare.outputs.version }}'
+          releaseBody: ${{ needs.prepare.outputs.notes }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}

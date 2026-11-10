@@ -6,7 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Releases are cut from a **Run workflow** button on GitHub, and a release that went wrong can be rolled back from another. Nothing changes in the app; it means every release goes through the same checks whoever makes it.
 
 ## [0.8.1] - 2026-11-10
 

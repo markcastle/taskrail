@@ -2,6 +2,7 @@
 //
 //   node scripts/changelog.mjs section 0.8.0     print that version's notes
 //   node scripts/changelog.mjs release 0.9.0     turn "Unreleased" into 0.9.0, dated today
+//   node scripts/changelog.mjs note "text"       add a line under Unreleased's Changed
 //
 // CHANGELOG.md follows Keep a Changelog: "## [Unreleased]" at the top collects
 // changes as they land, and cutting a release gives that section the version
@@ -47,14 +48,41 @@ export function release(text, version, date) {
   return out
 }
 
-const [command, version] = process.argv.slice(2)
+// Adds one line under "### Changed" in Unreleased, making the heading if it
+// is missing and dropping the "Nothing yet." placeholder. The roll back
+// workflow uses it to record what it did.
+export function note(text, line) {
+  const start = text.search(heading('Unreleased'))
+  if (start < 0) throw new Error('CHANGELOG.md has no "## [Unreleased]" section.')
+  const afterHeading = text.indexOf('\n', start) + 1
+  const rest = text.slice(afterHeading)
+  const next = rest.search(/^## \[/m)
+  let body = (next < 0 ? rest : rest.slice(0, next)).replace(`${EMPTY}\n`, '')
+  if (/^### Changed$/m.test(body)) {
+    body = body.replace(/^### Changed\n\n/m, `### Changed\n\n- ${line}\n`)
+  } else {
+    body = `\n### Changed\n\n- ${line}\n${body.trimEnd()}\n\n`.replace(/\n{3,}/g, '\n\n')
+  }
+  return text.slice(0, afterHeading) + body + (next < 0 ? '' : rest.slice(next))
+}
+
+const [command, argument] = process.argv.slice(2)
 if (import.meta.url === `file://${process.argv[1]}`) {
-  if (!/^\d+\.\d+\.\d+$/.test(version ?? '')) {
-    console.error('Usage: node scripts/changelog.mjs <section|release> <major.minor.patch>')
+  const version = argument
+  const needsVersion = command === 'section' || command === 'release'
+  if (needsVersion && !/^\d+\.\d+\.\d+$/.test(version ?? '')) {
+    console.error('Usage: node scripts/changelog.mjs <section|release> <major.minor.patch> | note "text"')
     process.exit(1)
   }
   const text = readFileSync(PATH, 'utf8')
-  if (command === 'section') {
+  if (command === 'note') {
+    if (!argument) {
+      console.error('Usage: node scripts/changelog.mjs note "what changed"')
+      process.exit(1)
+    }
+    writeFileSync(PATH, note(text, argument))
+    console.log('CHANGELOG.md: noted under Unreleased.')
+  } else if (command === 'section') {
     process.stdout.write(section(text, version) + '\n')
   } else if (command === 'release') {
     const today = new Date().toISOString().slice(0, 10)
@@ -66,7 +94,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     console.log(`CHANGELOG.md: Unreleased is now ${version} (${today}).`)
   } else {
-    console.error(`Unknown command "${command}". Use section or release.`)
+    console.error(`Unknown command "${command}". Use section, release or note.`)
     process.exit(1)
   }
 }

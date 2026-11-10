@@ -1,0 +1,119 @@
+name: Roll back
+
+# Actions → Roll back → Run workflow. Give the last good version and one
+# sentence on why. Then:
+#
+# 1. Every release newer than it is marked as a pre-release, which withdraws
+#    it: "latest" points at the good version again at once, so the one-line
+#    installers hand out the good version and apps that have not updated yet
+#    are no longer offered the bad one.
+# 2. The good version's code goes back on main as one commit, with a line in
+#    the changelog saying so and why.
+# 3. The Release workflow releases that as the next patch number, higher than
+#    the withdrawn release, so apps that already took the bad version update
+#    to the good code too. Running apps only ever install a higher version,
+#    which is why rolling back is a release and not a deletion.
+#
+# The release tooling (.github, scripts, CHANGELOG.md) stays at its current
+# state. Work on main that landed after the good version is gone from main
+# after this; bring it back with git revert of the "Roll back to" commit.
+
+on:
+  workflow_dispatch:
+    inputs:
+      to:
+        description: 'The last good version, such as 0.8.1'
+        required: true
+        type: string
+      reason:
+        description: 'Why, in a sentence. It goes in the changelog.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    name: Restore ${{ inputs.to }}
+    runs-on: ubuntu-latest
+    outputs:
+      next: ${{ steps.versions.outputs.next }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check the versions
+        id: versions
+        env:
+          TO: ${{ inputs.to }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Roll back from main, not from $GITHUB_REF_NAME. Pick main under \"Use workflow from\"."
+            exit 1
+          fi
+          if ! [[ "$TO" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::\"$TO\" is not a version. Use major.minor.patch, such as 0.8.1."
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/v$TO" >/dev/null; then
+            echo "::error::There is no release v$TO."
+            exit 1
+          fi
+          highest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
+          if [ "$TO" = "$highest" ]; then
+            echo "::error::$TO is already the newest release. There is nothing to roll back."
+            exit 1
+          fi
+          next="${highest%.*}.$(( ${highest##*.} + 1 ))"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "Rolling back from $highest to $TO. The roll-forward release will be $next."
+
+      - name: Withdraw the releases newer than ${{ inputs.to }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TO: ${{ inputs.to }}
+        run: |
+          for v in $(git tag -l 'v*' | sed 's/^v//' | sort -V | sed "1,/^$TO\$/d"); do
+            if gh release edit "v$v" --prerelease >/dev/null 2>&1; then
+              echo "Withdrew v$v (marked as a pre-release)."
+            else
+              echo "No published release for v$v; nothing to withdraw."
+            fi
+          done
+          echo "Latest is now $(gh release view --json tagName --jq .tagName)."
+
+      - name: Put the code of ${{ inputs.to }} back on main
+        env:
+          TO: ${{ inputs.to }}
+          REASON: ${{ inputs.reason }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # The whole tree as it was at the good version, then the release
+          # tooling back to today's, since it is what is running right now.
+          git read-tree --reset -u "v$TO"
+          git checkout HEAD -- .github scripts CHANGELOG.md
+          node scripts/changelog.mjs note "Rolled back to the code of $TO. $REASON"
+          git add -A
+          git commit -q -m "Roll back to v$TO" -m "$REASON" -m "Every release newer than v$TO is withdrawn. The next release carries this code under a higher number so that apps which already updated move too."
+          git show --stat --format='%h %s' HEAD
+          git push origin HEAD:main
+
+  release:
+    name: Release
+    needs: restore
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.restore.outputs.next }}
+      skip_ci_check: true
+    secrets: inherit

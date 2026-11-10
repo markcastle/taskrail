@@ -108,11 +108,26 @@ Secrets are never written to the database or to a profile. A profile only names 
 
 ## Cutting a release
 
-Pick the number first. A patch (0.2.0 to 0.2.1) is for fixes and small adjustments. A minor (0.2.x to 0.3.0) is for anything a person would notice as new: a feature, a redesign, a new connector ability. Leaving 0.x behind is a judgement about stability, not a feature count.
+Pick the number first. A patch (0.2.0 to 0.2.1) is for fixes and small adjustments. A minor (0.2.x to 0.3.0) is for anything a person would notice as new: a feature, a redesign, a new connector ability. Leaving 0.x behind is a judgement about stability, not a feature count. A release must always be a higher number than the last, because running apps only ever install a higher version.
 
-Then make sure [CHANGELOG.md](../CHANGELOG.md) says what the release holds. Every change a person would notice goes under **Unreleased** as it lands, in one of **Added**, **Changed**, **Fixed** or **Removed**, written for the person using the app: what they will see, not which function moved. The release command refuses to run while that section is empty, because those notes become the GitHub Release and what the app shows as **Release notes** when it offers the update.
+Then make sure [CHANGELOG.md](../CHANGELOG.md) says what the release holds. Every change a person would notice goes under **Unreleased** as it lands, in one of **Added**, **Changed**, **Fixed** or **Removed**, written for the person using the app: what they will see, not which function moved. A release refuses to run while that section is empty, because those notes become the GitHub Release and what the app shows as **Release notes** when it offers the update.
 
-Then two commands:
+### The button
+
+On GitHub, open **Actions**, pick **Release** on the left, press **Run workflow**, type the version, and press the green button. Only people with write access to the repository can do this. The workflow then:
+
+1. Refuses if the version is not higher than the last release, if CI has not passed on the latest commit to main, or if the changelog has nothing under Unreleased.
+2. Dates the Unreleased section as the version and opens a fresh one, sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.conf.json`, updates `Cargo.lock`, commits and tags.
+3. Builds a Windows installer (NSIS, per-user, no admin prompt) and a universal macOS disk image.
+4. Publishes a GitHub Release with both attached and the changelog section as the notes.
+
+Tick **Rehearse** to see steps 1 and 2 in the log without anything being pushed, built or published. A rehearsal can run from any branch.
+
+`install.ps1` and `install.sh` at the repo root read `releases/latest`, so the moment the workflow finishes the one-line install picks up the new version, and running apps see it within the hour.
+
+### From the terminal
+
+The same thing from a checkout, for when you would rather:
 
 ```bash
 npm run release -- 0.1.1
@@ -122,13 +137,19 @@ npm run release -- 0.1.1
 git push --follow-tags
 ```
 
-The first dates the **Unreleased** section of the changelog as `0.1.1` and opens a fresh one, sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.conf.json`, updates `Cargo.lock`, commits and tags `v0.1.1`. The push starts the Release workflow, which:
+The first command is exactly what the button runs, so the two routes cannot drift. The tag push starts the Release workflow at the build step. The terminal route does not check CI for you.
 
-1. Checks the tag matches the version in the config, so a mistyped tag fails fast.
-2. Builds a Windows installer (NSIS, per-user, no admin prompt) and a universal macOS disk image.
-3. Publishes a GitHub Release with both attached and the changelog section as the notes.
+## Rolling back a release
 
-`install.ps1` and `install.sh` at the repo root read `releases/latest`, so the moment the workflow finishes the one-line install picks up the new version.
+If a release turns out to be broken, open **Actions**, pick **Roll back**, press **Run workflow**, give the last good version and one sentence on why. The workflow then:
+
+1. Marks every release newer than the good one as a pre-release, which withdraws it. GitHub's "latest" points at the good version again at once, so the one-line installers hand out the good version and apps that have not updated yet are no longer offered the bad one.
+2. Puts the good version's code back on main as one commit, **Roll back to vX**, with a line in the changelog saying so and why. The release tooling (`.github`, `scripts`, `CHANGELOG.md`) keeps its current state.
+3. Releases that code as the next patch number, higher than the withdrawn release. Apps that already took the bad version update to the good code within the hour.
+
+Step 3 is why a rollback is a release and not a deletion. The updater compares version numbers and only ever installs a higher one, so the only way to move an app off 0.9.0 is to give it a 0.9.1. Anyone who wants an older build by hand can still download it from the releases page; the withdrawn ones stay there, marked pre-release.
+
+Work on main that landed after the good version is no longer on main afterwards. It is not lost: bring it back with `git revert` of the Roll back commit, fix what was wrong, and release again.
 
 ### How the app updates itself
 
