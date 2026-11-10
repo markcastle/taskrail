@@ -1,7 +1,11 @@
-// Cut a release: set the version everywhere it lives, commit, and tag.
+// Cut a release: date the changelog, set the version everywhere it lives,
+// commit, and tag.
 //
 //   npm run release -- 0.1.1
 //   git push --follow-tags
+//
+// It stops if CHANGELOG.md has nothing under "## [Unreleased]": the notes
+// there become the GitHub Release and what the app shows as Release notes.
 //
 // The tag push starts .github/workflows/release.yml, which builds the
 // installers and publishes the GitHub Release the install scripts read.
@@ -22,6 +26,10 @@ if (sh('git status --porcelain')) {
   console.error('Commit or stash your changes first; a release commit should carry only the version.')
   process.exit(1)
 }
+
+// First, so a changelog with nothing to say stops the release before any
+// version number has moved.
+run(`node scripts/changelog.mjs release ${version}`)
 
 function rewrite(path, replacer) {
   const before = readFileSync(path, 'utf8')

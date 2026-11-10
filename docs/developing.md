@@ -110,6 +110,8 @@ Secrets are never written to the database or to a profile. A profile only names 
 
 Pick the number first. A patch (0.2.0 to 0.2.1) is for fixes and small adjustments. A minor (0.2.x to 0.3.0) is for anything a person would notice as new: a feature, a redesign, a new connector ability. Leaving 0.x behind is a judgement about stability, not a feature count.
 
+Then make sure [CHANGELOG.md](../CHANGELOG.md) says what the release holds. Every change a person would notice goes under **Unreleased** as it lands, in one of **Added**, **Changed**, **Fixed** or **Removed**, written for the person using the app: what they will see, not which function moved. The release command refuses to run while that section is empty, because those notes become the GitHub Release and what the app shows as **Release notes** when it offers the update.
+
 Then two commands:
 
 ```bash
@@ -120,11 +122,11 @@ npm run release -- 0.1.1
 git push --follow-tags
 ```
 
-The first sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.conf.json`, updates `Cargo.lock`, commits and tags `v0.1.1`. The push starts the Release workflow, which:
+The first dates the **Unreleased** section of the changelog as `0.1.1` and opens a fresh one, sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.conf.json`, updates `Cargo.lock`, commits and tags `v0.1.1`. The push starts the Release workflow, which:
 
 1. Checks the tag matches the version in the config, so a mistyped tag fails fast.
 2. Builds a Windows installer (NSIS, per-user, no admin prompt) and a universal macOS disk image.
-3. Publishes a GitHub Release with both attached and the install lines in the notes.
+3. Publishes a GitHub Release with both attached and the changelog section as the notes.
 
 `install.ps1` and `install.sh` at the repo root read `releases/latest`, so the moment the workflow finishes the one-line install picks up the new version.
 

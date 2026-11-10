@@ -100,7 +100,9 @@ Most people should never need one. Blueprints already cover any system somebody 
 
 ## 🗺️ Where it is going
 
-Next up: pausing a connector, richer task details, and animation and sound that make every gesture feel acknowledged. The full list, with what is done and what is still a question, is the [roadmap](docs/roadmap.md). The thinking behind the decisions so far is in [docs/plan.md](docs/plan.md).
+Next up: richer task details, discovery without an API key, and signed builds. The full list, with what is done and what is still a question, is the [roadmap](docs/roadmap.md). The thinking behind the decisions so far is in [docs/plan.md](docs/plan.md).
+
+What each version added, changed, fixed or removed is in the [changelog](CHANGELOG.md). 📋
 
 ## 🛠️ Developing
 

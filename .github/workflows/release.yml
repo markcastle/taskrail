@@ -33,21 +33,28 @@ jobs:
             exit 1
           fi
           echo "Building Task Rail $version"
-      # What changed since the last release, one line per change, from the
-      # commit headlines. This is what the app shows when it offers the update,
-      # so it is written for the person using the app, not for GitHub.
+      # The version's section of CHANGELOG.md is the release body. It is what
+      # the app opens from "Release notes" when it offers the update, so it is
+      # written for the person using the app. A tag with no section, which
+      # should not happen since npm run release writes one, falls back to the
+      # commit headlines since the previous release.
       - name: Write the release notes
         id: notes
         run: |
-          previous=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
-          if [ -n "$previous" ]; then range="$previous..${GITHUB_REF_NAME}"; else range="${GITHUB_REF_NAME}"; fi
-          notes=$(git log "$range" --no-merges --pretty=format:'- %s' | grep -v -- '- Release v' | grep -v -i -- '- Merge ' || true)
+          tag="${GITHUB_REF_NAME#v}"
+          notes=$(node scripts/changelog.mjs section "$tag")
+          if [ -z "$notes" ]; then
+            echo "CHANGELOG.md has no section for $tag; using the commit headlines instead."
+            previous=$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)
+            if [ -n "$previous" ]; then range="$previous..${GITHUB_REF_NAME}"; else range="${GITHUB_REF_NAME}"; fi
+            notes=$(git log "$range" --no-merges --pretty=format:'- %s' | grep -v -- '- Release v' | grep -v -i -- '- Merge ' || true)
+          fi
           if [ -z "$notes" ]; then notes="- Small fixes and improvements."; fi
           {
             echo "notes<<EOF"
             echo "$notes"
             echo ""
-            echo "Download below, or install and update in one line from https://taskrail.uk"
+            echo "Every version's notes are in [CHANGELOG.md](https://github.com/markcastle/taskrail/blob/main/CHANGELOG.md). Download below, or install and update in one line from https://taskrail.uk"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
           echo "$notes"
