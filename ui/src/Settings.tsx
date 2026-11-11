@@ -285,7 +285,7 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
           ]}
         />
       </Row>
-      <Row label="Auto-hide" help="The rail tucks itself into a thin strip at the edge and comes out when you rest the pointer on it. Escape puts it away.">
+      <Row label="Auto-hide" help="The rail tucks itself into a thin strip at the edge and comes out when you push the pointer against that edge. The pin at the top of the rail is this same switch: pinned is off.">
         <Toggle checked={draft.auto_hide} onChange={(v) => set('auto_hide', v)} label="Auto-hide" />
       </Row>
       <Row label="Width" help="Or drag the rail's inner edge.">

@@ -443,6 +443,27 @@ await page.locator('html').dispatchEvent('pointerleave')
 await page.waitForTimeout(900)
 assert.equal(await page.getByTestId('strip').count(), 0, 'with auto-hide off the rail stays out')
 
+// 11e2. The pin in the header is the same setting the other way up: pinned is
+// auto-hide off, which is how a new rail starts.
+const pin = page.getByTestId('pin')
+assert.equal(await pin.getAttribute('aria-pressed'), 'true', 'pinned to begin with')
+await pin.click()
+await page.waitForFunction(async () => (await window.__taskrail.getSettings()).auto_hide === true)
+assert.equal(await pin.getAttribute('aria-pressed'), 'false', 'unpinned')
+await page.locator('html').dispatchEvent('pointerleave')
+await page.getByTestId('strip').waitFor()
+await page.getByTestId('strip').click()
+await page.getByTestId('section-priority').waitFor()
+await page.getByTestId('pin').click()
+await page.waitForFunction(async () => (await window.__taskrail.getSettings()).auto_hide === false)
+assert.equal(await page.getByTestId('pin').getAttribute('aria-pressed'), 'true', 'pinned again')
+await page.locator('html').dispatchEvent('pointerleave')
+await page.waitForTimeout(900)
+assert.equal(await page.getByTestId('strip').count(), 0, 'a pinned rail stays')
+await settings.reload()
+await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
+assert.equal(await settings.getByRole('switch', { name: 'Auto-hide' }).getAttribute('aria-checked'), 'false', 'the switch in Settings agrees with the pin')
+
 // 11f. About says who made it.
 await settings.getByRole('button', { name: 'About', exact: true }).click()
 await settings.getByTestId('about').waitFor()

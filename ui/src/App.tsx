@@ -152,6 +152,14 @@ export default function App() {
       }),
     [],
   )
+  // The pin in the header is the Auto-hide switch in Settings, the other way
+  // up: pinned is auto-hide off. One setting, two places to reach it.
+  const togglePin = () => {
+    if (!railSettings) return
+    const next = { ...railSettings, auto_hide: !railSettings.auto_hide }
+    setRailSettings(next)
+    backend.updateSettings(next).catch((e) => setNotice(String(e)))
+  }
   // Typing in the rail, dragging a row or dragging its edge keeps it out.
   useEffect(() => {
     if (!autoHide) return
@@ -414,6 +422,16 @@ export default function App() {
       <header className="rail__header">
         <img className="rail__mark" src="/logo.svg" alt="" width={24} height={24} />
         <h1 className="rail__brand">TaskRail</h1>
+        <button
+          className={`icon-button${autoHide ? '' : ' icon-button--pinned'}`}
+          title={autoHide ? 'Hides when not in use. Click to pin it here' : 'Pinned. Click to let the rail hide itself'}
+          aria-label="Pin the rail"
+          aria-pressed={!autoHide}
+          data-testid="pin"
+          onClick={togglePin}
+        >
+          <PinIcon pinned={!autoHide} />
+        </button>
         <button className="icon-button" title="Settings" aria-label="Settings" onClick={openSettings}>
           <GearIcon />
         </button>
@@ -970,6 +988,27 @@ function GearIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+    </svg>
+  )
+}
+
+/** A pushpin: filled and upright when the rail is pinned, an outline at a tilt when it is free to hide. */
+function PinIcon({ pinned }: { pinned: boolean }) {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill={pinned ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={`pin${pinned ? '' : ' pin--free'}`}
+    >
+      <path d="M12 17v5" />
+      <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
     </svg>
   )
 }

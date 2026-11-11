@@ -6,7 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **A pin at the top of the rail.** Pinned, the rail stays where it is and other windows make room for it. Click the pin and the rail is free to hide itself when you move away, coming back when you push the pointer against its edge of the screen. Click again to pin it back. The rail starts pinned. The pin and the **Auto-hide** switch in Settings are one setting, so they always agree.
 
 ## [0.9.2] - 2026-11-11
 

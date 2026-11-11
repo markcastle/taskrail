@@ -37,7 +37,7 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 
 - 📌 **Always there.** A docked strip on Windows and a floating edge panel on macOS. Hide it from the tray when you need the space back.
 - 🗓️ **Your day at a glance.** Today's date, how many tasks are done, what is up next, and your priorities in the order you set.
-- 🫥 **Out of the way when you want.** Turn on auto-hide and the rail tucks into a thin strip at the edge. Push the pointer against that edge and it comes out; move away and it goes back. Drag its inner edge to make it as wide as you like.
+- 🫥 **Out of the way when you want.** Unpin the rail with the 📌 at its top and it tucks into a thin strip at the edge. Push the pointer against that edge and it comes out; move away and it goes back. Drag its inner edge to make it as wide as you like.
 - 🖐️ **Gestures, not menus.** Drag to reorder, pull into In progress, flick to complete, tap for details.
 - 🔁 **Two-way sync.** Moving a task on the rail moves it in the system it came from.
 - 📅 **Your calendar too.** Paste a calendar's iCalendar address and today's meetings join the rail, the next one up top.
@@ -73,7 +73,8 @@ Prefer a download? The installers are on the [releases page](https://github.com/
 | **Drag** a task up or down | It moves in the order, and that order is yours: syncing never touches it |
 | **Drag** a task into In progress | It starts, and its status changes in the source system |
 | **Drag** the rail's inner edge | The rail gets wider or narrower |
-| **Push the pointer** against the rail's edge of the screen | With auto-hide on, the rail comes out. Move away, or press Escape, and it goes back |
+| **📌** | Pinned, the rail stays put. Unpinned, it hides itself when you move away |
+| **Push the pointer** against the rail's edge of the screen | An unpinned rail comes out. Move away, or press Escape, and it goes back |
 | **Flick** a task sideways | It completes |
 | **Tap** the circle | Same thing, for people who like circles |
 | **Tap** a task | Details open: source link, due date, priority, and buttons for everything else |
