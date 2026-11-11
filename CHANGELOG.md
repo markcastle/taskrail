@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.0] - 2026-11-11
+
 ### Added
 
 - **Auto-hide.** A switch on the Rail page. On, the rail tucks itself into a thin strip at the edge of the screen. Other windows still keep clear of the strip, so nothing is covered, and a small mark on it shows where the rail is. Rest the pointer on the strip for a moment, or click it, and the rail slides out over the desktop. It slides back once the pointer leaves, unless you are typing in it or dragging a task. Escape puts it away at once. The tray and Ctrl+Shift+Space bring it out as before.
@@ -192,7 +196,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/markcastle/taskrail/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/markcastle/taskrail/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/markcastle/taskrail/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/markcastle/taskrail/compare/v0.6.0...v0.7.0
