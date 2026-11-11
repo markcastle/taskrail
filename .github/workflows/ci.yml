@@ -35,7 +35,11 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run ui:build
-      - run: npx playwright install --with-deps chromium
+      # The system packages are fonts and libraries the runner mostly has
+      # already. When its package mirror is unreachable, which happens, the
+      # browser alone is enough to run the test.
+      - name: Install the test browser
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
       - run: npm run ui:test
 
   desktop:
