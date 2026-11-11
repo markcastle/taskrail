@@ -37,9 +37,11 @@ struct Placement {
     edge: Edge,
     /// The reserved strip.
     width: i32,
-    /// The window, which may be narrower (tucked away) or wider (out over
-    /// the desktop) than the strip.
+    /// The window, which may be wider than the strip when the rail is out
+    /// over the desktop.
     window: i32,
+    /// How much of the window is on screen; the rest is past the edge.
+    visible: i32,
     monitor: Option<String>,
     callback_message: u32,
     /// The strip as the system last agreed to it, which may sit inward of
@@ -99,6 +101,7 @@ impl DesktopDock for AppBarDock {
             edge: request.edge,
             width: request.width_px as i32,
             window: request.window_px as i32,
+            visible: request.visible_px as i32,
             monitor: request.monitor.clone(),
             callback_message: self.callback_message,
             strip: None,
@@ -107,11 +110,12 @@ impl DesktopDock for AppBarDock {
         place(self.hwnd(), &placement)
     }
 
-    fn resize_window(&mut self, window_px: u32) -> Result<DockedRect, DockError> {
+    fn resize_window(&mut self, window_px: u32, visible_px: u32) -> Result<DockedRect, DockError> {
         let placement = {
             let mut guard = lock_placement();
             let placement = guard.as_mut().ok_or(DockError::NotDocked)?;
             placement.window = window_px as i32;
+            placement.visible = visible_px as i32;
             placement.clone()
         };
         // Only the window moves. The strip is already what the system
@@ -252,12 +256,20 @@ fn place(hwnd: HWND, placement: &Placement) -> Result<DockedRect, DockError> {
     move_window(hwnd, placement, data.rc)
 }
 
-/// Puts the window on the strip's edge at the window's own width, which
-/// is the strip's width unless the rail is tucked away or out over the
-/// desktop.
+/// Puts the window at its own width with `visible` pixels of it on screen
+/// from the strip's outer edge inward, and the rest past the screen edge.
 fn move_window(hwnd: HWND, placement: &Placement, strip: RECT) -> Result<DockedRect, DockError> {
     let mut rc = strip;
-    fit(&mut rc, placement.edge, placement.window, strip);
+    match placement.edge {
+        Edge::Right => {
+            rc.left = strip.right - placement.visible;
+            rc.right = rc.left + placement.window;
+        }
+        Edge::Left => {
+            rc.right = strip.left + placement.visible;
+            rc.left = rc.right - placement.window;
+        }
+    }
     let (width, height) = (rc.right - rc.left, rc.bottom - rc.top);
     unsafe {
         SetWindowPos(

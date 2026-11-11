@@ -67,12 +67,15 @@ impl FloatingPanelDock {
             .ok_or_else(|| DockError::Os("no screen to dock to".into()))?;
         let scale = screen.backingScaleFactor();
         // Nothing is reserved on macOS, so the strip's width only matters
-        // through the window's; see the crate docs.
+        // through the window's; see the crate docs. A tucked-away rail
+        // keeps its width and sits past the screen edge with `visible_px`
+        // of it showing.
         let width = f64::from(request.window_px) / scale;
+        let showing = f64::from(request.visible_px) / scale;
         let visible = screen.visibleFrame();
         let x = match request.edge {
-            Edge::Right => visible.origin.x + visible.size.width - width,
-            Edge::Left => visible.origin.x,
+            Edge::Right => visible.origin.x + visible.size.width - showing,
+            Edge::Left => visible.origin.x + showing - width,
         };
         let frame = NSRect::new(
             NSPoint::new(x, visible.origin.y),
@@ -113,9 +116,10 @@ impl DesktopDock for FloatingPanelDock {
         self.apply(request)
     }
 
-    fn resize_window(&mut self, window_px: u32) -> Result<DockedRect, DockError> {
+    fn resize_window(&mut self, window_px: u32, visible_px: u32) -> Result<DockedRect, DockError> {
         let request = self.last.as_mut().ok_or(DockError::NotDocked)?;
         request.window_px = window_px;
+        request.visible_px = visible_px;
         let request = request.clone();
         self.apply(request)
     }

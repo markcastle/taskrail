@@ -119,16 +119,22 @@ pub fn set_revealed(app: &AppHandle, revealed: bool) -> Result<(), DockError> {
 pub fn resize(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();
-    let (window_px, monitor) = {
+    let (window_px, visible_px, monitor) = {
         let rail = lock(&state.rail);
-        (rail.window_width_px(), rail.settings.monitor.clone())
+        (
+            rail.window_width_px(),
+            rail.visible_width_px(),
+            rail.settings.monitor.clone(),
+        )
     };
     let scale = monitor_scale(&window, monitor.as_deref());
-    let physical = (f64::from(window_px) * scale).round() as u32;
+    let window_physical = (f64::from(window_px) * scale).round() as u32;
+    let visible_physical = (f64::from(visible_px) * scale).round() as u32;
     let mut guard = lock(&state.dock);
     match guard.as_mut() {
         Some(dock) => {
-            dock.resize_window(physical)?;
+            let rect = dock.resize_window(window_physical, visible_physical)?;
+            log::info!("window at {rect:?}, {visible_px}px of {window_px}px showing");
             Ok(())
         }
         None => {
@@ -162,12 +168,13 @@ pub fn release(app: &AppHandle) {
 fn apply(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();
-    let (edge, width_px, window_px, monitor) = {
+    let (edge, width_px, window_px, visible_px, monitor) = {
         let rail = lock(&state.rail);
         (
             rail.settings.edge,
             rail.reserved_width_px(),
             rail.window_width_px(),
+            rail.visible_width_px(),
             rail.settings.monitor.clone(),
         )
     };
@@ -176,6 +183,7 @@ fn apply(app: &AppHandle) -> Result<(), DockError> {
         edge,
         width_px: (f64::from(width_px) * scale).round() as u32,
         window_px: (f64::from(window_px) * scale).round() as u32,
+        visible_px: (f64::from(visible_px) * scale).round() as u32,
         monitor,
     };
     let mut guard = lock(&state.dock);
@@ -250,12 +258,13 @@ pub fn monitors(app: &AppHandle) -> Vec<MonitorInfo> {
 /// The no-docking fallback: an always-on-top window at the chosen edge of the
 /// chosen monitor.
 fn park(window: &WebviewWindow, app: &AppHandle) -> tauri::Result<()> {
-    let (edge, width_px, monitor) = {
+    let (edge, width_px, visible_px, monitor) = {
         let state = app.state::<AppState>();
         let rail = lock(&state.rail);
         (
             rail.settings.edge,
             rail.window_width_px(),
+            rail.visible_width_px(),
             rail.settings.monitor.clone(),
         )
     };
@@ -264,11 +273,12 @@ fn park(window: &WebviewWindow, app: &AppHandle) -> tauri::Result<()> {
     };
     let scale = monitor.scale_factor();
     let width = (f64::from(width_px) * scale).round() as u32;
+    let showing = (f64::from(visible_px) * scale).round() as i32;
     let size = monitor.size();
     let origin = monitor.position();
     let x = match edge {
-        Edge::Right => origin.x + size.width as i32 - width as i32,
-        Edge::Left => origin.x,
+        Edge::Right => origin.x + size.width as i32 - showing,
+        Edge::Left => origin.x + showing - width as i32,
     };
     window.set_always_on_top(true)?;
     window.set_size(PhysicalSize::new(width, size.height))?;

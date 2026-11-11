@@ -32,6 +32,8 @@ pub const EXPANDED_WIDTH_PX: u32 = 760;
 
 /// Logical width of the strip an auto-hidden rail leaves at the edge: enough
 /// to find with the pointer and to show a mark, too little to cover anything.
+/// The window itself never gets this narrow; it slides past the screen edge
+/// with this much left showing.
 pub const STRIP_WIDTH_PX: u32 = 8;
 
 impl Rail {
@@ -94,14 +96,24 @@ impl Rail {
         }
     }
 
-    /// How wide the window itself is right now.
+    /// How wide the window itself is right now. Never the strip: a window a
+    /// few pixels wide does not reliably exist on Windows, so a tucked-away
+    /// rail keeps its width and sits past the screen edge instead.
     pub fn window_width_px(&self) -> u32 {
         if self.expanded {
             self.rail_width_px().max(EXPANDED_WIDTH_PX)
-        } else if self.settings.auto_hide && !self.revealed {
-            STRIP_WIDTH_PX
         } else {
             self.rail_width_px()
+        }
+    }
+
+    /// How much of the window is on screen: all of it, or only the strip
+    /// while the rail is tucked away.
+    pub fn visible_width_px(&self) -> u32 {
+        if self.settings.auto_hide && !self.revealed && !self.expanded {
+            STRIP_WIDTH_PX
+        } else {
+            self.window_width_px()
         }
     }
 
