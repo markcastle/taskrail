@@ -104,6 +104,89 @@ button {
   font: inherit;
 }
 
+/* --- the strip an auto-hidden rail leaves at the edge --- */
+
+.strip {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.strip:focus-visible {
+  outline: none;
+}
+
+.strip__mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 36px;
+  margin: -18px 0 0 -1.5px;
+  border-radius: 2px;
+  background: var(--accent);
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+.strip:hover .strip__mark,
+.strip:focus-visible .strip__mark {
+  opacity: 1;
+}
+
+/* --- drag the inner edge to resize --- */
+
+.grip {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 30;
+}
+
+/* Docked to the right edge, the inner edge is on the left, and vice versa. */
+.grip--right {
+  left: 0;
+}
+
+.grip--left {
+  right: 0;
+}
+
+.grip::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.grip--right::after {
+  left: 0;
+}
+
+.grip--left::after {
+  right: 0;
+}
+
+.grip:hover::after,
+html.resizing .grip::after {
+  opacity: 0.6;
+}
+
+html.resizing,
+html.resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
 /* --- the rail itself --- */
 
 .rail {
@@ -682,6 +765,41 @@ button {
 
 :root[data-motion='on'] .card--leaving .card__body {
   background: color-mix(in srgb, var(--done) 16%, transparent);
+}
+
+/* Out of the strip and back into it, from whichever edge the rail docks to. */
+:root[data-edge='right'] {
+  --edge-shift: 100%;
+}
+
+:root[data-edge='left'] {
+  --edge-shift: -100%;
+}
+
+:root[data-motion='on'] .rail--arriving {
+  animation: rail-arrive 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+:root[data-motion='on'] .rail--leaving {
+  animation: rail-leave 160ms cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes rail-arrive {
+  from {
+    transform: translateX(var(--edge-shift));
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes rail-leave {
+  to {
+    transform: translateX(var(--edge-shift));
+    opacity: 0.6;
+  }
 }
 
 :root[data-motion='on'] .upnext__card--arrive {
@@ -1957,4 +2075,47 @@ button {
   font: 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/* --- about --- */
+
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 18px 8px;
+}
+
+.about .settings-actions {
+  margin-top: 6px;
+}
+
+.about__hero {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.about__hero h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.about__version {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.about__line {
+  margin: 0;
+  max-width: 46em;
+  line-height: 1.5;
+}
+
+.about__copyright {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }

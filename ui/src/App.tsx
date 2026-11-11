@@ -11,13 +11,29 @@ import {
 } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { createBackend, type AvailableUpdate, type ConnectorSummary, type Item, type RailBackend, type RailView, type Status, type SyncError } from './backend'
+import { createBackend, WIDTH_MAX_PX, WIDTH_MIN_PX, type AvailableUpdate, type ConnectorSummary, type Item, type RailBackend, type RailSettings, type RailView, type Status, type SyncError } from './backend'
 import { Segmented } from './controls'
 import { agoWord, dueWord, formatTime, relativeStart, shortcutHint, todayLine, whenWord } from './format'
 import Settings from './Settings'
 import { play, setSoundsEnabled } from './sound'
 import { followTheme } from './theme'
 import { useSwipe } from './useSwipe'
+
+/** How long the pointer rests on the strip before the rail comes out. */
+const DWELL_MS = 250
+/** How long after the pointer leaves before the rail goes back in. */
+const TUCK_AFTER_MS = 700
+const ARRIVE_MS = 180
+const LEAVE_MS = 160
+
+function isField(target: EventTarget | null) {
+  return target instanceof HTMLElement && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+}
+
+/** Typing in the rail, or dragging a row, keeps an auto-hidden rail out. */
+function holdsRailOpen() {
+  return (document.hasFocus() && isField(document.activeElement)) || document.querySelector('.card--dragging') !== null
+}
 
 const backend: RailBackend = createBackend()
 
@@ -41,6 +57,11 @@ export default function App() {
   const [update, setUpdate] = useState<AvailableUpdate | null>(null)
   const [installing, setInstalling] = useState(false)
   const [moreProgress, setMoreProgress] = useState(false)
+  const [railSettings, setRailSettings] = useState<RailSettings | null>(null)
+  // Auto-hide: the rail is either out (rendered) or tucked into its strip.
+  const [collapsed, setCollapsed] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [arriving, setArriving] = useState(false)
   const addInput = useRef<HTMLInputElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
 
@@ -59,6 +80,7 @@ export default function App() {
         setFoldLimit(Math.max(1, s.top_limit))
         setAnimations(s.animations)
         setSoundsEnabled(s.sounds)
+        setRailSettings(s)
       })
       .catch(() => {})
   }, [])
@@ -92,8 +114,167 @@ export default function App() {
     const t = window.setTimeout(() => setNotice(null), 8000)
     return () => window.clearTimeout(t)
   }, [notice])
-  useEffect(() => backend.onQuickAdd(() => addInput.current?.focus()), [])
   useEffect(() => backend.onUpdateAvailable(setUpdate), [])
+
+  // --- auto-hide ---------------------------------------------------------
+  // The page decides when the rail goes into its strip and comes out, since
+  // it is the one that knows where the pointer is and whether someone is
+  // typing. The backend only moves the window.
+  const autoHide = railSettings?.auto_hide ?? false
+  const edge = railSettings?.edge ?? 'right'
+  const live = useRef({ autoHide, collapsed, leaving, settingsOpen })
+  live.current = { autoHide, collapsed, leaving, settingsOpen }
+  const over = useRef(false)
+  const tuckTimer = useRef(0)
+  const leaveTimer = useRef(0)
+  const dwellTimer = useRef(0)
+  const focusWhenOut = useRef(false)
+  useEffect(() => {
+    document.documentElement.dataset.edge = edge
+  }, [edge])
+
+  const tuck = useCallback((force = false) => {
+    const s = live.current
+    if (!s.autoHide || s.collapsed || s.leaving || s.settingsOpen) return
+    if (!force && (over.current || holdsRailOpen())) return
+    const put = () => {
+      setLeaving(false)
+      setCollapsed(true)
+      backend.revealRail(false).catch(() => {})
+    }
+    if (document.documentElement.dataset.motion === 'on') {
+      setLeaving(true)
+      leaveTimer.current = window.setTimeout(put, LEAVE_MS)
+    } else {
+      put()
+    }
+  }, [])
+  const tuckSoon = useCallback(() => {
+    window.clearTimeout(tuckTimer.current)
+    tuckTimer.current = window.setTimeout(() => tuck(), TUCK_AFTER_MS)
+  }, [tuck])
+  const reveal = useCallback(() => {
+    window.clearTimeout(dwellTimer.current)
+    dwellTimer.current = 0
+    window.clearTimeout(tuckTimer.current)
+    if (!live.current.collapsed) return
+    setCollapsed(false)
+    setArriving(true)
+    window.setTimeout(() => setArriving(false), ARRIVE_MS + 40)
+    backend.revealRail(true).catch(() => {})
+  }, [])
+  // A rest on the strip. Armed on movement as well as entry, because a strip
+  // that appears under a pointer already sitting there gets no entry event.
+  const armDwell = useCallback(() => {
+    if (dwellTimer.current) return
+    dwellTimer.current = window.setTimeout(() => {
+      dwellTimer.current = 0
+      reveal()
+    }, DWELL_MS)
+  }, [reveal])
+  const disarmDwell = useCallback(() => {
+    window.clearTimeout(dwellTimer.current)
+    dwellTimer.current = 0
+  }, [])
+  useEffect(() => {
+    const root = document.documentElement
+    const onEnter = () => {
+      over.current = true
+      window.clearTimeout(tuckTimer.current)
+      if (live.current.leaving) {
+        window.clearTimeout(leaveTimer.current)
+        setLeaving(false)
+      }
+    }
+    const onLeave = () => {
+      over.current = false
+      tuckSoon()
+    }
+    const onBlur = () => tuckSoon()
+    const onKey = (e: KeyboardEvent) => {
+      // Escape in a field clears the field; Escape anywhere else puts the rail away.
+      if (e.key !== 'Escape' || isField(e.target)) return
+      tuck(true)
+    }
+    root.addEventListener('pointerenter', onEnter)
+    root.addEventListener('pointerleave', onLeave)
+    window.addEventListener('blur', onBlur)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      root.removeEventListener('pointerenter', onEnter)
+      root.removeEventListener('pointerleave', onLeave)
+      window.removeEventListener('blur', onBlur)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [tuck, tuckSoon])
+  // Turning auto-hide on tucks the rail once the pointer has gone; turning
+  // it off brings it out for good. Closing settings is a chance to tuck too.
+  useEffect(() => {
+    if (autoHide) tuckSoon()
+    else setCollapsed(false)
+  }, [autoHide, tuckSoon])
+  useEffect(() => {
+    if (!settingsOpen) tuckSoon()
+  }, [settingsOpen, tuckSoon])
+  useEffect(() => backend.onReveal(reveal), [reveal])
+  useEffect(
+    () =>
+      backend.onQuickAdd(() => {
+        if (live.current.collapsed) {
+          focusWhenOut.current = true
+          reveal()
+        } else {
+          addInput.current?.focus()
+        }
+      }),
+    [reveal],
+  )
+  useEffect(() => {
+    if (!collapsed && focusWhenOut.current) {
+      focusWhenOut.current = false
+      addInput.current?.focus()
+    }
+  }, [collapsed])
+
+  // --- drag to resize ----------------------------------------------------
+  // The inner edge is a handle. The window follows the pointer through a
+  // preview that saves nothing; the width is saved once on release, so the
+  // slider in Settings shows what was dragged out.
+  const onGripDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!railSettings || e.button !== 0) return
+    const grip = e.currentTarget
+    grip.setPointerCapture(e.pointerId)
+    const startX = e.screenX
+    const startWidth = railSettings.width_px
+    const sign = edge === 'right' ? -1 : 1
+    let width = startWidth
+    let frame = 0
+    const clamp = (w: number) => Math.min(WIDTH_MAX_PX, Math.max(WIDTH_MIN_PX, Math.round(w)))
+    const move = (ev: PointerEvent) => {
+      width = clamp(startWidth + sign * (ev.screenX - startX))
+      if (!frame) {
+        frame = window.requestAnimationFrame(() => {
+          frame = 0
+          backend.previewWidth(width).catch(() => {})
+        })
+      }
+    }
+    const up = () => {
+      grip.removeEventListener('pointermove', move)
+      grip.removeEventListener('pointerup', up)
+      grip.removeEventListener('pointercancel', up)
+      document.documentElement.classList.remove('resizing')
+      window.cancelAnimationFrame(frame)
+      frame = 0
+      const next = { ...railSettings, width_px: width }
+      setRailSettings(next)
+      backend.updateSettings(next).catch((err) => setNotice(String(err)))
+    }
+    document.documentElement.classList.add('resizing')
+    grip.addEventListener('pointermove', move)
+    grip.addEventListener('pointerup', up)
+    grip.addEventListener('pointercancel', up)
+  }
   const installUpdate = () => {
     setInstalling(true)
     backend.installUpdate().catch((e) => {
@@ -204,6 +385,23 @@ export default function App() {
     act(() => backend.moveTask(id, status, index))
   }
 
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        className="strip"
+        aria-label="Show Task Rail"
+        title="Task Rail"
+        data-testid="strip"
+        onPointerEnter={armDwell}
+        onPointerMove={armDwell}
+        onPointerLeave={disarmDwell}
+        onClick={reveal}
+      >
+        <span className="strip__mark" />
+      </button>
+    )
+  }
   if (error) {
     return (
       <div className="rail rail--empty">
@@ -252,8 +450,10 @@ export default function App() {
   const activeItem = view.in_progress.find((i) => i.id === view.active) ?? null
   const upNext: Item | null = activeItem ?? view.up_next ?? view.in_progress[0] ?? view.top.find((i) => i.kind === 'task') ?? null
 
+  const railClass = ['rail', arriving ? 'rail--arriving' : '', leaving ? 'rail--leaving' : ''].filter(Boolean).join(' ')
   return (
-    <div className="rail">
+    <>
+    <div className={railClass}>
       <header className="rail__header">
         <img className="rail__mark" src="/logo.svg" alt="" width={24} height={24} />
         <h1 className="rail__brand">TaskRail</h1>
@@ -432,6 +632,8 @@ export default function App() {
         <SyncStatus connectors={connectors} />
       </div>
     </div>
+    <div className={`grip grip--${edge}`} role="separator" aria-orientation="vertical" aria-label="Resize the rail" data-testid="grip" onPointerDown={onGripDown} />
+    </>
   )
 }
 

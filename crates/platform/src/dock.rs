@@ -1,14 +1,32 @@
 use taskrail_core::settings::Edge;
 
-/// What the shell asks for. Width is in *physical* pixels because that is
+/// What the shell asks for. Widths are in *physical* pixels because that is
 /// what both operating systems want to hear; the shell does the scaling.
 /// `monitor` is the platform's name for a display, as the shell lists them;
 /// `None`, or a name that no longer exists, means the primary display.
+///
+/// `width_px` is the strip reserved for the rail, the part other windows
+/// keep clear of. `window_px` is how wide the window itself is, which is
+/// the same number until the rail tucks itself away (the window shrinks to
+/// the strip) or comes out over the desktop (it grows past the strip).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DockRequest {
     pub edge: Edge,
     pub width_px: u32,
+    pub window_px: u32,
     pub monitor: Option<String>,
+}
+
+impl DockRequest {
+    /// A window exactly as wide as its strip.
+    pub fn plain(edge: Edge, width_px: u32, monitor: Option<String>) -> Self {
+        Self {
+            edge,
+            width_px,
+            window_px: width_px,
+            monitor,
+        }
+    }
 }
 
 /// Where the rail ended up, in physical pixels with a top-left origin.
@@ -48,6 +66,11 @@ pub trait DesktopDock: Send {
     /// Claim the edge. Safe to call again with a new request to move or
     /// resize the rail.
     fn dock(&mut self, request: DockRequest) -> Result<DockedRect, DockError>;
+
+    /// Move only the window, keeping the reserved strip as it is. Cheap
+    /// enough to call on every pointer move while the rail is dragged wider,
+    /// and what the rail uses to come out of and go back into its strip.
+    fn resize_window(&mut self, window_px: u32) -> Result<DockedRect, DockError>;
 
     /// Re-apply the last request, for when the display layout changes.
     fn relayout(&mut self) -> Result<DockedRect, DockError>;

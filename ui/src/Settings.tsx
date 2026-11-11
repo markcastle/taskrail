@@ -14,6 +14,8 @@ import {
   type ServerSpec,
   type Theme,
   type UpdateStatus,
+  WIDTH_MAX_PX,
+  WIDTH_MIN_PX,
 } from './backend'
 import { Result, SavedMark, Segmented, Slider, Spinner, Toggle, type Tone } from './controls'
 import { useDebouncedSave } from './useDebouncedSave'
@@ -21,13 +23,14 @@ import { followTheme } from './theme'
 
 const backend: RailBackend = createBackend()
 
-type Page = 'rail' | 'model' | 'connectors' | 'logs'
+type Page = 'rail' | 'model' | 'connectors' | 'logs' | 'about'
 
 const PAGES: { id: Page; label: string; blurb: string }[] = [
   { id: 'rail', label: 'Rail', blurb: 'Where it sits and how much it shows. Changes apply as you make them.' },
   { id: 'connectors', label: 'Connectors', blurb: 'The systems your tasks come from.' },
   { id: 'logs', label: 'Logs', blurb: 'What the app has been doing, for when something is wrong.' },
   { id: 'model', label: 'Model', blurb: 'Only needed the first time anyone connects a new kind of system. Most people never set this up.' },
+  { id: 'about', label: 'About', blurb: 'Who made it, what it is built with, and where to say hello.' },
 ]
 
 export interface Toast {
@@ -86,6 +89,7 @@ export default function Settings({ onClose }: { onClose: () => void }) {
         {page === 'model' && <ModelPage notify={notify} fail={fail} />}
         {page === 'connectors' && <ConnectorsPage notify={notify} fail={fail} onOpenModel={() => setPage('model')} />}
         {page === 'logs' && <LogsPage notify={notify} fail={fail} />}
+        {page === 'about' && <AboutPage fail={fail} />}
         {toast && (
           <div className={`toast toast--${toast.tone}`} role={toast.tone === 'error' ? 'alert' : 'status'} data-testid="toast">
             <span>{toast.text}</span>
@@ -281,8 +285,11 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
           ]}
         />
       </Row>
-      <Row label="Width">
-        <Slider label="Width" value={draft.width_px} min={240} max={480} step={10} unit="px" onChange={(v) => set('width_px', v)} />
+      <Row label="Auto-hide" help="The rail tucks itself into a thin strip at the edge and comes out when you rest the pointer on it. Escape puts it away.">
+        <Toggle checked={draft.auto_hide} onChange={(v) => set('auto_hide', v)} label="Auto-hide" />
+      </Row>
+      <Row label="Width" help="Or drag the rail's inner edge.">
+        <Slider label="Width" value={draft.width_px} min={WIDTH_MIN_PX} max={WIDTH_MAX_PX} step={10} unit="px" onChange={(v) => set('width_px', v)} />
       </Row>
       <Row label="Top priorities shown" help="The rest wait behind the fold.">
         <Slider label="Top priorities shown" value={draft.top_limit} min={1} max={10} unit={draft.top_limit === 1 ? 'card' : 'cards'} onChange={(v) => set('top_limit', v)} />
@@ -1070,6 +1077,47 @@ function AddServer({
 }
 
 /* ------------------------------------------------------------------ logs */
+
+const COPYRIGHT_FROM = 2026
+// The year the app was built, not the year it is run: a copyright line is a statement about the work.
+const COPYRIGHT_TO = new Date().getFullYear()
+
+function AboutPage({ fail }: { fail: (e: unknown) => void }) {
+  const [version, setVersion] = useState('')
+  useEffect(() => {
+    backend.appVersion().then(setVersion).catch(() => setVersion(''))
+  }, [])
+  const years = COPYRIGHT_TO > COPYRIGHT_FROM ? `${COPYRIGHT_FROM}–${COPYRIGHT_TO}` : `${COPYRIGHT_FROM}`
+  const open = (url: string) => backend.openProjectPage(url).catch(fail)
+  return (
+    <section className="group about" data-testid="about">
+      <div className="about__hero">
+        <img src="/logo.svg" alt="" width={56} height={56} />
+        <div>
+          <h2>Task Rail</h2>
+          <p className="about__version">{version ? `Version ${version}` : '\u00a0'}</p>
+        </div>
+      </div>
+      <p className="about__line">A task strip that lives on the edge of your screen, fed by the systems your work already lives in.</p>
+      <p className="about__line">Developed by Mark Castle. Built with Rust, Tauri and React, and open source under the MIT licence.</p>
+      <p className="about__copyright">© {years} Mark Castle</p>
+      <div className="settings-actions">
+        <button type="button" className="button button--quiet" onClick={() => open('https://taskrail.uk/')}>
+          Website
+        </button>
+        <button type="button" className="button button--quiet" onClick={() => open('https://github.com/markcastle/taskrail/')}>
+          Source on GitHub
+        </button>
+        <button type="button" className="button button--quiet" onClick={() => open('https://github.com/markcastle/taskrail/blob/main/CHANGELOG.md')}>
+          What changed
+        </button>
+        <button type="button" className="button button--quiet" onClick={() => open('https://github.com/markcastle/taskrail/issues/new')}>
+          Report a problem
+        </button>
+      </div>
+    </section>
+  )
+}
 
 function LogsPage({ notify, fail }: { notify: (tone: Tone, text: string) => void; fail: (e: unknown) => void }) {
   const [text, setText] = useState('')

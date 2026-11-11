@@ -2,7 +2,7 @@
 
 use taskrail_core::settings::Edge;
 use taskrail_platform::{DockError, DockRequest, RawWindow};
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 use crate::state::{lock, AppState};
 
@@ -64,8 +64,12 @@ pub fn hide(app: &AppHandle) {
     });
 }
 
-/// Bring a hidden rail back and dock it again. A rail that is already on
-/// screen is just focused.
+/// The UI listens for this to come out of its strip when the tray or the
+/// shortcut asked for the rail.
+pub const REVEAL_EVENT: &str = "rail:reveal";
+
+/// Bring a hidden rail back and dock it again, and bring an auto-hidden
+/// rail out of its strip. A rail that is already on screen is just focused.
 pub fn show(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
@@ -80,8 +84,68 @@ pub fn show(app: &AppHandle) {
             }
             log::info!("rail shown");
         }
+        let tucked = {
+            let state = handle.state::<AppState>();
+            let rail = lock(&state.rail);
+            rail.settings.auto_hide && !rail.revealed
+        };
+        if tucked {
+            if let Err(e) = set_revealed(&handle, true) {
+                log::warn!("could not bring the rail out: {e}");
+            }
+            let _ = handle.emit(REVEAL_EVENT, ());
+        }
         let _ = window.set_focus();
     });
+}
+
+/// Out of the strip or back into it. Only the window moves; the strip other
+/// windows keep clear of stays as it is. Must run on the main thread.
+pub fn set_revealed(app: &AppHandle, revealed: bool) -> Result<(), DockError> {
+    {
+        let state = app.state::<AppState>();
+        let mut rail = lock(&state.rail);
+        if rail.revealed == revealed {
+            return Ok(());
+        }
+        rail.revealed = revealed;
+    }
+    log::info!("rail {}", if revealed { "out" } else { "tucked away" });
+    resize(app)
+}
+
+/// Re-size the window to what the rail's state says, without touching the
+/// reserved strip. For the live drag and for coming out of the strip.
+pub fn resize(app: &AppHandle) -> Result<(), DockError> {
+    let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
+    let state = app.state::<AppState>();
+    let (window_px, monitor) = {
+        let rail = lock(&state.rail);
+        (rail.window_width_px(), rail.settings.monitor.clone())
+    };
+    let scale = monitor_scale(&window, monitor.as_deref());
+    let physical = (f64::from(window_px) * scale).round() as u32;
+    let mut guard = lock(&state.dock);
+    match guard.as_mut() {
+        Some(dock) => {
+            dock.resize_window(physical)?;
+            Ok(())
+        }
+        None => {
+            drop(guard);
+            park(&window, app).map_err(|e| DockError::Os(e.to_string()))
+        }
+    }
+}
+
+/// `resize`, from a command thread.
+pub fn resize_later(app: &AppHandle) -> tauri::Result<()> {
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        if let Err(e) = resize(&handle) {
+            log::warn!("re-size failed: {e}");
+        }
+    })
 }
 
 /// Undock and drop the platform dock. Safe to call more than once.
@@ -98,11 +162,12 @@ pub fn release(app: &AppHandle) {
 fn apply(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();
-    let (edge, width_px, monitor) = {
+    let (edge, width_px, window_px, monitor) = {
         let rail = lock(&state.rail);
         (
             rail.settings.edge,
-            rail.current_width_px(),
+            rail.reserved_width_px(),
+            rail.window_width_px(),
             rail.settings.monitor.clone(),
         )
     };
@@ -110,6 +175,7 @@ fn apply(app: &AppHandle) -> Result<(), DockError> {
     let request = DockRequest {
         edge,
         width_px: (f64::from(width_px) * scale).round() as u32,
+        window_px: (f64::from(window_px) * scale).round() as u32,
         monitor,
     };
     let mut guard = lock(&state.dock);
@@ -189,7 +255,7 @@ fn park(window: &WebviewWindow, app: &AppHandle) -> tauri::Result<()> {
         let rail = lock(&state.rail);
         (
             rail.settings.edge,
-            rail.current_width_px(),
+            rail.window_width_px(),
             rail.settings.monitor.clone(),
         )
     };

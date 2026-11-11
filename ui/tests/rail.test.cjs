@@ -391,6 +391,51 @@ assert.equal(await settings.getByRole('switch', { name: 'Sounds' }).getAttribute
 await settings.getByRole('switch', { name: 'Animation' }).click()
 await page.waitForFunction(() => document.documentElement.dataset.motion === 'on')
 
+// 11d. The rail's inner edge is a handle, on whichever side faces the desktop.
+// The stand-in cannot move a window, but the width saved on release is the one
+// dragged out: 60px inward from 320 is 260.
+const edge = await page.evaluate(async () => (await window.__taskrail.getSettings()).edge)
+const grip = page.getByTestId('grip')
+const gripBox = await grip.boundingBox()
+const inward = edge === 'right' ? 60 : -60
+await page.mouse.move(gripBox.x + 3, 400)
+await page.mouse.down()
+await page.mouse.move(gripBox.x + 3 + inward, 400, { steps: 4 })
+await page.mouse.up()
+await page.waitForFunction(() => JSON.parse(localStorage.getItem('taskrail-dev-state') ?? '{}').settings?.width_px === 260)
+await settings.reload()
+await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
+assert.match(await settings.getByRole('slider', { name: 'Width' }).evaluate((el) => String(el.value)), /^260$/, 'the slider shows the dragged width')
+
+// 11e. Auto-hide. Once the pointer has left, the rail tucks itself into a strip;
+// a rest on the strip or a click brings it back; Escape puts it away.
+await page.evaluate(async () => {
+  const b = window.__taskrail
+  await b.updateSettings({ ...(await b.getSettings()), auto_hide: true })
+})
+await page.locator('html').dispatchEvent('pointerleave')
+await page.getByTestId('strip').waitFor()
+await page.mouse.move(160, 450)
+await page.getByTestId('section-priority').waitFor()
+assert.equal(await page.getByTestId('strip').count(), 0, 'the rail is out')
+await page.keyboard.press('Escape')
+await page.getByTestId('strip').waitFor()
+await page.getByTestId('strip').click()
+await page.getByTestId('section-priority').waitFor()
+await page.evaluate(async () => {
+  const b = window.__taskrail
+  await b.updateSettings({ ...(await b.getSettings()), auto_hide: false })
+})
+await page.locator('html').dispatchEvent('pointerleave')
+await page.waitForTimeout(900)
+assert.equal(await page.getByTestId('strip').count(), 0, 'with auto-hide off the rail stays out')
+
+// 11f. About says who made it.
+await settings.getByRole('button', { name: 'About', exact: true }).click()
+await settings.getByTestId('about').waitFor()
+assert.match(await settings.getByTestId('about').textContent(), /Developed by Mark Castle/)
+assert.match(await settings.getByTestId('about').textContent(), /© 2026/)
+
 // 12. The Logs page shows the stand-in's log, including this page's own start line.
 await settings.getByRole('button', { name: 'Logs', exact: true }).click()
 await settings.getByTestId('log').waitFor()

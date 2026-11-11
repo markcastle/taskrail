@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- **Auto-hide.** A switch on the Rail page. On, the rail tucks itself into a thin strip at the edge of the screen. Other windows still keep clear of the strip, so nothing is covered, and a small mark on it shows where the rail is. Rest the pointer on the strip for a moment, or click it, and the rail slides out over the desktop. It slides back once the pointer leaves, unless you are typing in it or dragging a task. Escape puts it away at once. The tray and Ctrl+Shift+Space bring it out as before.
+- **Drag to resize.** The rail's inner edge is a handle. Drag it and the rail follows; let go and the width is saved, so the Width slider in Settings shows what you dragged out. The rail can now go up to 600px wide.
+- **About** in Settings: who made Task Rail, what it is built with, the licence, and links to the website, the source, the changelog and the issue tracker.
+
 ### Changed
 
 - Releases are cut from a **Run workflow** button on GitHub, and a release that went wrong can be rolled back from another. Nothing changes in the app; it means every release goes through the same checks whoever makes it.

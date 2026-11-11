@@ -20,10 +20,19 @@ pub struct Rail {
     pub active: Option<ItemId>,
     /// While settings are open the rail widens to make room. Not persisted.
     pub expanded: bool,
+    /// With auto-hide on, whether the rail is out over the desktop right now
+    /// or tucked into its strip. Always true with auto-hide off.
+    pub revealed: bool,
+    /// A width being dragged out, shown live but not yet saved.
+    pub preview_width_px: Option<u32>,
 }
 
 /// Logical width of the rail while settings are open.
 pub const EXPANDED_WIDTH_PX: u32 = 760;
+
+/// Logical width of the strip an auto-hidden rail leaves at the edge: enough
+/// to find with the pointer and to show a mark, too little to cover anything.
+pub const STRIP_WIDTH_PX: u32 = 8;
 
 impl Rail {
     pub fn open(path: Option<PathBuf>) -> Result<Self, Box<dyn std::error::Error>> {
@@ -35,7 +44,7 @@ impl Rail {
             }
         };
 
-        let settings = store
+        let settings: RailSettings = store
             .get_value(SETTINGS_KEY)?
             .and_then(|json| serde_json::from_str(&json).ok())
             .unwrap_or_default();
@@ -43,30 +52,56 @@ impl Rail {
 
         if store.get_value(SEEDED_KEY)?.is_none() {
             store.set_value(SEEDED_KEY, "1")?;
+            let revealed = !settings.auto_hide;
             let mut rail = Self {
                 service: RailService::new(store, SystemClock),
                 settings,
                 active,
                 expanded: false,
+                revealed,
+                preview_width_px: None,
             };
             crate::seed::welcome(&mut rail.service)?;
             return Ok(rail);
         }
 
+        let revealed = !settings.auto_hide;
         Ok(Self {
             service: RailService::new(store, SystemClock),
             settings,
             active,
             expanded: false,
+            revealed,
+            preview_width_px: None,
         })
     }
 
-    /// The width the dock should use right now.
-    pub fn current_width_px(&self) -> u32 {
+    /// The width being shown as the rail's own: the saved one, or the one
+    /// mid-drag.
+    fn rail_width_px(&self) -> u32 {
+        self.preview_width_px.unwrap_or(self.settings.width_px)
+    }
+
+    /// The strip other windows keep clear of. With auto-hide on that is a
+    /// sliver; settings still take the room they need.
+    pub fn reserved_width_px(&self) -> u32 {
         if self.expanded {
-            self.settings.width_px.max(EXPANDED_WIDTH_PX)
+            self.rail_width_px().max(EXPANDED_WIDTH_PX)
+        } else if self.settings.auto_hide {
+            STRIP_WIDTH_PX
         } else {
-            self.settings.width_px
+            self.rail_width_px()
+        }
+    }
+
+    /// How wide the window itself is right now.
+    pub fn window_width_px(&self) -> u32 {
+        if self.expanded {
+            self.rail_width_px().max(EXPANDED_WIDTH_PX)
+        } else if self.settings.auto_hide && !self.revealed {
+            STRIP_WIDTH_PX
+        } else {
+            self.rail_width_px()
         }
     }
 
@@ -81,7 +116,11 @@ impl Rail {
         ))
     }
 
-    pub fn save_settings(&mut self, settings: RailSettings) -> Result<(), String> {
+    pub fn save_settings(&mut self, mut settings: RailSettings) -> Result<(), String> {
+        settings.width_px = RailSettings::clamp_width(settings.width_px);
+        if !settings.auto_hide {
+            self.revealed = true;
+        }
         let json = serde_json::to_string(&settings).map_err(|e| e.to_string())?;
         self.service
             .repository_mut()

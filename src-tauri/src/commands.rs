@@ -178,10 +178,12 @@ pub fn update_settings(
     let needs_redock = {
         let mut rail = lock(&state.rail);
         let before = rail.settings.clone();
+        rail.preview_width_px = None;
         rail.save_settings(settings)?;
         before.edge != rail.settings.edge
             || before.width_px != rail.settings.width_px
             || before.monitor != rail.settings.monitor
+            || before.auto_hide != rail.settings.auto_hide
     };
     if needs_redock {
         crate::dock::redock(&app).map_err(|e| e.to_string())?;
@@ -684,9 +686,15 @@ pub fn export_blueprint(state: State<'_, AppState>, id: String) -> CommandResult
 /// gets to open an arbitrary address.
 #[tauri::command]
 pub fn open_project_page(url: String) -> CommandResult<()> {
-    const OURS: &str = "https://github.com/markcastle/taskrail/";
-    if !url.starts_with(OURS) {
-        return Err(format!("only pages under {OURS} can be opened"));
+    const OURS: [&str; 2] = [
+        "https://github.com/markcastle/taskrail/",
+        "https://taskrail.uk/",
+    ];
+    if !OURS.iter().any(|ours| url.starts_with(ours)) {
+        return Err(format!(
+            "only pages under {} can be opened",
+            OURS.join(" or ")
+        ));
     }
     open::that(&url).map_err(|e| e.to_string())
 }
@@ -733,6 +741,35 @@ pub fn open_settings(app: AppHandle) -> CommandResult<()> {
 #[tauri::command]
 pub fn list_monitors(app: AppHandle) -> Vec<crate::dock::MonitorInfo> {
     crate::dock::monitors(&app)
+}
+
+/// Out of the strip, or back into it. The page decides when: it is the one
+/// that knows where the pointer is and whether someone is typing.
+#[tauri::command]
+pub fn reveal_rail(app: AppHandle, revealed: bool) -> CommandResult<()> {
+    let handle = app.clone();
+    app.run_on_main_thread(move || {
+        if let Err(e) = crate::dock::set_revealed(&handle, revealed) {
+            log::warn!("could not change the rail's reveal: {e}");
+        }
+    })
+    .map_err(|e| e.to_string())
+}
+
+/// A width being dragged out: the window follows the pointer, nothing is
+/// saved and the reserved strip is left alone until the drag ends with
+/// `update_settings`. `None` ends a preview without saving.
+#[tauri::command]
+pub fn preview_width(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    width_px: Option<u32>,
+) -> CommandResult<()> {
+    {
+        let mut rail = lock(&state.rail);
+        rail.preview_width_px = width_px.map(RailSettings::clamp_width);
+    }
+    crate::dock::resize_later(&app).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

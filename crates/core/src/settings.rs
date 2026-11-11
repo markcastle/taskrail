@@ -31,11 +31,21 @@ pub const TOP_LIMIT_DEFAULT: u8 = 5;
 /// backlog, and ten is where that stops being true.
 pub const TOP_LIMIT_MAX: u8 = 10;
 
+/// The narrowest the rail goes before titles stop fitting, and the widest
+/// before it stops being a rail. The slider and the drag handle share them.
+pub const WIDTH_MIN_PX: u32 = 240;
+pub const WIDTH_MAX_PX: u32 = 600;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RailSettings {
     pub edge: Edge,
     /// Rail width in logical pixels. Platforms convert to physical pixels.
     pub width_px: u32,
+    /// Tuck the rail away to a thin strip at the edge, and bring it out when
+    /// the pointer rests on the strip. Off by default: the rail's whole idea
+    /// is to be in view.
+    #[serde(default)]
+    pub auto_hide: bool,
     /// Requested fold limit. Read it through
     /// [`RailSettings::effective_top_limit`], which clamps it.
     pub top_limit: u8,
@@ -71,6 +81,7 @@ impl Default for RailSettings {
         Self {
             edge: Edge::Right,
             width_px: 320,
+            auto_hide: false,
             top_limit: TOP_LIMIT_DEFAULT,
             event_lead_minutes: 60,
             theme: Theme::System,
@@ -86,6 +97,12 @@ impl RailSettings {
     pub fn effective_top_limit(&self) -> usize {
         self.top_limit.clamp(1, TOP_LIMIT_MAX) as usize
     }
+
+    /// The width inside the range the rail can live with, whatever was
+    /// asked for.
+    pub fn clamp_width(width_px: u32) -> u32 {
+        width_px.clamp(WIDTH_MIN_PX, WIDTH_MAX_PX)
+    }
 }
 
 #[cfg(test)]
@@ -99,7 +116,15 @@ mod tests {
         assert_eq!(settings.theme, Theme::System);
         assert_eq!(settings.monitor, None);
         assert_eq!(settings.width_px, 300);
+        assert!(!settings.auto_hide);
         let json = serde_json::to_string(&settings).unwrap();
         assert!(json.contains("\"theme\":\"system\""));
+    }
+
+    #[test]
+    fn a_width_outside_the_range_is_pulled_back_in() {
+        assert_eq!(RailSettings::clamp_width(100), WIDTH_MIN_PX);
+        assert_eq!(RailSettings::clamp_width(320), 320);
+        assert_eq!(RailSettings::clamp_width(9000), WIDTH_MAX_PX);
     }
 }

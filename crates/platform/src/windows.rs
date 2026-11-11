@@ -35,9 +35,16 @@ const SUBCLASS_ID: usize = 0x5452_4149; // "TRAI"
 #[derive(Debug, Clone)]
 struct Placement {
     edge: Edge,
+    /// The reserved strip.
     width: i32,
+    /// The window, which may be narrower (tucked away) or wider (out over
+    /// the desktop) than the strip.
+    window: i32,
     monitor: Option<String>,
     callback_message: u32,
+    /// The strip as the system last agreed to it, which may sit inward of
+    /// the screen edge when another bar is on the same side.
+    strip: Option<RECT>,
 }
 
 static PLACEMENT: Mutex<Option<Placement>> = Mutex::new(None);
@@ -91,11 +98,34 @@ impl DesktopDock for AppBarDock {
         let placement = Placement {
             edge: request.edge,
             width: request.width_px as i32,
+            window: request.window_px as i32,
             monitor: request.monitor.clone(),
             callback_message: self.callback_message,
+            strip: None,
         };
         *lock_placement() = Some(placement.clone());
         place(self.hwnd(), &placement)
+    }
+
+    fn resize_window(&mut self, window_px: u32) -> Result<DockedRect, DockError> {
+        let placement = {
+            let mut guard = lock_placement();
+            let placement = guard.as_mut().ok_or(DockError::NotDocked)?;
+            placement.window = window_px as i32;
+            placement.clone()
+        };
+        // Only the window moves. The strip is already what the system
+        // thinks it is, so there is no reason to tell it again.
+        let strip = match placement.strip {
+            Some(strip) => strip,
+            None => {
+                let screen = screen_for(placement.monitor.as_deref())?;
+                let mut rc = screen;
+                fit(&mut rc, placement.edge, placement.width, screen);
+                rc
+            }
+        };
+        move_window(self.hwnd(), &placement, strip)
     }
 
     fn relayout(&mut self) -> Result<DockedRect, DockError> {
@@ -216,7 +246,18 @@ fn place(hwnd: HWND, placement: &Placement) -> Result<DockedRect, DockError> {
     fit(&mut data.rc, placement.edge, placement.width, screen);
     unsafe { SHAppBarMessage(ABM_SETPOS, &mut data) };
 
-    let rc = data.rc;
+    if let Some(current) = lock_placement().as_mut() {
+        current.strip = Some(data.rc);
+    }
+    move_window(hwnd, placement, data.rc)
+}
+
+/// Puts the window on the strip's edge at the window's own width, which
+/// is the strip's width unless the rail is tucked away or out over the
+/// desktop.
+fn move_window(hwnd: HWND, placement: &Placement, strip: RECT) -> Result<DockedRect, DockError> {
+    let mut rc = strip;
+    fit(&mut rc, placement.edge, placement.window, strip);
     let (width, height) = (rc.right - rc.left, rc.bottom - rc.top);
     unsafe {
         SetWindowPos(
@@ -239,6 +280,8 @@ fn place(hwnd: HWND, placement: &Placement) -> Result<DockedRect, DockError> {
     })
 }
 
+/// Keeps `rc` on its outer edge and gives it the asked-for width and the
+/// full height of `screen`.
 fn fit(rc: &mut RECT, edge: Edge, width: i32, screen: RECT) {
     rc.top = screen.top;
     rc.bottom = screen.bottom;

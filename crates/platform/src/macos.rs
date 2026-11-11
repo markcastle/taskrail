@@ -66,7 +66,9 @@ impl FloatingPanelDock {
             .or_else(|| window.screen())
             .ok_or_else(|| DockError::Os("no screen to dock to".into()))?;
         let scale = screen.backingScaleFactor();
-        let width = f64::from(request.width_px) / scale;
+        // Nothing is reserved on macOS, so the strip's width only matters
+        // through the window's; see the crate docs.
+        let width = f64::from(request.window_px) / scale;
         let visible = screen.visibleFrame();
         let x = match request.edge {
             Edge::Right => visible.origin.x + visible.size.width - width,
@@ -108,6 +110,13 @@ fn screen_for(mtm: MainThreadMarker, monitor: Option<&str>) -> Option<Retained<N
 impl DesktopDock for FloatingPanelDock {
     fn dock(&mut self, request: DockRequest) -> Result<DockedRect, DockError> {
         self.last = Some(request.clone());
+        self.apply(request)
+    }
+
+    fn resize_window(&mut self, window_px: u32) -> Result<DockedRect, DockError> {
+        let request = self.last.as_mut().ok_or(DockError::NotDocked)?;
+        request.window_px = window_px;
+        let request = request.clone();
         self.apply(request)
     }
 

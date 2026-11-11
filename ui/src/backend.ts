@@ -67,9 +67,15 @@ export interface RailView {
 
 export type Theme = 'system' | 'light' | 'dark'
 
+/** The narrowest and widest the rail goes, shared by the slider and the drag handle. */
+export const WIDTH_MIN_PX = 240
+export const WIDTH_MAX_PX = 600
+
 export interface RailSettings {
   edge: Edge
   width_px: number
+  /** Tuck the rail into a thin strip at the edge until the pointer rests on it. */
+  auto_hide: boolean
   top_limit: number
   event_lead_minutes: number
   theme: Theme
@@ -184,6 +190,12 @@ export interface RailBackend {
   quit(): Promise<void>
   /** Widen the rail for settings, or give the width back. */
   expandRail(expanded: boolean): Promise<void>
+  /** With auto-hide on: out of the strip over the desktop, or back into it. */
+  revealRail(revealed: boolean): Promise<void>
+  /** A width being dragged out: the window follows, nothing is saved. `null` ends the preview. */
+  previewWidth(widthPx: number | null): Promise<void>
+  /** Fires when the tray or the shortcut brought an auto-hidden rail out. Returns an unsubscribe. */
+  onReveal(callback: () => void): () => void
   /** The displays attached right now, primary first. */
   listMonitors(): Promise<MonitorInfo[]>
   /** Fires when the tray asks the rail to show settings. Returns an unsubscribe. */
@@ -277,6 +289,9 @@ function tauriBackend(): RailBackend {
     updateSettings: (settings) => call('update_settings', { settings }),
     quit: () => call('quit'),
     expandRail: (expanded) => call('expand_rail', { expanded }),
+    revealRail: (revealed) => call('reveal_rail', { revealed }),
+    previewWidth: (widthPx) => call('preview_width', { widthPx }),
+    onReveal: (cb) => listen('rail:reveal', cb),
     listMonitors: () => call('list_monitors'),
     onOpenSettings: (cb) => listen('rail:open-settings', cb),
     readLog: (lines) => call('read_log', { lines: lines ?? null }),
@@ -367,7 +382,7 @@ function browserBackend(): RailBackend {
     task('update-project-plan', 'Update project plan', 'done'),
   ]
   let active: string | null = 'design-dashboard'
-  let settings: RailSettings = { edge: 'right', width_px: 320, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, auto_update: false, animations: true, sounds: false }
+  let settings: RailSettings = { edge: 'right', width_px: 320, auto_hide: false, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, auto_update: false, animations: true, sounds: false }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
@@ -388,6 +403,7 @@ function browserBackend(): RailBackend {
       settings = {
         ...state.settings,
         theme: state.settings.theme ?? 'system',
+        auto_hide: state.settings.auto_hide ?? false,
         monitor: state.settings.monitor ?? null,
         auto_update: state.settings.auto_update ?? false,
         animations: state.settings.animations ?? true,
@@ -552,6 +568,12 @@ function browserBackend(): RailBackend {
     updateSettings: (next) => async(() => ((settings = { ...next }), notify(), settings)),
     quit: () => async(() => undefined),
     expandRail: () => async(() => undefined),
+    revealRail: (revealed) =>
+      async(() => {
+        devLog.push(`${new Date().toISOString()} [info] stand-in rail ${revealed ? 'out' : 'tucked away'}`)
+      }),
+    previewWidth: () => async(() => undefined),
+    onReveal: () => () => undefined,
     listMonitors: () =>
       async(() => [
         { name: '\\\\.\\DISPLAY1', width: 2560, height: 1440, x: 0, y: 0, scale: 1, primary: true },
