@@ -6,7 +6,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- With auto-hide on, the rail vanished completely on Windows instead of leaving its strip, so there was nothing to rest the pointer on. The window was being shrunk to 8px, which Windows does not reliably show. It now keeps its width and slides past the screen edge, leaving the strip and a bolder mark showing.
 
 ## [0.9.0] - 2026-11-11
 
