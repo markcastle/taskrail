@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.1] - 2026-11-11
+
 ### Fixed
 
 - With auto-hide on, the rail vanished completely on Windows instead of leaving its strip, so there was nothing to rest the pointer on. The window was being shrunk to 8px, which Windows does not reliably show. It now keeps its width and slides past the screen edge, leaving the strip and a bolder mark showing.
@@ -198,7 +202,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/markcastle/taskrail/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/markcastle/taskrail/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/markcastle/taskrail/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/markcastle/taskrail/compare/v0.7.0...v0.8.0
