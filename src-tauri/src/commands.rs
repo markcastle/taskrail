@@ -175,16 +175,31 @@ pub fn update_settings(
     state: State<'_, AppState>,
     settings: RailSettings,
 ) -> CommandResult<RailSettings> {
-    let needs_redock = {
+    let (needs_redock, auto_hide_changed) = {
         let mut rail = lock(&state.rail);
         let before = rail.settings.clone();
         rail.preview_width_px = None;
         rail.save_settings(settings)?;
-        before.edge != rail.settings.edge
-            || before.width_px != rail.settings.width_px
-            || before.monitor != rail.settings.monitor
-            || before.auto_hide != rail.settings.auto_hide
+        let auto_hide_changed = before.auto_hide != rail.settings.auto_hide;
+        if auto_hide_changed {
+            // On or off, the rail is out at the moment of the change: it was
+            // switched from Settings, which is the rail.
+            rail.revealed = true;
+            rail.wipe_px = None;
+        }
+        (
+            before.edge != rail.settings.edge
+                || before.width_px != rail.settings.width_px
+                || before.monitor != rail.settings.monitor
+                || auto_hide_changed,
+            auto_hide_changed,
+        )
     };
+    if auto_hide_changed {
+        // Start the rules again from "out"; the watcher takes it from there.
+        *lock(&state.autohide) = taskrail_core::autohide::AutoHide::new(true);
+        let _ = app.emit(crate::autohide::PHASE_EVENT, "out");
+    }
     if needs_redock {
         crate::dock::redock(&app).map_err(|e| e.to_string())?;
     }
@@ -743,17 +758,44 @@ pub fn list_monitors(app: AppHandle) -> Vec<crate::dock::MonitorInfo> {
     crate::dock::monitors(&app)
 }
 
-/// Out of the strip, or back into it. The page decides when: it is the one
-/// that knows where the pointer is and whether someone is typing.
+/// Out of the strip (a click on it), or back into it (Escape). The pointer
+/// coming and going is watched by the shell itself; see `autohide`.
 #[tauri::command]
-pub fn reveal_rail(app: AppHandle, revealed: bool) -> CommandResult<()> {
-    let handle = app.clone();
-    app.run_on_main_thread(move || {
-        if let Err(e) = crate::dock::set_revealed(&handle, revealed) {
-            log::warn!("could not change the rail's reveal: {e}");
-        }
-    })
-    .map_err(|e| e.to_string())
+pub fn reveal_rail(app: AppHandle, revealed: bool) {
+    if revealed {
+        crate::autohide::bring_out(&app, "the strip was clicked");
+    } else {
+        crate::autohide::put_away(&app);
+    }
+}
+
+/// What the page needs to draw an auto-hidden rail: the phase it is in,
+/// and whether the shell wipes the window itself (so the page keeps still).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct RailPhase {
+    pub phase: &'static str,
+    pub wipes: bool,
+}
+
+#[tauri::command]
+pub fn rail_phase(state: State<'_, AppState>) -> RailPhase {
+    let auto_hide = lock(&state.rail).settings.auto_hide;
+    let phase = if auto_hide {
+        crate::autohide::phase_name(lock(&state.autohide).phase())
+    } else {
+        "out"
+    };
+    RailPhase {
+        phase,
+        wipes: crate::autohide::WIPES,
+    }
+}
+
+/// The page saying the rail is in use (someone is typing in it, or dragging
+/// a row), so auto-hide leaves it out until that ends.
+#[tauri::command]
+pub fn hold_rail(state: State<'_, AppState>, held: bool) {
+    lock(&state.rail).held = held;
 }
 
 /// A width being dragged out: the window follows the pointer, nothing is

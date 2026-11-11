@@ -407,21 +407,34 @@ await settings.reload()
 await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
 assert.match(await settings.getByRole('slider', { name: 'Width' }).evaluate((el) => String(el.value)), /^260$/, 'the slider shows the dragged width')
 
-// 11e. Auto-hide. Once the pointer has left, the rail tucks itself into a strip;
-// a rest on the strip or a click brings it back; Escape puts it away.
+// 11e. Auto-hide. The shell decides when the rail is out; the stand-in follows
+// the same rules with page events. Leave and the rail tucks into a strip; rest
+// the pointer on the edge and it comes out; Escape puts it away; a click on the
+// strip brings it back.
+const onEdge = edge === 'right' ? 317 : 2
 await page.evaluate(async () => {
   const b = window.__taskrail
   await b.updateSettings({ ...(await b.getSettings()), auto_hide: true })
 })
 await page.locator('html').dispatchEvent('pointerleave')
 await page.getByTestId('strip').waitFor()
+assert.equal(await page.getByTestId('section-priority').count(), 0, 'tucked away, the strip is all there is')
 await page.mouse.move(160, 450)
+await page.waitForTimeout(400)
+assert.equal(await page.getByTestId('strip').count(), 1, 'the middle of the screen is not the edge')
+await page.mouse.move(onEdge, 450)
 await page.getByTestId('section-priority').waitFor()
 assert.equal(await page.getByTestId('strip').count(), 0, 'the rail is out')
 await page.keyboard.press('Escape')
 await page.getByTestId('strip').waitFor()
 await page.getByTestId('strip').click()
 await page.getByTestId('section-priority').waitFor()
+// In use, it stays: with the add box focused, leaving does not tuck it away.
+await page.getByLabel('New task title').focus()
+await page.locator('html').dispatchEvent('pointerleave')
+await page.waitForTimeout(1000)
+assert.equal(await page.getByTestId('strip').count(), 0, 'a rail being typed in stays out')
+await page.getByLabel('New task title').blur()
 await page.evaluate(async () => {
   const b = window.__taskrail
   await b.updateSettings({ ...(await b.getSettings()), auto_hide: false })

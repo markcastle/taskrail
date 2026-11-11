@@ -12,6 +12,7 @@
 //! crate, that is the signal to add an adapter crate instead and reach it
 //! through a port.
 
+pub mod autohide;
 pub mod domain;
 pub mod memory;
 pub mod ports;

@@ -17,8 +17,8 @@ use windows::core::w;
 use windows::core::BOOL;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, HDC, HMONITOR, MONITORINFO,
-    MONITORINFOEXW, MONITOR_DEFAULTTOPRIMARY,
+    CreateRectRgn, EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, SetWindowRgn, HDC,
+    HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTOPRIMARY,
 };
 use windows::Win32::UI::Shell::{
     DefSubclassProc, RemoveWindowSubclass, SHAppBarMessage, SetWindowSubclass, ABE_LEFT, ABE_RIGHT,
@@ -40,7 +40,8 @@ struct Placement {
     /// The window, which may be wider than the strip when the rail is out
     /// over the desktop.
     window: i32,
-    /// How much of the window is on screen; the rest is past the edge.
+    /// How much of the window shows, from the screen edge inward; the rest
+    /// is clipped away while the rail is tucked into its strip.
     visible: i32,
     monitor: Option<String>,
     callback_message: u32,
@@ -143,6 +144,7 @@ impl DesktopDock for AppBarDock {
             unsafe {
                 SHAppBarMessage(ABM_REMOVE, &mut data);
                 let _ = RemoveWindowSubclass(self.hwnd(), Some(subclass_proc), SUBCLASS_ID);
+                SetWindowRgn(self.hwnd(), None, true);
             }
             self.registered = false;
             *lock_placement() = None;
@@ -256,20 +258,18 @@ fn place(hwnd: HWND, placement: &Placement) -> Result<DockedRect, DockError> {
     move_window(hwnd, placement, data.rc)
 }
 
-/// Puts the window at its own width with `visible` pixels of it on screen
-/// from the strip's outer edge inward, and the rest past the screen edge.
+/// Puts the window on the strip's edge at its own width, and clips it to
+/// the `visible` pixels nearest the edge when the rail is tucked away.
+///
+/// A tucked-away rail is not moved and not shrunk. Shrinking does not work:
+/// the system holds a window with a caption style to a minimum width far
+/// above a strip's. Moving it past the screen edge does not either: with a
+/// monitor on that side the rail simply appears there. A window region does
+/// both jobs in place: outside it nothing is drawn and the pointer goes to
+/// whatever is behind.
 fn move_window(hwnd: HWND, placement: &Placement, strip: RECT) -> Result<DockedRect, DockError> {
     let mut rc = strip;
-    match placement.edge {
-        Edge::Right => {
-            rc.left = strip.right - placement.visible;
-            rc.right = rc.left + placement.window;
-        }
-        Edge::Left => {
-            rc.right = strip.left + placement.visible;
-            rc.left = rc.right - placement.window;
-        }
-    }
+    fit(&mut rc, placement.edge, placement.window, strip);
     let (width, height) = (rc.right - rc.left, rc.bottom - rc.top);
     unsafe {
         SetWindowPos(
@@ -283,6 +283,7 @@ fn move_window(hwnd: HWND, placement: &Placement, strip: RECT) -> Result<DockedR
         )
     }
     .map_err(|e| DockError::Os(format!("SetWindowPos: {e}")))?;
+    clip(hwnd, placement, width, height);
 
     Ok(DockedRect {
         x: rc.left,
@@ -290,6 +291,24 @@ fn move_window(hwnd: HWND, placement: &Placement, strip: RECT) -> Result<DockedR
         width,
         height,
     })
+}
+
+/// Shows only the `visible` pixels nearest the screen edge, or everything.
+/// Region coordinates are the window's own, from its top-left corner.
+fn clip(hwnd: HWND, placement: &Placement, width: i32, height: i32) {
+    unsafe {
+        if placement.visible >= width {
+            SetWindowRgn(hwnd, None, true);
+            return;
+        }
+        let (left, right) = match placement.edge {
+            Edge::Right => (width - placement.visible, width),
+            Edge::Left => (0, placement.visible),
+        };
+        // The system owns the region once it is set, so it is not deleted here.
+        let region = CreateRectRgn(left, 0, right, height);
+        SetWindowRgn(hwnd, Some(region), true);
+    }
 }
 
 /// Keeps `rc` on its outer edge and gives it the asked-for width and the

@@ -42,6 +42,10 @@ The shell. It opens the store, builds a `RailService` over it in `rail.rs`, turn
 
 There is exactly one window. A second webview window created next to a docked AppBar hung on Windows every time, so settings open inside the rail instead: the page swaps to the settings component and asks the shell to widen the strip with the same docking call used at startup, then gives the width back on close. Anything that needs more than a strip of screen should follow that pattern rather than opening a window.
 
+Auto-hide follows the same split as everything else. The rules, when the rail comes out and when it goes back, are a small state machine in `crates/core` (`autohide`) with no clock and no operating system in it, so each rule is a unit test: rest on the edge and it comes out, brush past and it does not, leave and it goes back after a moment, type in it and it stays. The shell runs one thread that asks the system where the pointer is a few times a second, feeds the machine, and makes the window match the phase it is in. The pointer is read from the system and not from the page on purpose: a tucked-away rail is eight pixels of window, and whether a webview hears the pointer arrive on eight pixels is the kind of thing that differs between machines. The page only draws the phase it is told and reports when the rail is in use.
+
+How the hidden part is hidden is the platform crate's business, behind `visible_px` on the dock. Windows keeps the window where it is and clips it with a window region, because it will neither let a captioned window be eight pixels wide nor keep a window pushed past the screen edge off a monitor on that side. macOS makes the window that narrow. Neither ever moves the rail off its display.
+
 ### `ui`
 
 React, TypeScript, Vite. `backend.ts` is the one interface the components talk to, with two implementations: Tauri commands in the app, and an in-memory stand-in with the same rules in a plain browser. The types mirror `core/src/domain.rs` by hand, and when one changes the other must.

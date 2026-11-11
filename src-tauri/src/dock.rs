@@ -2,7 +2,7 @@
 
 use taskrail_core::settings::Edge;
 use taskrail_platform::{DockError, DockRequest, RawWindow};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
 
 use crate::state::{lock, AppState};
 
@@ -54,6 +54,7 @@ pub fn redock(app: &AppHandle) -> tauri::Result<()> {
 pub fn hide(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
+        lock(&handle.state::<AppState>().rail).tray_hidden = true;
         release(&handle);
         if let Ok(window) = rail_window(&handle) {
             if let Err(e) = window.hide() {
@@ -64,10 +65,6 @@ pub fn hide(app: &AppHandle) {
     });
 }
 
-/// The UI listens for this to come out of its strip when the tray or the
-/// shortcut asked for the rail.
-pub const REVEAL_EVENT: &str = "rail:reveal";
-
 /// Bring a hidden rail back and dock it again, and bring an auto-hidden
 /// rail out of its strip. A rail that is already on screen is just focused.
 pub fn show(app: &AppHandle) {
@@ -77,6 +74,7 @@ pub fn show(app: &AppHandle) {
             return;
         };
         let was_hidden = !window.is_visible().unwrap_or(true);
+        lock(&handle.state::<AppState>().rail).tray_hidden = false;
         let _ = window.show();
         if was_hidden {
             if let Err(e) = attach(&handle) {
@@ -84,34 +82,9 @@ pub fn show(app: &AppHandle) {
             }
             log::info!("rail shown");
         }
-        let tucked = {
-            let state = handle.state::<AppState>();
-            let rail = lock(&state.rail);
-            rail.settings.auto_hide && !rail.revealed
-        };
-        if tucked {
-            if let Err(e) = set_revealed(&handle, true) {
-                log::warn!("could not bring the rail out: {e}");
-            }
-            let _ = handle.emit(REVEAL_EVENT, ());
-        }
+        crate::autohide::bring_out(&handle, "asked for");
         let _ = window.set_focus();
     });
-}
-
-/// Out of the strip or back into it. Only the window moves; the strip other
-/// windows keep clear of stays as it is. Must run on the main thread.
-pub fn set_revealed(app: &AppHandle, revealed: bool) -> Result<(), DockError> {
-    {
-        let state = app.state::<AppState>();
-        let mut rail = lock(&state.rail);
-        if rail.revealed == revealed {
-            return Ok(());
-        }
-        rail.revealed = revealed;
-    }
-    log::info!("rail {}", if revealed { "out" } else { "tucked away" });
-    resize(app)
 }
 
 /// Re-size the window to what the rail's state says, without touching the
@@ -119,12 +92,13 @@ pub fn set_revealed(app: &AppHandle, revealed: bool) -> Result<(), DockError> {
 pub fn resize(app: &AppHandle) -> Result<(), DockError> {
     let window = rail_window(app).map_err(|e| DockError::Os(e.to_string()))?;
     let state = app.state::<AppState>();
-    let (window_px, visible_px, monitor) = {
+    let (window_px, visible_px, monitor, wiping) = {
         let rail = lock(&state.rail);
         (
             rail.window_width_px(),
             rail.visible_width_px(),
             rail.settings.monitor.clone(),
+            rail.wipe_px.is_some(),
         )
     };
     let scale = monitor_scale(&window, monitor.as_deref());
@@ -134,7 +108,11 @@ pub fn resize(app: &AppHandle) -> Result<(), DockError> {
     match guard.as_mut() {
         Some(dock) => {
             let rect = dock.resize_window(window_physical, visible_physical)?;
-            log::info!("window at {rect:?}, {visible_px}px of {window_px}px showing");
+            *lock(&state.window_rect) = Some((rect, scale));
+            // A wipe is a dozen of these in a row; only the ends are news.
+            if !wiping {
+                log::info!("window at {rect:?}, {visible_px}px of {window_px}px showing");
+            }
             Ok(())
         }
         None => {
@@ -189,7 +167,8 @@ fn apply(app: &AppHandle) -> Result<(), DockError> {
     let mut guard = lock(&state.dock);
     let dock = guard.as_mut().ok_or(DockError::NotDocked)?;
     let rect = dock.dock(request)?;
-    log::info!("docked at {rect:?}");
+    *lock(&state.window_rect) = Some((rect, scale));
+    log::info!("docked at {rect:?}, {visible_px}px of {window_px}px showing");
     Ok(())
 }
 
@@ -272,18 +251,49 @@ fn park(window: &WebviewWindow, app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     };
     let scale = monitor.scale_factor();
-    let width = (f64::from(width_px) * scale).round() as u32;
-    let showing = (f64::from(visible_px) * scale).round() as i32;
+    // With no dock to hide the rest, a tucked-away rail is a window as
+    // narrow as its strip.
+    let width = (f64::from(visible_px.min(width_px)) * scale).round() as u32;
     let size = monitor.size();
     let origin = monitor.position();
     let x = match edge {
-        Edge::Right => origin.x + size.width as i32 - showing,
-        Edge::Left => origin.x + showing - width as i32,
+        Edge::Right => origin.x + size.width as i32 - width as i32,
+        Edge::Left => origin.x,
     };
     window.set_always_on_top(true)?;
     window.set_size(PhysicalSize::new(width, size.height))?;
     window.set_position(PhysicalPosition::new(x, origin.y))?;
+    let rect = taskrail_platform::DockedRect {
+        x,
+        y: origin.y,
+        width: width as i32,
+        height: size.height as i32,
+    };
+    *lock(&app.state::<AppState>().window_rect) = Some((rect, scale));
     Ok(())
+}
+
+/// The window moved or changed size for a reason of the system's own, a
+/// display plugged in or another bar taking the edge. Keep what the pointer
+/// watcher knows in step. Called on the main thread from the window's events.
+pub fn note_window_rect(app: &AppHandle) {
+    let Ok(window) = rail_window(app) else {
+        return;
+    };
+    let (Ok(position), Ok(size), Ok(scale)) = (
+        window.outer_position(),
+        window.outer_size(),
+        window.scale_factor(),
+    ) else {
+        return;
+    };
+    let rect = taskrail_platform::DockedRect {
+        x: position.x,
+        y: position.y,
+        width: size.width as i32,
+        height: size.height as i32,
+    };
+    *lock(&app.state::<AppState>().window_rect) = Some((rect, scale));
 }
 
 fn rail_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {

@@ -67,15 +67,14 @@ impl FloatingPanelDock {
             .ok_or_else(|| DockError::Os("no screen to dock to".into()))?;
         let scale = screen.backingScaleFactor();
         // Nothing is reserved on macOS, so the strip's width only matters
-        // through the window's; see the crate docs. A tucked-away rail
-        // keeps its width and sits past the screen edge with `visible_px`
-        // of it showing.
-        let width = f64::from(request.window_px) / scale;
-        let showing = f64::from(request.visible_px) / scale;
+        // through the window's; see the crate docs. A tucked-away rail is a
+        // window as wide as its strip: a borderless NSWindow can be any
+        // width, and shrinking keeps it off a display on that side.
+        let width = f64::from(request.visible_px.min(request.window_px)) / scale;
         let visible = screen.visibleFrame();
         let x = match request.edge {
-            Edge::Right => visible.origin.x + visible.size.width - showing,
-            Edge::Left => visible.origin.x + showing - width,
+            Edge::Right => visible.origin.x + visible.size.width - width,
+            Edge::Left => visible.origin.x,
         };
         let frame = NSRect::new(
             NSPoint::new(x, visible.origin.y),

@@ -25,6 +25,14 @@ pub struct Rail {
     pub revealed: bool,
     /// A width being dragged out, shown live but not yet saved.
     pub preview_width_px: Option<u32>,
+    /// The page says the rail is in use (someone is typing in it, or
+    /// dragging a row), so an auto-hidden rail must stay out.
+    pub held: bool,
+    /// Hidden from the tray: off the screen altogether, strip included.
+    pub tray_hidden: bool,
+    /// Mid-way between strip and rail: how much shows right now while the
+    /// rail is being wiped out of its strip or back into it.
+    pub wipe_px: Option<u32>,
 }
 
 /// Logical width of the rail while settings are open.
@@ -32,8 +40,6 @@ pub const EXPANDED_WIDTH_PX: u32 = 760;
 
 /// Logical width of the strip an auto-hidden rail leaves at the edge: enough
 /// to find with the pointer and to show a mark, too little to cover anything.
-/// The window itself never gets this narrow; it slides past the screen edge
-/// with this much left showing.
 pub const STRIP_WIDTH_PX: u32 = 8;
 
 impl Rail {
@@ -62,6 +68,9 @@ impl Rail {
                 expanded: false,
                 revealed,
                 preview_width_px: None,
+                held: false,
+                tray_hidden: false,
+                wipe_px: None,
             };
             crate::seed::welcome(&mut rail.service)?;
             return Ok(rail);
@@ -75,6 +84,9 @@ impl Rail {
             expanded: false,
             revealed,
             preview_width_px: None,
+            held: false,
+            tray_hidden: false,
+            wipe_px: None,
         })
     }
 
@@ -96,9 +108,8 @@ impl Rail {
         }
     }
 
-    /// How wide the window itself is right now. Never the strip: a window a
-    /// few pixels wide does not reliably exist on Windows, so a tucked-away
-    /// rail keeps its width and sits past the screen edge instead.
+    /// How wide the rail is right now, tucked away or not. How a platform
+    /// hides a tucked-away rail is the dock's business.
     pub fn window_width_px(&self) -> u32 {
         if self.expanded {
             self.rail_width_px().max(EXPANDED_WIDTH_PX)
@@ -107,13 +118,16 @@ impl Rail {
         }
     }
 
-    /// How much of the window is on screen: all of it, or only the strip
-    /// while the rail is tucked away.
+    /// How much of the rail shows, from the screen edge inward: all of it,
+    /// or only the strip while it is tucked away.
     pub fn visible_width_px(&self) -> u32 {
-        if self.settings.auto_hide && !self.revealed && !self.expanded {
-            STRIP_WIDTH_PX
-        } else {
-            self.window_width_px()
+        if !self.settings.auto_hide || self.expanded {
+            return self.window_width_px();
+        }
+        match self.wipe_px {
+            Some(px) => px.clamp(STRIP_WIDTH_PX, self.window_width_px()),
+            None if self.revealed => self.window_width_px(),
+            None => STRIP_WIDTH_PX,
         }
     }
 

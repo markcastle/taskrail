@@ -71,6 +71,9 @@ export type Theme = 'system' | 'light' | 'dark'
 export const WIDTH_MIN_PX = 240
 export const WIDTH_MAX_PX = 600
 
+/** An auto-hidden rail is out over the desktop, on its way back, or tucked into its strip. */
+export type RailPhase = 'out' | 'leaving' | 'tucked'
+
 export interface RailSettings {
   edge: Edge
   width_px: number
@@ -190,12 +193,16 @@ export interface RailBackend {
   quit(): Promise<void>
   /** Widen the rail for settings, or give the width back. */
   expandRail(expanded: boolean): Promise<void>
-  /** With auto-hide on: out of the strip over the desktop, or back into it. */
+  /** With auto-hide on: ask for the rail (a click on its strip) or put it away (Escape). */
   revealRail(revealed: boolean): Promise<void>
+  /** Which phase an auto-hidden rail is in, and whether the shell wipes the window itself. */
+  railPhase(): Promise<{ phase: RailPhase; wipes: boolean }>
+  /** Tell the shell the rail is in use (typing, dragging), so auto-hide leaves it out. */
+  holdRail(held: boolean): Promise<void>
+  /** Fires when an auto-hidden rail changes phase. The shell watches the pointer and decides. Returns an unsubscribe. */
+  onRailPhase(callback: (phase: RailPhase) => void): () => void
   /** A width being dragged out: the window follows, nothing is saved. `null` ends the preview. */
   previewWidth(widthPx: number | null): Promise<void>
-  /** Fires when the tray or the shortcut brought an auto-hidden rail out. Returns an unsubscribe. */
-  onReveal(callback: () => void): () => void
   /** The displays attached right now, primary first. */
   listMonitors(): Promise<MonitorInfo[]>
   /** Fires when the tray asks the rail to show settings. Returns an unsubscribe. */
@@ -290,8 +297,10 @@ function tauriBackend(): RailBackend {
     quit: () => call('quit'),
     expandRail: (expanded) => call('expand_rail', { expanded }),
     revealRail: (revealed) => call('reveal_rail', { revealed }),
+    railPhase: () => call('rail_phase'),
+    holdRail: (held) => call('hold_rail', { held }),
+    onRailPhase: (cb) => listen<RailPhase>('rail:phase', cb),
     previewWidth: (widthPx) => call('preview_width', { widthPx }),
-    onReveal: (cb) => listen('rail:reveal', cb),
     listMonitors: () => call('list_monitors'),
     onOpenSettings: (cb) => listen('rail:open-settings', cb),
     readLog: (lines) => call('read_log', { lines: lines ?? null }),
@@ -442,6 +451,53 @@ function browserBackend(): RailBackend {
   })
   load()
   persist()
+
+  // A stand-in for the shell's pointer watcher, which asks the system where
+  // the pointer is. A page can only see its own events, so this follows the
+  // same rules with those: rest on the edge and the rail comes out, leave
+  // the page and it goes back unless it is in use.
+  const phaseListeners = new Set<(phase: RailPhase) => void>()
+  const pointerWatch = (() => {
+    let phase: RailPhase = 'out'
+    let held = false
+    let timer = 0
+    const set = (next: RailPhase) => {
+      window.clearTimeout(timer)
+      if (phase === next) return
+      phase = next
+      devLog.push(`${new Date().toISOString()} [info] stand-in rail ${next}`)
+      phaseListeners.forEach((cb) => cb(next))
+    }
+    const leave = () => {
+      set('leaving')
+      timer = window.setTimeout(() => set('tucked'), 180)
+    }
+    const atEdge = (x: number) => (settings.edge === 'right' ? x >= window.innerWidth - 8 : x < 8)
+    if (typeof document !== 'undefined') {
+      document.documentElement.addEventListener('pointerleave', () => {
+        if (!settings.auto_hide || phase !== 'out') return
+        window.clearTimeout(timer)
+        timer = window.setTimeout(() => !held && leave(), 500)
+      })
+      document.documentElement.addEventListener('pointerenter', () => {
+        if (phase === 'out') window.clearTimeout(timer)
+      })
+      document.addEventListener('pointermove', (e) => {
+        if (!settings.auto_hide || phase !== 'tucked') return
+        window.clearTimeout(timer)
+        if (atEdge(e.clientX)) timer = window.setTimeout(() => set('out'), 150)
+      })
+    }
+    return {
+      phase: () => phase,
+      hold: (value: boolean) => void (held = value),
+      bringOut: () => set('out'),
+      putAway: () => {
+        if (phase === 'out') leave()
+      },
+      reset: () => set('out'),
+    }
+  })()
   const demoSummary = (): ConnectorSummary => ({
     id: 'demo-tracker',
     name: 'Demo tracker',
@@ -565,15 +621,26 @@ function browserBackend(): RailBackend {
       }),
     setActive: (id) => async(() => ((active = id), notify())),
     getSettings: () => async(() => settings),
-    updateSettings: (next) => async(() => ((settings = { ...next }), notify(), settings)),
+    updateSettings: (next) =>
+      async(() => {
+        if (next.auto_hide !== settings.auto_hide) pointerWatch.reset()
+        settings = { ...next }
+        notify()
+        return settings
+      }),
     quit: () => async(() => undefined),
     expandRail: () => async(() => undefined),
     revealRail: (revealed) =>
       async(() => {
-        devLog.push(`${new Date().toISOString()} [info] stand-in rail ${revealed ? 'out' : 'tucked away'}`)
+        if (revealed) pointerWatch.bringOut()
+        else pointerWatch.putAway()
       }),
+    // ?wipes draws the page the way it is drawn on Windows, where the window keeps the
+    // rail's width and the shell shows only the strip's worth of it.
+    railPhase: () => async(() => ({ phase: settings.auto_hide ? pointerWatch.phase() : ('out' as RailPhase), wipes: new URLSearchParams(location.search).has('wipes') })),
+    holdRail: (held) => async(() => pointerWatch.hold(held)),
+    onRailPhase: (cb) => (phaseListeners.add(cb), () => phaseListeners.delete(cb)),
     previewWidth: () => async(() => undefined),
-    onReveal: () => () => undefined,
     listMonitors: () =>
       async(() => [
         { name: '\\\\.\\DISPLAY1', width: 2560, height: 1440, x: 0, y: 0, scale: 1, primary: true },

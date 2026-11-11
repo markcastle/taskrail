@@ -1,6 +1,7 @@
 use std::sync::Mutex;
 
-use taskrail_platform::DesktopDock;
+use taskrail_core::autohide::AutoHide;
+use taskrail_platform::{DesktopDock, DockedRect};
 
 use crate::connectors::ConnectorRegistry;
 use crate::rail::Rail;
@@ -10,11 +11,19 @@ pub struct AppState {
     pub rail: Mutex<Rail>,
     pub connectors: Mutex<ConnectorRegistry>,
     pub dock: Mutex<Option<Box<dyn DesktopDock>>>,
+    /// When an auto-hidden rail is out and when it is tucked away.
+    pub autohide: Mutex<AutoHide>,
+    /// Where the rail's window is and its display's scale, for telling
+    /// whether the pointer is on the rail's edge.
+    pub window_rect: Mutex<Option<(DockedRect, f64)>>,
 }
 
 impl AppState {
     pub fn new(rail: Rail, connectors: ConnectorRegistry) -> Self {
+        let out = rail.revealed;
         Self {
+            autohide: Mutex::new(AutoHide::new(out)),
+            window_rect: Mutex::new(None),
             rail: Mutex::new(rail),
             connectors: Mutex::new(connectors),
             dock: Mutex::new(None),

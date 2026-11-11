@@ -6,6 +6,7 @@
 //! translates between the webview's JSON and the core's types. Product rules
 //! live in the core; OS rules live in the platform crate.
 
+mod autohide;
 mod commands;
 mod connectors;
 mod dock;
@@ -45,6 +46,8 @@ pub fn run() {
             commands::open_settings,
             commands::expand_rail,
             commands::reveal_rail,
+            commands::rail_phase,
+            commands::hold_rail,
             commands::preview_width,
             commands::list_monitors,
             commands::list_connectors,
@@ -90,7 +93,16 @@ pub fn run() {
             release_on_console_signal(app.handle().clone());
             sync::start(app.handle().clone());
             update::start(app.handle().clone());
+            autohide::start(app.handle().clone());
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            use tauri::WindowEvent::{Moved, Resized, ScaleFactorChanged};
+            if window.label() == dock::RAIL_WINDOW
+                && matches!(event, Moved(_) | Resized(_) | ScaleFactorChanged { .. })
+            {
+                dock::note_window_rect(window.app_handle());
+            }
         })
         .build(tauri::generate_context!())
         .expect("Task Rail failed to start");

@@ -6,7 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **Auto-hide works the way an auto-hidden taskbar does.** Push the pointer against the edge of the screen where the rail lives and it comes out; move away and it goes back. Before, bringing it out depended on the pointer landing exactly on a strip that on Windows was not there to land on, and with a second monitor on that side the hidden rail could turn up on it.
+- The strip is now always on screen while the rail is tucked away: a tinted bar with a blue handle on it, so there is something to see and something to click.
+
+### Changed
+
+- The app now watches where the pointer is on the desktop itself, a few times a second and only while auto-hide is on, where it used to wait for the pointer to arrive on the rail's own window. That is what makes the edge work even where the strip cannot be hovered.
+- On Windows the rail unrolls from the edge and rolls back into it, in place. It is never moved off the screen and never lands on a neighbouring monitor.
+- A rail brought out by the tray or by Ctrl+Shift+Space waits for you: it stays until the pointer has been to it and left, or for a few seconds if it never comes.
+- A rail you are typing in, dragging a task on or resizing stays out however far the pointer goes.
 
 ## [0.9.1] - 2026-11-11
 

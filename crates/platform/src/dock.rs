@@ -6,12 +6,13 @@ use taskrail_core::settings::Edge;
 /// `None`, or a name that no longer exists, means the primary display.
 ///
 /// `width_px` is the strip reserved for the rail, the part other windows
-/// keep clear of. `window_px` is how wide the window itself is, which may
-/// be more than the strip when the rail is out over the desktop. `visible_px`
-/// is how much of the window is on screen: the whole of it normally, and
-/// only its inner edge when the rail is tucked away, with the rest pushed
-/// past the screen edge. The window never gets narrower than the rail,
-/// because windows a few pixels wide do not reliably exist on Windows.
+/// keep clear of. `window_px` is how wide the rail is, which may be more
+/// than the strip when it is out over the desktop. `visible_px` is how much
+/// of it shows, measured from the screen edge inward: all of it normally,
+/// and only a sliver while the rail is tucked away. How a platform hides
+/// the rest is its own business (Windows clips the window in place, macOS
+/// makes the window that narrow); what it must never do is put the hidden
+/// part on a neighbouring display.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DockRequest {
     pub edge: Edge,
@@ -72,10 +73,10 @@ pub trait DesktopDock: Send {
     /// resize the rail.
     fn dock(&mut self, request: DockRequest) -> Result<DockedRect, DockError>;
 
-    /// Move only the window, keeping the reserved strip as it is. Cheap
+    /// Change only the window, keeping the reserved strip as it is. Cheap
     /// enough to call on every pointer move while the rail is dragged wider,
-    /// and what the rail uses to slide out over the desktop and back off
-    /// the edge. `visible_px` is how much of the window stays on screen.
+    /// and what the rail uses to come out of its strip and go back into it.
+    /// `visible_px` is how much of the rail shows, from the edge inward.
     fn resize_window(&mut self, window_px: u32, visible_px: u32) -> Result<DockedRect, DockError>;
 
     /// Re-apply the last request, for when the display layout changes.
