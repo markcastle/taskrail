@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.2] - 2026-11-11
+
 ### Fixed
 
 - **Auto-hide works the way an auto-hidden taskbar does.** Push the pointer against the edge of the screen where the rail lives and it comes out; move away and it goes back. Before, bringing it out depended on the pointer landing exactly on a strip that on Windows was not there to land on, and with a second monitor on that side the hidden rail could turn up on it.
@@ -212,7 +216,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.9.2...HEAD
+[0.9.2]: https://github.com/markcastle/taskrail/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/markcastle/taskrail/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/markcastle/taskrail/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/markcastle/taskrail/compare/v0.8.0...v0.8.1
