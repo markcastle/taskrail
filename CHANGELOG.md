@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.11.1] - 2026-11-12
+
 ### Changed
 
 - **Scope is now Filter, and it explains itself.** The panel that decides which of a connector's tasks reach the rail used to be a switch and two walls of names with no word on what any of it did. It now says what it is for, each choice has a sentence under it in the system's own words, and the bottom line tells you how many tasks your choices leave on the rail.
@@ -247,7 +251,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/markcastle/taskrail/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/markcastle/taskrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/markcastle/taskrail/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/markcastle/taskrail/compare/v0.9.1...v0.9.2
