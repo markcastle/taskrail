@@ -735,7 +735,12 @@ function browserBackend(): RailBackend {
         items = items.filter((i) => i.origin?.connector !== id)
         notify()
       }),
-    syncConnector: (id) => async(() => items.filter((i) => i.origin?.connector === id).length),
+    syncConnector: (id) =>
+      async(() => {
+        connectors = connectors.map((c) => (c.id === id ? { ...c, last_sync: new Date().toISOString(), last_error: null } : c))
+        notify()
+        return items.filter((i) => i.origin?.connector === id).length
+      }),
     onSyncError: (cb) => (syncErrorListeners.add(cb), () => syncErrorListeners.delete(cb)),
     getModelSettings: () => async(() => modelSettings),
     saveModelSettings: (config, apiKey) =>

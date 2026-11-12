@@ -6,7 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A rail left open overnight could stop syncing for good, and not say so.** If a connection to a task system stopped answering without closing, which is what a laptop going to sleep or a network changing does, the app waited on it for ever. Nothing was pulled again, status changes made on the rail were never written back, and the footer went on saying "Up to date". Every network wait now has a limit, a connection that stops answering is dropped and made again, and a connector that fails is tried again a minute later.
+- **The date at the top keeps up.** A rail left open past midnight went on showing yesterday's date, yesterday's "done today" count and yesterday's events until something else made it redraw. It now notices the new day by itself.
+
+### Changed
+
+- **The footer no longer says "Up to date" over old data.** When a connector has gone well past its own interval without a sync, the footer turns amber and says "Last synced 5 h ago".
+- **Click the footer to sync now.**
+- **"Later" is now "More priorities".** It is the rest of your priorities behind the fold, and it was being read as the "Later" group on a board, which it has nothing to do with.
+- A connector that is failing says so once when it starts, not again on every retry.
 
 ## [0.10.0] - 2026-11-11
 

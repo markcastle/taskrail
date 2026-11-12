@@ -90,6 +90,27 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => backend.onChanged(refresh), [refresh])
+  // The rail is left open for days. When the day changes, so does the date
+  // at the top, what counts as done today, and which events are today's:
+  // look twice a minute, and whenever the rail is looked at again.
+  const [day, setDay] = useState(() => new Date().toDateString())
+  useEffect(() => {
+    const check = () => setDay(new Date().toDateString())
+    const t = window.setInterval(check, 30_000)
+    window.addEventListener('focus', check)
+    document.addEventListener('visibilitychange', check)
+    return () => {
+      window.clearInterval(t)
+      window.removeEventListener('focus', check)
+      document.removeEventListener('visibilitychange', check)
+    }
+  }, [])
+  useEffect(() => {
+    setDay(new Date().toDateString())
+  }, [phase])
+  useEffect(() => {
+    refresh()
+  }, [day, refresh])
   useEffect(() => followTheme(backend), [])
   // Motion is off when the person said so, or when the system asks for less of it.
   useEffect(() => {
@@ -587,8 +608,9 @@ export default function App() {
         </Section>
       </DndContext>
 
+      {/* Not "Later": boards have groups called that, and this is only the fold. */}
       {later.length > 0 && (
-        <Section title="Later" tone="later" count={later.length} collapsed>
+        <Section title="More priorities" tone="later" count={later.length} collapsed>
           {later.map((item) => (
             <Row key={item.id} {...rowProps(item)} />
           ))}
@@ -604,7 +626,7 @@ export default function App() {
 
       <div className="rail__bottom">
         <QuickAdd inputRef={addInput} onSubmit={(title) => act(() => backend.addTask(title))} />
-        <SyncStatus connectors={connectors} />
+        <SyncStatus connectors={connectors} onSynced={refresh} />
       </div>
     </div>
     <div className={`grip grip--${edge}`} role="separator" aria-orientation="vertical" aria-label="Resize the rail" data-testid="grip" onPointerDown={onGripDown} />
@@ -676,16 +698,25 @@ function QuickAdd({ inputRef, onSubmit }: { inputRef: React.RefObject<HTMLInputE
   )
 }
 
-function SyncStatus({ connectors }: { connectors: ConnectorSummary[] }) {
+/** A connector is stale when it has gone several of its own intervals without a pull, and at least ten minutes. */
+function isStale(c: ConnectorSummary, now: number): boolean {
+  if (!c.last_sync) return false
+  return now - Date.parse(c.last_sync) > Math.max(c.poll_seconds * 3, 600) * 1000
+}
+
+function SyncStatus({ connectors, onSynced }: { connectors: ConnectorSummary[]; onSynced: () => void }) {
   // "4 min ago" has to move on its own, so the footer re-renders twice a minute.
-  const [, setTick] = useState(0)
+  const [now, setNow] = useState(() => Date.now())
+  const [syncing, setSyncing] = useState(false)
   useEffect(() => {
-    const t = window.setInterval(() => setTick((n) => n + 1), 30_000)
+    const t = window.setInterval(() => setNow(Date.now()), 30_000)
     return () => window.clearInterval(t)
   }, [])
   const running = connectors.filter((c) => !c.paused)
   const failing = running.filter((c) => c.last_error)
-  let tone: 'ok' | 'off' | 'error' = 'ok'
+  const latest = running.map((c) => c.last_sync).filter((t): t is string => !!t).sort().at(-1)
+  const stale = running.filter((c) => isStale(c, now))
+  let tone: 'ok' | 'off' | 'error' | 'stale' = 'ok'
   let text = 'Up to date'
   if (connectors.length === 0) {
     tone = 'off'
@@ -696,14 +727,26 @@ function SyncStatus({ connectors }: { connectors: ConnectorSummary[] }) {
   } else if (failing.length > 0) {
     tone = 'error'
     text = `${failing[0].name} could not sync`
+  } else if (stale.length > 0) {
+    // Never "Up to date" over data that is hours old.
+    tone = 'stale'
+    text = `Last synced ${agoWord(stale.map((c) => c.last_sync!).sort()[0], now)}`
   }
-  const latest = running.map((c) => c.last_sync).filter((t): t is string => !!t).sort().at(-1)
+  if (syncing) text = 'Syncing…'
+  const syncNow = () => {
+    if (syncing || running.length === 0) return
+    setSyncing(true)
+    Promise.allSettled(running.map((c) => backend.syncConnector(c.id))).finally(() => {
+      setSyncing(false)
+      onSynced()
+    })
+  }
   return (
-    <footer className={`foot foot--${tone}`} data-testid="sync-status">
+    <button type="button" className={`foot foot--${tone}`} data-testid="sync-status" title={running.length > 0 ? 'Sync now' : undefined} disabled={running.length === 0} onClick={syncNow}>
       <span className="foot__dot" aria-hidden="true" />
       <span className="foot__text">{text}</span>
-      {latest && tone === 'ok' && <span className="foot__time">Synced {agoWord(latest)}</span>}
-    </footer>
+      {latest && tone === 'ok' && !syncing && <span className="foot__time">Synced {agoWord(latest, now)}</span>}
+    </button>
   )
 }
 

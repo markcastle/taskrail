@@ -13,6 +13,11 @@ use crate::state::{lock, AppState};
 pub const SYNC_ERROR_EVENT: &str = "rail:sync-error";
 const TICK_SECONDS: u64 = 10;
 
+/// The longest one pull may take, end to end. Each call a connector makes
+/// has its own, shorter limit; this is the backstop for anything those miss,
+/// because a pull that never returns stops every pull after it.
+const PULL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SyncError {
     pub connector: String,
@@ -39,10 +44,24 @@ pub async fn pull(app: &AppHandle, id: &str) -> Result<usize, String> {
     let Some(connector) = lock(&state.connectors).live_any(id) else {
         return Err(format!("no connector {id}"));
     };
-    let outcome = pull_with(app, connector).await;
+    let outcome = match tokio::time::timeout(PULL_TIMEOUT, pull_with(app, connector)).await {
+        Ok(outcome) => outcome,
+        Err(_) => Err(format!(
+            "gave up after {} minutes without an answer",
+            PULL_TIMEOUT.as_secs() / 60
+        )),
+    };
+    let before = lock(&state.connectors).last_error(id);
     lock(&state.connectors).record(id, outcome.clone(), chrono::Utc::now());
-    if let Err(message) = &outcome {
-        report(app, id, message);
+    match &outcome {
+        // Said once when it starts, not on every retry while it lasts.
+        Err(message) if before.as_deref() != Some(message.as_str()) => report(app, id, message),
+        Err(message) => log::warn!("sync error on {id}, still: {message}"),
+        Ok(_) if before.is_some() => {
+            log::info!("{id} is syncing again");
+            let _ = app.emit(crate::commands::CHANGED_EVENT, ());
+        }
+        Ok(_) => {}
     }
     outcome
 }

@@ -66,9 +66,15 @@ pub struct ConnectorSummary {
 #[derive(Debug, Clone, Default)]
 pub struct SyncStatus {
     pub last_sync: Option<DateTime<Utc>>,
+    /// The last pull, whether it worked or not, so a failing connector is
+    /// tried again after a pause and not on every tick.
+    pub last_attempt: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub item_count: usize,
 }
+
+/// How long to leave a connector alone after a pull failed.
+const RETRY_SECONDS: u32 = 60;
 
 #[derive(Default)]
 pub struct ConnectorRegistry {
@@ -268,6 +274,7 @@ impl ConnectorRegistry {
 
     pub fn record(&mut self, id: &str, outcome: Result<usize, String>, at: DateTime<Utc>) {
         let status = self.status.entry(id.to_owned()).or_default();
+        status.last_attempt = Some(at);
         match outcome {
             Ok(count) => {
                 status.last_sync = Some(at);
@@ -278,14 +285,29 @@ impl ConnectorRegistry {
         }
     }
 
+    /// What the last pull of a connector said went wrong, if it failed.
+    pub fn last_error(&self, id: &str) -> Option<String> {
+        self.status.get(id).and_then(|s| s.last_error.clone())
+    }
+
     pub fn due_for_sync(&self, now: DateTime<Utc>) -> Vec<String> {
         let due = |id: &str, poll: u32| {
-            !self.is_paused(id)
-                && self
-                    .status
-                    .get(id)
-                    .and_then(|s| s.last_sync)
-                    .map_or(true, |last| (now - last).num_seconds() >= i64::from(poll))
+            if self.is_paused(id) {
+                return false;
+            }
+            let Some(status) = self.status.get(id) else {
+                return true;
+            };
+            // After a failure, try again soon but not at once; after a
+            // success, when the connector's own interval has passed.
+            let (since, wait) = match &status.last_error {
+                Some(_) => (status.last_attempt, RETRY_SECONDS.min(poll)),
+                None => (status.last_sync, poll),
+            };
+            match since {
+                Some(last) => (now - last).num_seconds() >= i64::from(wait),
+                None => true,
+            }
         };
         self.profiles
             .iter()
@@ -398,4 +420,70 @@ pub fn oauth_secret_name(connector_id: &str) -> String {
 pub fn oauth_secret_name_for_url(url: &str) -> String {
     let host = taskrail_connector_mcp::blueprint::host_of(url).unwrap_or_else(|| url.to_owned());
     format!("oauth:{host}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Duration;
+
+    /// A registry holding one calendar that polls every five minutes.
+    fn one_feed() -> ConnectorRegistry {
+        ConnectorRegistry {
+            feeds: vec![CalendarFeed {
+                id: "cal".into(),
+                name: "Calendar".into(),
+                url_secret: "calendar:cal:url".into(),
+                poll_seconds: 300,
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn a_connector_never_pulled_is_due() {
+        assert_eq!(one_feed().due_for_sync(Utc::now()), vec!["cal".to_owned()]);
+    }
+
+    #[test]
+    fn after_a_good_pull_it_waits_its_own_interval() {
+        let mut registry = one_feed();
+        let then = Utc::now();
+        registry.record("cal", Ok(3), then);
+        assert!(registry
+            .due_for_sync(then + Duration::seconds(299))
+            .is_empty());
+        assert_eq!(
+            registry.due_for_sync(then + Duration::seconds(300)).len(),
+            1
+        );
+    }
+
+    #[test]
+    fn after_a_failed_pull_it_tries_again_in_a_minute_not_at_once() {
+        let mut registry = one_feed();
+        let good = Utc::now();
+        registry.record("cal", Ok(3), good);
+        let failed = good + Duration::seconds(300);
+        registry.record("cal", Err("no answer".into()), failed);
+        assert!(registry
+            .due_for_sync(failed + Duration::seconds(10))
+            .is_empty());
+        assert_eq!(
+            registry.due_for_sync(failed + Duration::seconds(60)).len(),
+            1
+        );
+        // The last good pull is still what the rail reports as "synced".
+        assert_eq!(registry.status.get("cal").unwrap().last_sync, Some(good));
+    }
+
+    #[test]
+    fn a_pull_that_works_again_clears_the_error() {
+        let mut registry = one_feed();
+        let now = Utc::now();
+        registry.record("cal", Err("no answer".into()), now);
+        assert_eq!(registry.last_error("cal").as_deref(), Some("no answer"));
+        registry.record("cal", Ok(3), now + Duration::seconds(60));
+        assert_eq!(registry.last_error("cal"), None);
+    }
 }

@@ -16,7 +16,7 @@ A permanent task strip docked to the edge of the desktop. The next few things yo
 | Calendars | A source like any other. Events carry a time and no status |
 | LLM | Bring your own key: Anthropic, OpenAI or OpenRouter. Used at setup only |
 | macOS | Parity from day one: floating panel, plus opt-in Accessibility window-nudging |
-| Sections | Up next, Priorities, In progress, Later (the fold), Completed. User-defined later |
+| Sections | Up next, Priorities, In progress, More priorities (the fold), Completed. User-defined later |
 | The fold | Five shown by default, ten at most, the last card fades when more exist |
 | Active task | One Active card among many In Progress. Local only, no timer |
 | Rail as MCP server | In v1, so agents can read and push tasks |

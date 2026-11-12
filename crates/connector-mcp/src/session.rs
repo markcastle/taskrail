@@ -69,19 +69,56 @@ pub struct McpSession {
     service: RunningService<RoleClient, ClientConfig>,
 }
 
+/// How long a server gets to answer. A connection that stops answering
+/// without closing (a laptop that slept, a network that changed, a server
+/// that stalled) would otherwise be waited on for ever, and everything
+/// queued behind it with it: the next pull, and every status written back.
+const CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+const CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+const CLOSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// What went wrong on the wire, as the kind of error that makes the
+/// connector sign in again or reconnect.
+fn wire_error(text: String) -> ConnectorError {
+    if text.contains("Auth required") || text.contains("401") {
+        ConnectorError::Auth("this server needs you to sign in".into())
+    } else {
+        ConnectorError::Transport(text)
+    }
+}
+
+/// A failed request: the server saying no is the server's answer, and the
+/// session is fine; anything else means the session is not, and the
+/// connector should drop it and connect again.
+fn request_error(e: rmcp::ServiceError) -> ConnectorError {
+    match e {
+        rmcp::ServiceError::McpError(_) => ConnectorError::Protocol(e.to_string()),
+        other => wire_error(other.to_string()),
+    }
+}
+
 impl McpSession {
     /// Connect and complete the MCP handshake. On HTTP transports a bearer
     /// token is sent when present, and stored OAuth credentials are used
     /// when the auth carries a store that has some.
     pub async fn connect(spec: &ServerSpec, auth: &SessionAuth) -> Result<Self, ConnectorError> {
-        let transport_err = |e: &dyn std::fmt::Display| {
-            let text = e.to_string();
-            if text.contains("Auth required") || text.contains("401") {
-                ConnectorError::Auth("this server needs you to sign in".into())
-            } else {
-                ConnectorError::Transport(text)
+        match tokio::time::timeout(CONNECT_TIMEOUT, Self::connect_unbounded(spec, auth)).await {
+            Ok(outcome) => outcome,
+            Err(_) => {
+                log::warn!("{} did not answer while connecting", describe(spec));
+                Err(ConnectorError::Transport(format!(
+                    "no answer within {} seconds while connecting",
+                    CONNECT_TIMEOUT.as_secs()
+                )))
             }
-        };
+        }
+    }
+
+    async fn connect_unbounded(
+        spec: &ServerSpec,
+        auth: &SessionAuth,
+    ) -> Result<Self, ConnectorError> {
+        let transport_err = |e: &dyn std::fmt::Display| wire_error(e.to_string());
         let service = match spec {
             ServerSpec::Stdio { command, args, env } => {
                 let mut cmd = Command::new(command);
@@ -151,11 +188,15 @@ impl McpSession {
     }
 
     pub async fn tools(&self) -> Result<Vec<ToolSummary>, ConnectorError> {
-        let tools = self
-            .service
-            .list_all_tools()
+        let tools = tokio::time::timeout(CALL_TIMEOUT, self.service.list_all_tools())
             .await
-            .map_err(|e| ConnectorError::Protocol(e.to_string()))?;
+            .map_err(|_| {
+                ConnectorError::Transport(format!(
+                    "no answer within {} seconds when asked for its tools",
+                    CALL_TIMEOUT.as_secs()
+                ))
+            })?
+            .map_err(request_error)?;
         let names: Vec<&str> = tools.iter().map(|t| t.name.as_ref()).collect();
         log::info!("server offers {} tools: {}", tools.len(), names.join(", "));
         Ok(tools.iter().map(ToolSummary::from).collect())
@@ -174,14 +215,26 @@ impl McpSession {
             }
         };
         log::debug!("calling {tool}");
-        let result = self
+        let request = self
             .service
-            .call_tool(CallToolRequestParams::new(tool.to_owned()).with_arguments(arguments))
-            .await
-            .map_err(|e| {
+            .call_tool(CallToolRequestParams::new(tool.to_owned()).with_arguments(arguments));
+        let result = match tokio::time::timeout(CALL_TIMEOUT, request).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(e)) => {
                 log::warn!("{tool} failed: {e}");
-                ConnectorError::Protocol(e.to_string())
-            })?;
+                return Err(request_error(e));
+            }
+            Err(_) => {
+                log::warn!(
+                    "{tool} did not answer in {} seconds",
+                    CALL_TIMEOUT.as_secs()
+                );
+                return Err(ConnectorError::Transport(format!(
+                    "{tool} did not answer within {} seconds",
+                    CALL_TIMEOUT.as_secs()
+                )));
+            }
+        };
         crate::extract::result_to_json(&result).map_err(|e| {
             log::warn!("{tool} answered in a way the connector could not read: {e}");
             ConnectorError::Protocol(e.to_string())
@@ -189,7 +242,8 @@ impl McpSession {
     }
 
     pub async fn close(self) {
-        let _ = self.service.cancel().await;
+        // Closing a connection that has stopped answering must not wait on it.
+        let _ = tokio::time::timeout(CLOSE_TIMEOUT, self.service.cancel()).await;
     }
 }
 
@@ -207,3 +261,28 @@ pub fn describe(spec: &ServerSpec) -> String {
 
 #[allow(dead_code)]
 fn _env_type_check(_: &BTreeMap<String, String>) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_refused_sign_in_asks_to_sign_in_again() {
+        assert!(matches!(
+            wire_error("HTTP status client error (401 Unauthorized)".into()),
+            ConnectorError::Auth(_)
+        ));
+    }
+
+    #[test]
+    fn a_dead_connection_is_a_transport_failure_so_the_connector_reconnects() {
+        assert!(matches!(
+            request_error(rmcp::ServiceError::TransportClosed),
+            ConnectorError::Transport(_)
+        ));
+        assert!(matches!(
+            wire_error("connection reset by peer".into()),
+            ConnectorError::Transport(_)
+        ));
+    }
+}

@@ -219,6 +219,18 @@ await page.locator('.toast--error', { hasText: 'Demo tracker is paused' }).waitF
 await settings.getByRole('button', { name: 'Resume', exact: true }).click()
 await settings.locator('[data-testid="connector-demo-tracker"] .connector__tag').waitFor({ state: 'detached' })
 await page.locator('[data-testid="sync-status"]', { hasText: 'Up to date' }).waitFor()
+
+// 8c. The footer never says "Up to date" over old data. Wind the stand-in's last
+// sync back five hours: the footer says when it last synced, and a click syncs now.
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('taskrail-dev-state'))
+  state.connectors = state.connectors.map((c) => ({ ...c, last_sync: new Date(Date.now() - 5 * 3600_000).toISOString() }))
+  localStorage.setItem('taskrail-dev-state', JSON.stringify(state))
+})
+await page.reload()
+await page.locator('[data-testid="sync-status"].foot--stale', { hasText: 'Last synced 5 h ago' }).waitFor()
+await page.getByTestId('sync-status').click()
+await page.locator('[data-testid="sync-status"].foot--ok', { hasText: 'Up to date' }).waitFor()
 // 9b. Scope: the trail shows on a row; the panel's switch and ticks save and come back.
 assert.match(await page.locator('[data-testid="card-demo-tracker:T-202"] .card__trail').textContent(), /Work › Now › Fix login timeout/)
 await settings.getByRole('button', { name: 'Scope', exact: true }).click()
@@ -469,6 +481,16 @@ await settings.getByRole('button', { name: 'About', exact: true }).click()
 await settings.getByTestId('about').waitFor()
 assert.match(await settings.getByTestId('about').textContent(), /Developed by Mark Castle/)
 assert.match(await settings.getByTestId('about').textContent(), /© 2026/)
+
+// 11g. The date at the top keeps up. A rail opened a minute before midnight shows
+// the new day once it comes, without being touched.
+const overnight = await context.newPage()
+await overnight.clock.install({ time: new Date(2026, 10, 11, 23, 59, 0) })
+await overnight.goto('http://localhost:5173/')
+await overnight.locator('.hero__date', { hasText: 'Wednesday, 11 November' }).waitFor()
+await overnight.clock.fastForward(2 * 60_000)
+await overnight.locator('.hero__date', { hasText: 'Thursday, 12 November' }).waitFor()
+await overnight.close()
 
 // 12. The Logs page shows the stand-in's log, including this page's own start line.
 await settings.getByRole('button', { name: 'Logs', exact: true }).click()
