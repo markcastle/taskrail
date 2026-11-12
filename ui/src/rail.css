@@ -1376,6 +1376,11 @@ html.resizing * {
   min-width: 0;
 }
 
+/* A switch needs no room of its own, so the words beside it get the row. */
+.row__control:has(> .toggle:only-child) {
+  flex: 0 0 auto;
+}
+
 /* A control that needs the width sits under its label instead of beside it. */
 .row--stack {
   flex-direction: column;

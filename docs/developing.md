@@ -76,6 +76,16 @@ cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings && npm 
 
 CI runs the core crates on Linux, the browser test, and the full build and test on Windows and macOS.
 
+### Retaking the README's screenshots
+
+The pictures in the README come from the browser build, not from a desktop, so anyone can retake them. With `npm run ui:dev` running:
+
+```bash
+node scripts/readme-shots.cjs docs/images
+```
+
+It writes the rail in light and dark, a task opened, the pin both ways, and two Settings pages, at a fixed clock so the result does not depend on when it is run.
+
 ## Where things are
 
 | Path | What lives there |

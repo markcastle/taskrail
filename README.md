@@ -77,17 +77,40 @@ Prefer a download? The installers are on the [releases page](https://github.com/
 | **Push the pointer** against the rail's edge of the screen | An unpinned rail comes out. Move away, or press Escape, and it goes back |
 | **Flick** a task sideways | It completes |
 | **Tap** the circle | Same thing, for people who like circles |
-| **Tap** a task | Details open: source link, due date, priority, and buttons for everything else |
+| **Tap** a task | Details open: where it sits, its source, due date, priority, and buttons for everything else |
 | **Start focus** on the Up next card | That task becomes the one you are on |
 | **Ctrl+Shift+Space** | Quick-add, from anywhere on the desktop |
 | **Today / All tasks** | Today keeps the fold; All tasks shows everything. The 🔍 searches both |
 | **⚙️** | Settings open inside the rail: edge, width, theme, monitor, connectors, model, and the log |
+| **Click** the line at the foot of the rail | Sync now. It also tells you when the last sync was, and turns amber if that was too long ago |
+
+Tap a task and it opens where it is. A task from a connected system says where it sits: its board, its group, and the task it is part of.
+
+<p align="center">
+  <img src="docs/images/details.png" width="320" alt="A task opened on the rail, showing the board, group and parent task it sits under, with Start, Complete and Delete" />
+</p>
+
+The pin at the top decides whether the rail stays put or gets out of your way. Pinned, on the left below, other windows make room for it. Unpinned, it tucks into a thin strip at the screen edge until you push the pointer against it.
+
+<p align="center">
+  <img src="docs/images/pin.png" width="700" alt="The rail's header twice: with the pin filled in, pinned, and with the pin outlined at a tilt, free to hide" />
+</p>
+
+Everything else is in ⚙️, which opens inside the rail:
+
+<p align="center">
+  <img src="docs/images/settings-rail.png" width="720" alt="The Rail page in Settings: appearance, a picture of each monitor to choose from, which edge to dock to, auto-hide, and width" />
+</p>
 
 The tray icon has **Show**, **Hide**, **Settings** and **Quit**. Always quit from there rather than killing the process: on Windows the reserved strip is only given back when the app exits cleanly.
 
 ## 🔌 Connect your work
 
 Open ⚙️ and look at **Connectors**.
+
+<p align="center">
+  <img src="docs/images/settings-connectors.png" width="720" alt="The Connectors page in Settings: one connected tracker with Sync now, Pause, Scope and Blueprint, and four ways to add another" />
+</p>
 
 - **Add demo tracker** gives you a small fake issue tracker to play with. Its tickets appear in seconds. Drag one into In progress and watch the tracker move it too.
 - **Add server** is the real thing. Name it, give it a URL, press **Discover**. If the server wants you to sign in, your browser opens and discovery carries on when you are back. You see what it found before you keep it.
