@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - **A rail left open overnight could stop syncing for good, and not say so.** If a connection to a task system stopped answering without closing, which is what a laptop going to sleep or a network changing does, the app waited on it for ever. Nothing was pulled again, status changes made on the rail were never written back, and the footer went on saying "Up to date". Every network wait now has a limit, a connection that stops answering is dropped and made again, and a connector that fails is tried again a minute later.
 - **The date at the top keeps up.** A rail left open past midnight went on showing yesterday's date, yesterday's "done today" count and yesterday's events until something else made it redraw. It now notices the new day by itself.
+- **"Today" is your day, not UTC's.** What counts as done today, and which events are today's, was decided by the date in UTC. In British summer time the day rolled over at 1am; in New York it rolled over at 7pm and showed tomorrow's meetings as today's. It now follows your own clock.
 
 ### Changed
 

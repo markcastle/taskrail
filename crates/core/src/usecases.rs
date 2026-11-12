@@ -5,7 +5,7 @@
 //! "done today". If a behaviour question starts with "what should the rail
 //! show when…", the answer is a test in this file.
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Utc};
 use serde::Serialize;
 
 use crate::domain::{Item, ItemId, Status};
@@ -27,22 +27,33 @@ pub struct RailView {
     pub in_progress: Vec<Item>,
     /// The one item the user is focused on. Always a member of `in_progress`.
     pub active: Option<ItemId>,
-    /// Completed since midnight UTC, newest first.
+    /// Completed since midnight on the person's own clock, newest first.
     pub done_today: Vec<Item>,
-    /// Calendar events that start today (local day, as the caller's `now`
-    /// defines it) and have not ended, soonest first. The day's shape.
+    /// Calendar events that start before midnight on the person's own clock
+    /// and have not ended, soonest first. The day's shape.
     #[serde(default)]
     pub events_today: Vec<Item>,
 }
 
+/// `now` is the moment as the person's own clock has it, offset and all,
+/// because "today" is theirs: a task finished at eleven at night was finished
+/// today wherever UTC had got to. The core still has no clock; the shell
+/// reads one and passes it in. The offset is the one in force right now, so
+/// on the two days a year the clocks change, an hour beside midnight can
+/// land on the wrong side of it.
+///
 /// `expand_top` lifts the fold, for when the person taps "more".
 pub fn build_rail_view(
     items: &[Item],
     active: Option<&ItemId>,
-    now: DateTime<Utc>,
+    now: DateTime<FixedOffset>,
     settings: &RailSettings,
     expand_top: bool,
 ) -> RailView {
+    let zone = *now.offset();
+    let today = now.date_naive();
+    // Everything stored is an instant in UTC; only the day is local.
+    let now = now.with_timezone(&Utc);
     let lead = Duration::minutes(i64::from(settings.event_lead_minutes));
 
     let mut upcoming: Vec<&Item> = items
@@ -52,9 +63,10 @@ pub fn build_rail_view(
         .collect();
     upcoming.sort_by_key(|item| item.window.map(|w| w.start));
     let up_next = upcoming.first().map(|item| (*item).clone());
-    let end_of_today = (now.date_naive() + Duration::days(1))
+    let end_of_today = (today + Duration::days(1))
         .and_hms_opt(0, 0, 0)
-        .map(|n| n.and_utc())
+        .and_then(|midnight| midnight.and_local_timezone(zone).single())
+        .map(|midnight| midnight.with_timezone(&Utc))
         .unwrap_or(now);
     let events_today: Vec<Item> = upcoming
         .iter()
@@ -98,11 +110,13 @@ pub fn build_rail_view(
         .filter(|id| in_progress.iter().any(|item| &item.id == *id))
         .cloned();
 
-    let today = now.date_naive();
     let mut done_today: Vec<Item> = items
         .iter()
         .filter(|item| !item.is_event() && item.status == Status::Done)
-        .filter(|item| item.completed_at.is_some_and(|t| t.date_naive() == today))
+        .filter(|item| {
+            item.completed_at
+                .is_some_and(|t| t.with_timezone(&zone).date_naive() == today)
+        })
         .cloned()
         .collect();
     done_today.sort_by_key(|item| std::cmp::Reverse(item.completed_at));
@@ -143,7 +157,39 @@ mod tests {
     }
 
     fn view(items: &[Item], active: Option<&ItemId>) -> RailView {
-        build_rail_view(items, active, now(), &RailSettings::default(), false)
+        build_rail_view(
+            items,
+            active,
+            now().fixed_offset(),
+            &RailSettings::default(),
+            false,
+        )
+    }
+
+    /// A clock some hours east (positive) or west of UTC, showing this
+    /// local date and time.
+    fn clock(hours_from_utc: i32, day: u32, hour: u32, minute: u32) -> DateTime<FixedOffset> {
+        FixedOffset::east_opt(hours_from_utc * 3600)
+            .unwrap()
+            .with_ymd_and_hms(2026, 11, day, hour, minute, 0)
+            .unwrap()
+    }
+
+    fn done_at(id: &str, when: DateTime<FixedOffset>) -> Item {
+        todo(id, 1).completed_at(when.with_timezone(&Utc))
+    }
+
+    fn event_at(id: &str, start: DateTime<FixedOffset>) -> Item {
+        let start = start.with_timezone(&Utc);
+        let window = TimeWindow {
+            start,
+            end: start + Duration::minutes(30),
+        };
+        Item::event(id, id, window, now())
+    }
+
+    fn ids(items: &[Item]) -> Vec<&str> {
+        items.iter().map(|i| i.id.as_str()).collect()
     }
 
     #[test]
@@ -162,7 +208,7 @@ mod tests {
             top_limit: 50,
             ..RailSettings::default()
         };
-        let v = build_rail_view(&items, None, now(), &settings, false);
+        let v = build_rail_view(&items, None, now().fixed_offset(), &settings, false);
         assert_eq!(v.top.len(), 10);
         assert_eq!(v.top_hidden, 2);
     }
@@ -170,7 +216,13 @@ mod tests {
     #[test]
     fn expanding_lifts_the_fold() {
         let items: Vec<Item> = (1..=12).map(|n| todo(&format!("t{n}"), n)).collect();
-        let v = build_rail_view(&items, None, now(), &RailSettings::default(), true);
+        let v = build_rail_view(
+            &items,
+            None,
+            now().fixed_offset(),
+            &RailSettings::default(),
+            true,
+        );
         assert_eq!(v.top.len(), 12);
         assert_eq!(v.top_hidden, 0);
     }
@@ -264,5 +316,62 @@ mod tests {
         let v = view(&items, None);
         let order: Vec<&str> = v.done_today.iter().map(|i| i.id.as_str()).collect();
         assert_eq!(order, ["late", "early"]);
+    }
+
+    #[test]
+    fn a_task_finished_late_last_night_by_your_clock_is_not_done_today() {
+        // Half past midnight an hour east of UTC. UTC is still on the 9th,
+        // which is where both of these were finished by its reckoning.
+        let now = clock(1, 10, 0, 30);
+        let items = vec![
+            done_at("last night", clock(1, 9, 23, 45)),
+            done_at("just now", clock(1, 10, 0, 10)),
+        ];
+        let v = build_rail_view(&items, None, now, &RailSettings::default(), false);
+        assert_eq!(ids(&v.done_today), ["just now"]);
+    }
+
+    #[test]
+    fn a_task_finished_this_afternoon_is_done_today_though_utc_is_on_tomorrow() {
+        // Eight in the evening five hours west of UTC, where it is already
+        // one in the morning on the 12th.
+        let now = clock(-5, 11, 20, 0);
+        let items = vec![
+            done_at("this afternoon", clock(-5, 11, 15, 0)),
+            done_at("yesterday", clock(-5, 10, 15, 0)),
+        ];
+        let v = build_rail_view(&items, None, now, &RailSettings::default(), false);
+        assert_eq!(ids(&v.done_today), ["this afternoon"]);
+    }
+
+    #[test]
+    fn todays_events_end_at_your_midnight_not_utcs() {
+        // West of UTC the day runs on past UTC's midnight...
+        let west = vec![
+            event_at("tonight", clock(-5, 11, 22, 0)),
+            event_at("tomorrow morning", clock(-5, 12, 9, 0)),
+        ];
+        let v = build_rail_view(
+            &west,
+            None,
+            clock(-5, 11, 20, 0),
+            &RailSettings::default(),
+            false,
+        );
+        assert_eq!(ids(&v.events_today), ["tonight"]);
+
+        // ...and east of it the day ends before UTC's does.
+        let east = vec![
+            event_at("this evening", clock(10, 11, 23, 0)),
+            event_at("after midnight", clock(10, 12, 0, 30)),
+        ];
+        let v = build_rail_view(
+            &east,
+            None,
+            clock(10, 11, 21, 0),
+            &RailSettings::default(),
+            false,
+        );
+        assert_eq!(ids(&v.events_today), ["this evening"]);
     }
 }

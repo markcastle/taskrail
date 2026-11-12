@@ -136,7 +136,8 @@ impl Rail {
         Ok(build_rail_view(
             &items,
             self.active.as_ref(),
-            chrono::Utc::now(),
+            // The person's own clock: "today" is their day, not UTC's.
+            chrono::Local::now().fixed_offset(),
             &self.settings,
             expand_top,
         ))
