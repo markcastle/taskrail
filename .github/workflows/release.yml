@@ -2,9 +2,11 @@ name: Release
 
 # Two ways in.
 #
-# The button: Actions → Release → Run workflow, type the version, press Run.
-# This workflow then dates the changelog, sets the version, commits, tags,
-# builds the installers and publishes the GitHub Release. Only people with
+# The button: Actions → Release → Run workflow, press Run. Leave the version
+# blank and the changelog decides it: a minor release if anything is listed
+# as Added or Removed under Unreleased, otherwise a patch. Type one to choose
+# yourself. This workflow then dates the changelog, sets the version,
+# commits, tags, builds the installers and publishes the GitHub Release. Only people with
 # write access to the repository can press it. Tick "Rehearse" to see what
 # it would do without pushing, building or publishing anything.
 #
@@ -27,8 +29,8 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release, such as 0.9.0. It must be higher than the last one, and CHANGELOG.md must say what it holds under Unreleased.'
-        required: true
+        description: 'Leave blank and the changelog decides: minor if anything was Added, otherwise a patch. Or type a version, such as 0.12.0, to choose yourself.'
+        required: false
         type: string
       dry_run:
         description: 'Rehearse: do everything except push, build and publish'
@@ -59,7 +61,7 @@ env:
 
 jobs:
   prepare:
-    name: Prepare ${{ inputs.version || github.ref_name }}
+    name: Prepare ${{ inputs.version || (github.event_name == 'push' && github.ref_name) || 'the next version' }}
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -89,7 +91,18 @@ jobs:
             fi
             echo "cut=false" >> "$GITHUB_OUTPUT"
           else
+            highest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
             version="$INPUT_VERSION"
+            why="as asked"
+            if [ -z "$version" ]; then
+              # Nobody chose, so the changelog does. The reason comes back on
+              # stderr and the number on stdout.
+              if ! version=$(node scripts/changelog.mjs next "${highest:-0.0.0}" 2> "$RUNNER_TEMP/reason.txt"); then
+                echo "::error::$(cat "$RUNNER_TEMP/reason.txt")"
+                exit 1
+              fi
+              why=$(sed -E 's/^After [^ ]+ comes [^:]+: //; s/\.$//' "$RUNNER_TEMP/reason.txt")
+            fi
             if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "::error::\"$version\" is not a version. Use major.minor.patch, such as 0.9.0."
               exit 1
@@ -102,7 +115,6 @@ jobs:
               echo "::error::v$version already exists."
               exit 1
             fi
-            highest=$(git tag -l 'v*' | sed 's/^v//' | sort -V | tail -1)
             if [ -n "$highest" ] && [ "$(printf '%s\n%s\n' "$highest" "$version" | sort -V | tail -1)" != "$version" ]; then
               echo "::error::$version is not higher than $highest. Running apps only ever install a higher version, so a release must go up."
               exit 1
@@ -110,7 +122,9 @@ jobs:
             echo "cut=true" >> "$GITHUB_OUTPUT"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "Releasing Task Rail $version"
+          echo "Releasing Task Rail $version${why:+ ($why)}"
+          # On the run's own page, so the number is there to read without opening a log.
+          echo "### Task Rail $version${why:+: $why}" >> "$GITHUB_STEP_SUMMARY"
 
       # The commit being released must have passed CI. A rehearsal skips this
       # so it can run from any branch; a roll back skips it because the tree

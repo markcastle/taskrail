@@ -3,6 +3,7 @@
 //   node scripts/changelog.mjs section 0.8.0     print that version's notes
 //   node scripts/changelog.mjs release 0.9.0     turn "Unreleased" into 0.9.0, dated today
 //   node scripts/changelog.mjs note "text"       add a line under Unreleased's Changed
+//   node scripts/changelog.mjs next 0.11.1       print what the next release should be numbered
 //
 // CHANGELOG.md follows Keep a Changelog: "## [Unreleased]" at the top collects
 // changes as they land, and cutting a release gives that section the version
@@ -28,6 +29,27 @@ export function section(text, version) {
   const next = rest.search(/^## \[/m)
   const body = (next < 0 ? rest : rest.slice(0, next)).replace(/^\[[^\]]+\]: .*$/gm, '')
   return body.trim()
+}
+
+// What the next release should be numbered, going by what Unreleased holds.
+//
+// The rule is the one in docs/developing.md, made mechanical so nobody has to
+// remember it: something Added (or Removed) is something a person would
+// notice as new, which is a minor release; only Changed and Fixed is a patch.
+// The changelog is written as the work lands, so by release time it already
+// knows which it is. Throws when there is nothing to release.
+export function nextVersion(text, current) {
+  const notes = section(text, 'Unreleased')
+  if (!notes || notes === EMPTY) {
+    throw new Error('CHANGELOG.md has nothing under "## [Unreleased]", so there is nothing to release. Say what changed first.')
+  }
+  const [major, minor, patch] = current.split('.').map(Number)
+  const kinds = [...notes.matchAll(/^### (\w+)\s*$/gm)].map((m) => m[1])
+  const noticeable = kinds.filter((kind) => kind === 'Added' || kind === 'Removed')
+  if (noticeable.length > 0) {
+    return { version: `${major}.${minor + 1}.0`, why: `a minor release, because the changelog lists something ${noticeable.join(' and ')}` }
+  }
+  return { version: `${major}.${minor}.${patch + 1}`, why: 'a patch, because the changelog lists only changes and fixes' }
 }
 
 // Retitles Unreleased as the version, adds the compare link, and opens a new
@@ -69,9 +91,9 @@ export function note(text, line) {
 const [command, argument] = process.argv.slice(2)
 if (import.meta.url === `file://${process.argv[1]}`) {
   const version = argument
-  const needsVersion = command === 'section' || command === 'release'
+  const needsVersion = command === 'section' || command === 'release' || command === 'next'
   if (needsVersion && !/^\d+\.\d+\.\d+$/.test(version ?? '')) {
-    console.error('Usage: node scripts/changelog.mjs <section|release> <major.minor.patch> | note "text"')
+    console.error('Usage: node scripts/changelog.mjs <section|release|next> <major.minor.patch> | note "text"')
     process.exit(1)
   }
   const text = readFileSync(PATH, 'utf8')
@@ -82,6 +104,16 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     writeFileSync(PATH, note(text, argument))
     console.log('CHANGELOG.md: noted under Unreleased.')
+  } else if (command === 'next') {
+    // The number alone on stdout, for scripts; the reason on stderr, for people.
+    try {
+      const next = nextVersion(text, version)
+      console.error(`After ${version} comes ${next.version}: ${next.why}.`)
+      process.stdout.write(next.version + '\n')
+    } catch (error) {
+      console.error(error.message)
+      process.exit(1)
+    }
   } else if (command === 'section') {
     process.stdout.write(section(text, version) + '\n')
   } else if (command === 'release') {
@@ -94,7 +126,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     console.log(`CHANGELOG.md: Unreleased is now ${version} (${today}).`)
   } else {
-    console.error(`Unknown command "${command}". Use section, release or note.`)
+    console.error(`Unknown command "${command}". Use section, release, next or note.`)
     process.exit(1)
   }
 }

@@ -118,15 +118,22 @@ Secrets are never written to the database or to a profile. A profile only names 
 
 ## Cutting a release
 
-Pick the number first. A patch (0.2.0 to 0.2.1) is for fixes and small adjustments. A minor (0.2.x to 0.3.0) is for anything a person would notice as new: a feature, a redesign, a new connector ability. Leaving 0.x behind is a judgement about stability, not a feature count. A release must always be a higher number than the last, because running apps only ever install a higher version.
+The work of a release is done before it, in [CHANGELOG.md](../CHANGELOG.md). Every change a person would notice goes under **Unreleased** as it lands, in one of **Added**, **Changed**, **Fixed** or **Removed**, written for the person using the app: what they will see, not which function moved. Those notes become the GitHub Release and what the app shows as **Release notes** when it offers the update, and a release refuses to run while the section is empty.
 
-Then make sure [CHANGELOG.md](../CHANGELOG.md) says what the release holds. Every change a person would notice goes under **Unreleased** as it lands, in one of **Added**, **Changed**, **Fixed** or **Removed**, written for the person using the app: what they will see, not which function moved. A release refuses to run while that section is empty, because those notes become the GitHub Release and what the app shows as **Release notes** when it offers the update.
+They also decide the version number, so nobody has to:
+
+| Unreleased lists | The release is | From 0.11.1 |
+| --- | --- | --- |
+| Something **Added** or **Removed** | A minor release: something a person would notice as new, or gone | 0.12.0 |
+| Only **Changed** and **Fixed** | A patch | 0.11.2 |
+
+That is the whole rule, and it lives in `nextVersion` in `scripts/changelog.mjs`, tested by `npm run scripts:test`. It follows that the heading a change is filed under matters: a new ability belongs under Added even when it is small, and a redesign of something that already exists belongs under Changed. You can always overrule it by giving a number yourself, which is how 1.0.0 will happen: leaving 0.x behind is a judgement about stability that no heading can make. Whatever the number, it must be higher than the last, because running apps only ever install a higher version.
 
 ### The button
 
-On GitHub, open **Actions**, pick **Release** on the left, press **Run workflow**, type the version, and press the green button. Only people with write access to the repository can do this. The workflow then:
+On GitHub, open **Actions**, pick **Release** on the left, press **Run workflow**, and press the green button. Leave the version blank and the changelog decides it; type one to choose yourself. The run's page says which number it took and why. Only people with write access to the repository can do this. The workflow then:
 
-1. Refuses if the version is not higher than the last release, if CI has not passed on the latest commit to main, or if the changelog has nothing under Unreleased.
+1. Works out the version if none was given, and refuses if the version is not higher than the last release, if CI has not passed on the latest commit to main, or if the changelog has nothing under Unreleased.
 2. Dates the Unreleased section as the version and opens a fresh one, sets the version in `package.json`, `Cargo.toml` and `src-tauri/tauri.conf.json`, updates `Cargo.lock`, commits and tags.
 3. Creates the GitHub Release as a draft, with the changelog section as the notes.
 4. Builds a Windows installer (NSIS, per-user, no admin prompt) and a universal macOS disk image, and uploads them to the draft.
@@ -134,7 +141,7 @@ On GitHub, open **Actions**, pick **Release** on the left, press **Run workflow*
 
 The draft is made first for a second reason: the workflow's token can only create a release for a commit that matches the head of main in its workflow files, so it has to happen while the tag is fresh. Pushing to main while a release is building is fine.
 
-Tick **Rehearse** to see steps 1 and 2 in the log without anything being pushed, built or published. A rehearsal can run from any branch.
+Tick **Rehearse** to see steps 1 and 2 in the log without anything being pushed, built or published, which is also the way to ask what number the next release would be. A rehearsal can run from any branch.
 
 `install.ps1` and `install.sh` at the repo root read `releases/latest`, so the moment the workflow finishes the one-line install picks up the new version, and running apps see it within the hour.
 
@@ -143,14 +150,14 @@ Tick **Rehearse** to see steps 1 and 2 in the log without anything being pushed,
 The same thing from a checkout, for when you would rather:
 
 ```bash
-npm run release -- 0.1.1
+npm run release
 ```
 
 ```bash
 git push --follow-tags
 ```
 
-The first command is exactly what the button runs, so the two routes cannot drift. The tag push starts the Release workflow at the build step. The terminal route does not check CI for you.
+The first command fetches the tags, works out the number the same way and says which it chose; `npm run release -- 0.12.0` chooses for it. It is exactly what the button runs, so the two routes cannot drift. The tag push starts the Release workflow at the build step. The terminal route does not check CI for you.
 
 ## Rolling back a release
 
