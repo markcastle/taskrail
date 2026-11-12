@@ -528,12 +528,21 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
     if (scope?.id === id) return setScope(null)
     run(`scope-${id}`, () => backend.getConnectorScope(id), (data) => setScope({ id, data: data as ConnectorScope }))
   }
+  // How many changes are still being applied, so the panel can say "Updating…" until the count is true again.
+  const [scopeSaving, setScopeSaving] = useState(0)
   const changeScope = (id: string, next: Scope) => {
     setScope((cur) => (cur && cur.id === id ? { ...cur, data: { ...cur.data, scope: next } } : cur))
+    setScopeSaving((n) => n + 1)
     backend
       .setConnectorScope(id, next)
-      .then(() => reload())
+      // What there is to pick from depends on what is already picked: groups follow boards.
+      .then(() => backend.getConnectorScope(id))
+      .then((fresh) => {
+        setScope((cur) => (cur && cur.id === id ? { ...cur, data: { ...cur.data, options: fresh.options } } : cur))
+        reload()
+      })
       .catch(fail)
+      .finally(() => setScopeSaving((n) => n - 1))
   }
   const showBlueprint = (id: string) => {
     setSample(null)
@@ -617,7 +626,7 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
               {c.kind !== 'calendar' && (
                 <>
                   <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showScope(c.id)} aria-expanded={scope?.id === c.id}>
-                    {busy === `scope-${c.id}` ? <Spinner label="Looking…" /> : 'Scope'}
+                    {busy === `scope-${c.id}` ? <Spinner label="Looking…" /> : 'Filter'}
                   </button>
                   <button type="button" className="button button--quiet" disabled={busy !== null} onClick={() => showBlueprint(c.id)} aria-expanded={blueprint?.id === c.id}>
                     Blueprint
@@ -634,7 +643,17 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
             </div>
           </div>
         ))}
-        {scope && <ScopePanel id={scope.id} data={scope.data} onChange={(next) => changeScope(scope.id, next)} onClose={() => setScope(null)} />}
+        {scope && (
+          <ScopePanel
+            id={scope.id}
+            name={connectors.find((c) => c.id === scope.id)?.name ?? scope.id}
+            count={connectors.find((c) => c.id === scope.id)?.item_count ?? 0}
+            saving={scopeSaving > 0}
+            data={scope.data}
+            onChange={(next) => changeScope(scope.id, next)}
+            onClose={() => setScope(null)}
+          />
+        )}
         {sample && (
           <div className="panel panel--form" data-testid={`sample-${sample.id}`}>
             <p className="settings-muted">What the server returned for the list call, trimmed. For working out which fields hold what when writing or fixing a profile.</p>
@@ -737,46 +756,105 @@ function looksLikeBlueprint(json: string): boolean {
 }
 
 /** What one person sees from a connector: the profile's switches as toggles and its picks as tick lists. Saves as you go. */
-function ScopePanel({ id, data, onChange, onClose }: { id: string; data: ConnectorScope; onChange: (next: Scope) => void; onClose: () => void }) {
+/** Lists longer than this start folded: thirty-odd names at once explain nothing. */
+const PICK_FOLD = 8
+
+/**
+ * Which of a connector's tasks come onto the rail. The choices are the
+ * blueprint's, and so are the words explaining them, since only it knows what
+ * the system calls things. The panel's job is to make three things plain
+ * without being asked: what each choice does, that nothing picked means
+ * everything, and what the answer comes to.
+ */
+function ScopePanel({
+  id,
+  name,
+  count,
+  saving,
+  data,
+  onChange,
+  onClose,
+}: {
+  id: string
+  name: string
+  count: number
+  saving: boolean
+  data: ConnectorScope
+  onChange: (next: Scope) => void
+  onClose: () => void
+}) {
   const { choices, scope, options } = data
+  const [unfolded, setUnfolded] = useState<Record<string, boolean>>({})
   const toggle = (choiceId: string, on: boolean) => onChange({ ...scope, switches: { ...scope.switches, [choiceId]: on } })
-  const tick = (choiceId: string, value: string) => {
-    const current = scope.picks[choiceId] ?? []
-    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value]
-    onChange({ ...scope, picks: { ...scope.picks, [choiceId]: next } })
-  }
+  const pick = (choiceId: string, values: string[]) => onChange({ ...scope, picks: { ...scope.picks, [choiceId]: values } })
   return (
     <div className="panel panel--form scope" data-testid={`scope-${id}`}>
-      {choices.length === 0 && <p className="settings-muted">This connector has nothing to choose. Its blueprint decides what you see.</p>}
-      {choices.map((choice) =>
-        choice.kind === 'switch' ? (
-          <div className="scope__switch" key={choice.id}>
-            <span className="scope__label">{choice.label}</span>
-            <Toggle checked={scope.switches[choice.id] ?? choice.default ?? false} onChange={(on) => toggle(choice.id, on)} label={choice.label} />
-          </div>
+      <div className="scope__intro">
+        <strong>What comes onto the rail from {name}</strong>
+        {choices.length > 0 ? (
+          <p className="settings-muted">Narrow it down to what you want to see. Changes apply as you make them, and nothing changes in {name} itself.</p>
         ) : (
+          <p className="settings-muted">There is nothing to choose for this connector: it brings in what its blueprint says.</p>
+        )}
+      </div>
+      {choices.map((choice) => {
+        if (choice.kind === 'switch') {
+          return (
+            <div className="scope__switch" key={choice.id}>
+              <div className="scope__words">
+                <span className="scope__label">{choice.label}</span>
+                {choice.help && <span className="scope__help">{choice.help}</span>}
+              </div>
+              <Toggle checked={scope.switches[choice.id] ?? choice.default ?? false} onChange={(on) => toggle(choice.id, on)} label={choice.label} />
+            </div>
+          )
+        }
+        const picked = scope.picks[choice.id] ?? []
+        // Something picked that is no longer on offer (its board was unpicked) still shows, so it can be unpicked.
+        const all = [...(options[choice.id] ?? []), ...picked.filter((v) => !(options[choice.id] ?? []).includes(v))]
+        const thing = choice.label.toLowerCase()
+        const folded = all.length > PICK_FOLD && picked.length === 0 && !unfolded[choice.id]
+        return (
           <div className="scope__group" key={choice.id}>
-            <span className="scope__label">
-              {choice.label} <span className="settings-muted">· none ticked means all</span>
-            </span>
+            <div className="scope__words">
+              <span className="scope__label">
+                {choice.label}
+                <span className="scope__state" data-testid={`scope-state-${choice.id}`}>
+                  {picked.length === 0 ? `All ${all.length}` : `${picked.length} of ${all.length}`}
+                </span>
+              </span>
+              {choice.help && <span className="scope__help">{choice.help}</span>}
+            </div>
             <div className="scope__ticks" role="group" aria-label={choice.label}>
-              {(options[choice.id] ?? []).map((value) => {
-                const on = (scope.picks[choice.id] ?? []).includes(value)
-                return (
-                  <button type="button" role="checkbox" aria-checked={on} key={value} className={`tick${on ? ' tick--on' : ''}`} onClick={() => tick(choice.id, value)}>
-                    {on ? '✓ ' : ''}
-                    {value}
-                  </button>
-                )
-              })}
-              {(options[choice.id] ?? []).length === 0 && <span className="settings-muted">Nothing to pick from yet.</span>}
+              <button type="button" role="checkbox" aria-checked={picked.length === 0} className={`tick${picked.length === 0 ? ' tick--on' : ''}`} onClick={() => pick(choice.id, [])}>
+                {picked.length === 0 ? '✓ ' : ''}All {thing}
+              </button>
+              {folded ? (
+                <button type="button" className="tick tick--more" onClick={() => setUnfolded((u) => ({ ...u, [choice.id]: true }))}>
+                  Choose from {all.length}…
+                </button>
+              ) : (
+                all.map((value) => {
+                  const on = picked.includes(value)
+                  return (
+                    <button type="button" role="checkbox" aria-checked={on} key={value} className={`tick${on ? ' tick--on' : ''}`} onClick={() => pick(choice.id, on ? picked.filter((v) => v !== value) : [...picked, value])}>
+                      {on ? '✓ ' : ''}
+                      {value}
+                    </button>
+                  )
+                })
+              )}
+              {all.length === 0 && <span className="settings-muted">Nothing to pick from yet.</span>}
             </div>
           </div>
-        ),
-      )}
-      <div className="settings-actions settings-actions--end">
+        )
+      })}
+      <div className="scope__foot">
+        <span className="scope__result" data-testid={`scope-result-${id}`} aria-live="polite">
+          {saving ? <Spinner label="Updating…" /> : `${count} ${count === 1 ? 'task' : 'tasks'} on the rail from ${name}`}
+        </span>
         <button type="button" className="button button--quiet" onClick={onClose}>
-          Close
+          Done
         </button>
       </div>
     </div>
@@ -1030,7 +1108,7 @@ function AddServer({
           <Result tone="success">
             {added && added.count === 0 ? (
               <>
-                <strong>{added.name} connected.</strong> Nothing is on the rail yet: nothing there is assigned to you. Open <b>Scope</b> on the connector to include unassigned tasks or other boards.
+                <strong>{added.name} connected.</strong> Nothing is on the rail yet: nothing there is assigned to you. Open <b>Filter</b> on the connector to include unassigned tasks or other boards.
               </>
             ) : added ? (
               <>

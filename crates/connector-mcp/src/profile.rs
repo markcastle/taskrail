@@ -159,6 +159,10 @@ pub enum Choice {
     Switch {
         id: String,
         label: String,
+        /// One sentence, for the person deciding, on what turning it does.
+        /// The blueprint knows the system's own words; the app does not.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        help: Option<String>,
         #[serde(default)]
         default: bool,
         #[serde(default, rename = "where", skip_serializing_if = "Vec::is_empty")]
@@ -171,6 +175,10 @@ pub enum Choice {
     Pick {
         id: String,
         label: String,
+        /// One sentence on what is being picked among, in the system's own
+        /// words.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        help: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         containers: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]

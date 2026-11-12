@@ -107,6 +107,7 @@
             "kind": "switch",
             "id": "mine",
             "label": "Only tickets assigned to me",
+            "help": "Turn this off to bring in everyone's tickets, not just your own.",
             "default": true,
             "where": [
               {
@@ -119,12 +120,14 @@
             "kind": "pick",
             "id": "boards",
             "label": "Boards",
+            "help": "Take tickets only from the boards you pick.",
             "containers": "$.name"
           },
           {
             "kind": "pick",
             "id": "groups",
             "label": "Groups",
+            "help": "The sections of a board, such as Now and Later. Pick some to leave the rest off the rail.",
             "trail": "group"
           }
         ]
@@ -233,6 +236,7 @@
             "kind": "switch",
             "id": "mine",
             "label": "Only tasks assigned to me",
+            "help": "Turn this off to bring in everyone's tasks, for a board you look after or one where nothing is assigned.",
             "default": true,
             "where": [
               {
@@ -245,12 +249,14 @@
             "kind": "pick",
             "id": "boards",
             "label": "Boards",
+            "help": "Take tasks only from the boards you pick.",
             "containers": "$.name"
           },
           {
             "kind": "pick",
             "id": "groups",
             "label": "Groups",
+            "help": "The sections of a board, such as Now, Next and Later. Pick some to leave the rest off the rail.",
             "trail": "group"
           }
         ]

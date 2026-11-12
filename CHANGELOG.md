@@ -6,7 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **Scope is now Filter, and it explains itself.** The panel that decides which of a connector's tasks reach the rail used to be a switch and two walls of names with no word on what any of it did. It now says what it is for, each choice has a sentence under it in the system's own words, and the bottom line tells you how many tasks your choices leave on the rail.
+- **"All" is something you can see.** Each list starts with an All option, ticked until you pick something else, in place of a note saying that nothing ticked means everything. Pressing it clears your picks.
+- **Long lists start folded,** behind one button that says how many there are to choose from.
+- **Groups follow boards.** Once you pick boards, only those boards' groups are offered.
+- In Settings, a row whose only control is a switch gives its explanation the full width.
 
 ## [0.11.0] - 2026-11-12
 

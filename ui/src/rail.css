@@ -1887,16 +1887,17 @@ html.resizing * {
   flex: 1;
 }
 
-.scope {
+/* Two classes, to outrank the tight spacing a form panel has by default. */
+.panel.scope {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 22px;
 }
 
 .scope__group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .scope__label {
@@ -1908,7 +1909,56 @@ html.resizing * {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+}
+
+.scope__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scope__intro p {
+  margin: 0;
+}
+
+.scope__words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scope__help {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* "All 10" or "2 of 10", beside the name of what is being picked. */
+.scope__state {
+  margin-left: 8px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.scope__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.scope__result {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tick--more {
+  border-style: dashed;
+  color: var(--text-muted);
 }
 
 .scope__ticks {

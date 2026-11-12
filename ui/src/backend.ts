@@ -38,8 +38,8 @@ export interface Item {
 }
 
 export type Choice =
-  | { kind: 'switch'; id: string; label: string; default?: boolean }
-  | { kind: 'pick'; id: string; label: string; containers?: string; trail?: string }
+  | { kind: 'switch'; id: string; label: string; help?: string; default?: boolean }
+  | { kind: 'pick'; id: string; label: string; help?: string; containers?: string; trail?: string }
 
 export interface Scope {
   switches: Record<string, boolean>
@@ -835,12 +835,16 @@ function browserBackend(): RailBackend {
     getConnectorScope: (id) =>
       async(() => ({
         choices: [
-          { kind: 'switch', id: 'mine', label: 'Only tasks assigned to me', default: true },
-          { kind: 'pick', id: 'boards', label: 'Boards', containers: '$.name' },
-          { kind: 'pick', id: 'groups', label: 'Groups', trail: 'group' },
+          { kind: 'switch', id: 'mine', label: 'Only tasks assigned to me', help: "Turn this off to bring in everyone's tickets, not just your own.", default: true },
+          { kind: 'pick', id: 'boards', label: 'Boards', help: 'Take tickets only from the boards you pick.', containers: '$.name' },
+          { kind: 'pick', id: 'groups', label: 'Groups', help: "The sections of a board, such as Now and Later. Pick some to leave the rest off the rail.", trail: 'group' },
         ],
         scope: scopes[id] ?? { switches: {}, picks: {} },
-        options: { boards: ['Work', 'Home'], groups: ['Later', 'Now'] },
+        // As the app does: with boards picked, only their groups are on offer.
+        options: {
+          boards: ['Work', 'Home'],
+          groups: (scopes[id]?.picks.boards ?? []).length === 1 && scopes[id]?.picks.boards[0] === 'Home' ? ['Someday'] : ['Backlog', 'Blocked', 'Done', 'In review', 'Later', 'Next', 'Now', 'QA', 'Released', 'Someday'],
+        },
       })),
     setConnectorScope: (id, scope) =>
       async(() => {

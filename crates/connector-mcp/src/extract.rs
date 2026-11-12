@@ -537,12 +537,15 @@ async fn fetch_aligned(
     Ok(all)
 }
 
-/// What a person can pick from: for each pick, the values seen with every
-/// switch off and nothing picked. Containers come from the parent call,
-/// trail values from the items themselves.
+/// What a person can pick from. Containers come from the parent call and are
+/// always all of them. Trail values, such as group names, come from the
+/// items themselves with every switch off, and only from the containers the
+/// person has already kept to: with two boards picked out of ten, the groups
+/// worth offering are those two boards', not the forty across all ten.
 pub async fn scope_options(
     session: &crate::session::McpSession,
     profile: &ConnectorProfile,
+    current: &Scope,
 ) -> Result<std::collections::BTreeMap<String, Vec<String>>, taskrail_connector_api::ConnectorError>
 {
     use taskrail_connector_api::ConnectorError;
@@ -551,8 +554,22 @@ pub async fn scope_options(
         .choices
         .iter()
         .any(|c| matches!(c, Choice::Pick { trail: Some(_), .. }));
+    let mut wide = Scope::everything(profile);
+    for choice in &profile.choices {
+        if let Choice::Pick {
+            id,
+            containers: Some(_),
+            ..
+        } = choice
+        {
+            let kept = current.picked(id);
+            if !kept.is_empty() {
+                wide.picks.insert(id.clone(), kept.to_vec());
+            }
+        }
+    }
     let items = if wants_trail {
-        fetch_aligned(session, profile, &Scope::everything(profile)).await?
+        fetch_aligned(session, profile, &wide).await?
     } else {
         Vec::new()
     };

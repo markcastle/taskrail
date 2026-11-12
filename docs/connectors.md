@@ -6,7 +6,7 @@ Task Rail reads tasks from any system that has an [MCP](https://modelcontextprot
 
 Before any model is involved, Task Rail checks whether the server is one somebody has connected before. It lists the server's tools and looks them up in the [blueprint registry](../blueprints/registry.json): a profile for each known system with the personal parts left out. If one fits, it is used straight away, tested against the live server, and shown for approval. No model, no API key.
 
-The registry is fetched from this repository when you add a server, with a copy built into the app as the fallback. A connector made from a blueprint goes on following it: the app reads the registry shortly after it starts and every hour, and when a blueprint has been improved, connectors made from it are brought up to date. The newer profile is run against your own server first, with your sign-in and your Scope answers, and is only saved if it answers; otherwise the connector stays as it was and the log says why. A profile you pasted or a model wrote is yours and is never replaced, unless it is for a host a blueprint was written for and calls only the tools that blueprint does, which is how connectors made before this existed are picked up. Contributing a blueprint is a **Blueprint** button on any saved connector and a pull request; [blueprints/README.md](../blueprints/README.md) has the steps.
+The registry is fetched from this repository when you add a server, with a copy built into the app as the fallback. A connector made from a blueprint goes on following it: the app reads the registry shortly after it starts and every hour, and when a blueprint has been improved, connectors made from it are brought up to date. The newer profile is run against your own server first, with your sign-in and your Filter answers, and is only saved if it answers; otherwise the connector stays as it was and the log says why. A profile you pasted or a model wrote is yours and is never replaced, unless it is for a host a blueprint was written for and calls only the tools that blueprint does, which is how connectors made before this existed are picked up. Contributing a blueprint is a **Blueprint** button on any saved connector and a pull request; [blueprints/README.md](../blueprints/README.md) has the steps.
 
 ## The three ways in
 
@@ -94,7 +94,7 @@ Field by field:
 | `list.for_each` | For systems that keep work in containers: call `list_boards` once, then the list tool once per board. See below. |
 | `identity` | Which tool says who the signed-in person is, and where their id sits in its result. Lets the profile say `{me}` instead of carrying a user id. See below. |
 | `list.trail` | Where an item sits, outermost first: board, group, parent task. Shown on the rail as `Board › Group › Parent`. See below. |
-| `choices` | What each person may decide for themselves: switches and picks, answered on their own connector under **Scope**. See below. |
+| `choices` | What each person may decide for themselves: switches and picks, answered on their own connector under **Filter**. See below. |
 | `set_status` | The tool that changes a status. `{external_id}` and `{status}` are filled in at call time. Leave it out and the connector is read-only. |
 | `create` | The tool that makes a new item from a `{title}`. Optional. |
 | `status_map.to_section` | Every status word the server might return, mapped onto `todo`, `in_progress` or `done`. |
@@ -173,16 +173,19 @@ Most systems keep a task's board, group or parent somewhere other than on the ta
 
 A step with only `label` reads it from the whole result once. A step with `key`, `items` and `id` takes the item's value at `key`, finds the element among `items` whose `id` matches, and reads `label` from it. The rail shows the steps the item has, in order, under the title: *Tuesday · Mark's Priorities › Now*, or for a subtask *Tuesday · Mark's Priorities › VideoLib go-live*. Tapping the task shows each on its own line.
 
-### Choices, and the Scope panel
+### Choices, and the Filter panel
 
-People use the same system differently. One keeps a private board with nothing assigned; another wants one group on one board. A profile declares `choices`, and each person answers them on their own connector under **Scope**, with toggles and tick lists. The answers live on the connector, never in the profile or the blueprint.
+People use the same system differently. One keeps a private board with nothing assigned; another wants one group on one board. A profile declares `choices`, and each person answers them on their own connector under **Filter**, with toggles and tick lists. The answers live on the connector, never in the profile or the blueprint.
 
 ```json
 "choices": [
   { "kind": "switch", "id": "mine", "label": "Only tasks assigned to me", "default": true,
+    "help": "Turn this off to bring in everyone's tasks, for a board you look after.",
     "where": [ { "path": "$.assignees[*]", "equals": "{me}" } ] },
-  { "kind": "pick", "id": "boards", "label": "Boards", "containers": "$.name" },
-  { "kind": "pick", "id": "groups", "label": "Groups", "trail": "group" }
+  { "kind": "pick", "id": "boards", "label": "Boards", "containers": "$.name",
+    "help": "Take tasks only from the boards you pick." },
+  { "kind": "pick", "id": "groups", "label": "Groups", "trail": "group",
+    "help": "The sections of a board, such as Now, Next and Later." }
 ]
 ```
 
@@ -192,7 +195,9 @@ People use the same system differently. One keeps a private board with nothing a
 | `pick` with `containers` | A tick list of the fan-out's elements by the label path, such as board names. Only ticked ones are fetched. Nothing ticked means all. |
 | `pick` with `trail` | A tick list of the values a trail step takes, such as group names. Only items with a ticked value stay. Nothing ticked means all. |
 
-Changing anything in Scope saves at once and pulls again. The tick lists are filled from the live server: boards from the fan-out, groups from the tasks seen with every switch off.
+Give every choice a `help`: one plain sentence, shown under its label, on what it does. The panel cannot write it for you, because only the profile knows what the system calls things. "Groups" means nothing to someone who has not been told they are a board's sections.
+
+Changing anything in Filter saves at once and pulls again, and the panel says how many tasks that leaves on the rail. The tick lists are filled from the live server: boards from the fan-out, groups from the tasks seen with every switch off. Each list starts with an **All** option, ticked while nothing else is, so nobody has to be told that nothing picked means everything. A list of more than eight starts folded behind one button. Once boards are picked, only their groups are offered.
 
 ## Calendars
 

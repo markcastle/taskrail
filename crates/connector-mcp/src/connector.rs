@@ -49,7 +49,9 @@ impl McpConnector {
             *guard = Some(McpSession::connect(&self.profile.server, &self.auth).await?);
         }
         match guard.as_ref() {
-            Some(session) => crate::extract::scope_options(session, &self.profile).await,
+            Some(session) => {
+                crate::extract::scope_options(session, &self.profile, &self.scope).await
+            }
             None => Err(ConnectorError::Transport("no session".into())),
         }
     }

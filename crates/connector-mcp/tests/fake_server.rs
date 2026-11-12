@@ -291,6 +291,7 @@ fn board_profile_with_choices() -> taskrail_connector_mcp::ConnectorProfile {
         Choice::Switch {
             id: "mine".into(),
             label: "Only tickets assigned to me".into(),
+            help: None,
             default: true,
             filter: vec![Condition {
                 path: "$.assignee".into(),
@@ -301,12 +302,14 @@ fn board_profile_with_choices() -> taskrail_connector_mcp::ConnectorProfile {
         Choice::Pick {
             id: "boards".into(),
             label: "Boards".into(),
+            help: None,
             containers: Some("$.name".into()),
             trail: None,
         },
         Choice::Pick {
             id: "groups".into(),
             label: "Groups".into(),
+            help: None,
             containers: None,
             trail: Some("group".into()),
         },
@@ -455,5 +458,39 @@ async fn a_connector_made_from_an_older_blueprint_gains_the_trail_when_refreshed
     assert!(
         after.iter().all(|item| !item.trail.is_empty()),
         "and each now says where it sits"
+    );
+}
+
+#[tokio::test]
+async fn the_groups_on_offer_are_those_of_the_boards_already_picked() {
+    use taskrail_connector_mcp::Scope;
+    let profile = board_profile_with_choices();
+    let everywhere = McpConnector::new(profile.clone(), SessionAuth::default())
+        .scope_options()
+        .await
+        .unwrap();
+
+    let mut scope = Scope::default();
+    scope.picks.insert("boards".into(), vec!["Home".into()]);
+    let at_home = McpConnector::with_scope(profile, SessionAuth::default(), scope)
+        .scope_options()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        at_home["boards"], everywhere["boards"],
+        "every board is still on offer, so the pick can be changed"
+    );
+    assert!(
+        at_home["groups"]
+            .iter()
+            .all(|g| everywhere["groups"].contains(g)),
+        "nothing appears that was not there before"
+    );
+    assert!(
+        at_home["groups"].len() < everywhere["groups"].len(),
+        "and the other board's groups are gone: {:?} of {:?}",
+        at_home["groups"],
+        everywhere["groups"]
     );
 }

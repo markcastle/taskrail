@@ -109,7 +109,7 @@ The tray icon has **Show**, **Hide**, **Settings** and **Quit**. Always quit fro
 Open ⚙️ and look at **Connectors**.
 
 <p align="center">
-  <img src="docs/images/settings-connectors.png" width="720" alt="The Connectors page in Settings: one connected tracker with Sync now, Pause, Scope and Blueprint, and four ways to add another" />
+  <img src="docs/images/settings-connectors.png" width="720" alt="The Connectors page in Settings: one connected tracker with Sync now, Pause, Filter and Blueprint, and four ways to add another" />
 </p>
 
 - **Add demo tracker** gives you a small fake issue tracker to play with. Its tickets appear in seconds. Drag one into In progress and watch the tracker move it too.
@@ -124,6 +124,8 @@ Want the details, or to write a connector by hand? See [docs/connectors.md](docs
 We know. Pasting an API key into an app you found on GitHub is a lot to ask, and we want to stop asking. Until then, here is exactly what happens with it: it goes into your operating system's credential store, never into a file; it is sent only to the provider you chose, only during discovery, and never again once a connector is saved; and the code that does it is in `crates/llm`, short enough to read over coffee. Discovery is the only thing in the app that talks to a model.
 
 Most people should never need one. Blueprints already cover any system somebody has connected and shared, and the [roadmap](docs/roadmap.md#discovery-without-an-api-key) has the rest: discovery by plain rules for servers with obvious tool names, and letting the agent you already trust do the thinking. If you connect a system with a key, pressing **Blueprint** and sending it in means the next person will not need one.
+
+Do not take our word for any of this. Every line is in this repository. Read it, hand it to your security team, or point a model at it and ask whether the app does what this page says and nothing more. And if you would rather not trust our installers either, [build it from source](docs/developing.md): it is two commands.
 
 ## 🗺️ Where it is going
 
