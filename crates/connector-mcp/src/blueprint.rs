@@ -142,6 +142,67 @@ impl Registry {
         });
         by_url.or_else(|| fits.first().copied())
     }
+
+    /// The blueprint a saved profile follows, if it follows one.
+    ///
+    /// A profile made from a blueprint says so. One made before profiles
+    /// said so is taken to follow the blueprint written for its own host,
+    /// provided it calls nothing that blueprint does not: same system, same
+    /// tools, an earlier edition. A profile for any other server, or one
+    /// that reaches for a tool the blueprint never uses, is somebody's own
+    /// work and is left alone.
+    pub fn followed_by(&self, profile: &ConnectorProfile) -> Option<&Blueprint> {
+        if let Some(id) = &profile.blueprint {
+            return self.blueprints.iter().find(|b| &b.id == id);
+        }
+        let ServerSpec::Http { url, .. } = &profile.server else {
+            return None;
+        };
+        let used = tools_used(profile);
+        self.blueprints.iter().find(|b| {
+            b.fingerprint
+                .url_contains
+                .iter()
+                .any(|u| url.contains(u.as_str()))
+                && used.iter().all(|t| b.fingerprint.tools.contains(t))
+        })
+    }
+
+    /// The profile as its blueprint would make it today, or `None` when it
+    /// follows no blueprint or is already what the blueprint makes. Who the
+    /// connector is (its id, its name, its server) is kept; everything the
+    /// blueprint decides is taken from the blueprint.
+    pub fn refreshed(&self, profile: &ConnectorProfile) -> Option<ConnectorProfile> {
+        let blueprint = self.followed_by(profile)?;
+        let fresh = blueprint
+            .instantiate(&profile.id, &profile.name, &profile.server, profile.kind)
+            .ok()?;
+        (fresh != *profile).then_some(fresh)
+    }
+}
+
+/// Every tool a profile calls, each once, in the order it calls them.
+fn tools_used(profile: &ConnectorProfile) -> Vec<String> {
+    let mut tools: Vec<String> = Vec::new();
+    let mut add = |tool: &str| {
+        if !tools.iter().any(|t| t == tool) {
+            tools.push(tool.to_owned());
+        }
+    };
+    add(&profile.list.call.tool);
+    if let Some(each) = &profile.list.for_each {
+        add(&each.tool);
+    }
+    if let Some(Identity { tool, .. }) = &profile.identity {
+        add(tool);
+    }
+    if let Some(spec) = &profile.set_status {
+        add(&spec.tool);
+    }
+    if let Some(spec) = &profile.create {
+        add(&spec.tool);
+    }
+    tools
 }
 
 impl Blueprint {
@@ -154,38 +215,23 @@ impl Blueprint {
         server: &ServerSpec,
         kind: ItemKind,
     ) -> Result<ConnectorProfile, String> {
-        complete_profile(self.profile.clone(), id, name, server, kind)
+        let mut profile = complete_profile(self.profile.clone(), id, name, server, kind)?;
+        // So the connector can follow the blueprint as it improves.
+        profile.blueprint = Some(self.id.clone());
+        Ok(profile)
     }
 
     /// A blueprint made from a working profile, ready to contribute. The
     /// fingerprint is the tools the profile calls, which is all a match needs.
     pub fn from_profile(profile: &ConnectorProfile, title: &str, description: &str) -> Self {
-        let mut tools: Vec<String> = Vec::new();
-        let mut add = |tool: &str| {
-            if !tools.iter().any(|t| t == tool) {
-                tools.push(tool.to_owned());
-            }
-        };
-        add(&profile.list.call.tool);
-        if let Some(each) = &profile.list.for_each {
-            add(&each.tool);
-        }
-        if let Some(Identity { tool, .. }) = &profile.identity {
-            add(tool);
-        }
-        if let Some(spec) = &profile.set_status {
-            add(&spec.tool);
-        }
-        if let Some(spec) = &profile.create {
-            add(&spec.tool);
-        }
+        let tools = tools_used(profile);
         let url_contains = match &profile.server {
             ServerSpec::Http { url, .. } => host_of(url).into_iter().collect(),
             ServerSpec::Stdio { .. } => vec![],
         };
         let mut value = serde_json::to_value(profile).unwrap_or(Value::Null);
         if let Value::Object(map) = &mut value {
-            for key in ["id", "name", "server", "version"] {
+            for key in ["id", "name", "server", "version", "blueprint"] {
                 map.remove(key);
             }
         }
@@ -345,5 +391,92 @@ mod tests {
         assert_eq!(again.id, "mine");
         assert_eq!(again.list, profile.list);
         assert_eq!(again.status_map, profile.status_map);
+    }
+
+    fn http(url: &str) -> ServerSpec {
+        ServerSpec::Http {
+            url: url.into(),
+            bearer_secret: None,
+            oauth_secret: None,
+        }
+    }
+
+    /// The Tuesday connector as its blueprint makes it today.
+    fn tuesday_today() -> ConnectorProfile {
+        Registry::bundled()
+            .blueprints
+            .iter()
+            .find(|b| b.id == "tuesday")
+            .expect("the registry has a Tuesday blueprint")
+            .instantiate(
+                "tuesday",
+                "Tuesday",
+                &http("https://tuesday.inovusmedical.com/mcp"),
+                ItemKind::Task,
+            )
+            .unwrap()
+    }
+
+    /// The same connector as an earlier edition of the blueprint made it:
+    /// before tasks said where they sit and before there was anything to
+    /// choose.
+    fn an_earlier_edition(mut profile: ConnectorProfile) -> ConnectorProfile {
+        profile.list.trail.clear();
+        profile.choices.clear();
+        profile
+    }
+
+    #[test]
+    fn a_connector_follows_its_blueprint_as_the_blueprint_improves() {
+        let today = tuesday_today();
+        assert!(!today.list.trail.is_empty() && !today.choices.is_empty());
+        let old = an_earlier_edition(today.clone());
+        let fresh = Registry::bundled()
+            .refreshed(&old)
+            .expect("an older edition is refreshed");
+        assert_eq!(fresh, today);
+        // Who the connector is does not change.
+        assert_eq!(
+            (fresh.id, fresh.name, fresh.server),
+            (old.id, old.name, old.server)
+        );
+    }
+
+    #[test]
+    fn a_connector_already_up_to_date_is_left_alone() {
+        assert_eq!(Registry::bundled().refreshed(&tuesday_today()), None);
+    }
+
+    #[test]
+    fn a_connector_from_before_profiles_named_their_blueprint_follows_its_hosts() {
+        let mut old = an_earlier_edition(tuesday_today());
+        old.blueprint = None;
+        let fresh = Registry::bundled()
+            .refreshed(&old)
+            .expect("adopted by its host's blueprint");
+        assert_eq!(fresh.blueprint.as_deref(), Some("tuesday"));
+        assert!(!fresh.list.trail.is_empty());
+    }
+
+    #[test]
+    fn a_profile_for_some_other_server_is_nobodys_but_its_owners() {
+        let mut own = an_earlier_edition(tuesday_today());
+        own.blueprint = None;
+        own.server = http("https://tasks.example.org/mcp");
+        assert_eq!(Registry::bundled().refreshed(&own), None);
+    }
+
+    #[test]
+    fn a_profile_that_calls_a_tool_its_hosts_blueprint_never_uses_is_left_alone() {
+        let mut own = an_earlier_edition(tuesday_today());
+        own.blueprint = None;
+        own.list.call.tool = "search_everything".into();
+        assert_eq!(Registry::bundled().refreshed(&own), None);
+    }
+
+    #[test]
+    fn a_blueprint_made_from_a_connector_does_not_say_where_the_connector_came_from() {
+        let exported = Blueprint::from_profile(&tuesday_today(), "Tuesday", "");
+        assert!(exported.profile.get("blueprint").is_none());
     }
 }

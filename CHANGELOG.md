@@ -12,6 +12,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - **The date at the top keeps up.** A rail left open past midnight went on showing yesterday's date, yesterday's "done today" count and yesterday's events until something else made it redraw. It now notices the new day by itself.
 - **"Today" is your day, not UTC's.** What counts as done today, and which events are today's, was decided by the date in UTC. In British summer time the day rolled over at 1am; in New York it rolled over at 7pm and showed tomorrow's meetings as today's. It now follows your own clock.
 
+### Added
+
+- **Connectors keep up with their blueprint.** A blueprint improves after people have connected with it: it learns to show where a task sits, it gains choices under Scope. Until now a connector kept the edition it was made with for ever, so only people who connected later saw the improvement. Now the app checks shortly after it starts and every hour, and brings each connector up to date with its blueprint. The newer version is tried against your own server first; if it does not work there, your connector is left exactly as it was. If your Tuesday tasks show no board, group or parent under their titles, this is what fixes it: subtasks will say what they are part of.
+
 ### Changed
 
 - **The footer no longer says "Up to date" over old data.** When a connector has gone well past its own interval without a sync, the footer turns amber and says "Last synced 5 h ago".

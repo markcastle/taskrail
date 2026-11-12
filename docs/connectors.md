@@ -6,7 +6,7 @@ Task Rail reads tasks from any system that has an [MCP](https://modelcontextprot
 
 Before any model is involved, Task Rail checks whether the server is one somebody has connected before. It lists the server's tools and looks them up in the [blueprint registry](../blueprints/registry.json): a profile for each known system with the personal parts left out. If one fits, it is used straight away, tested against the live server, and shown for approval. No model, no API key.
 
-The registry is fetched from this repository when you add a server, with a copy built into the app as the fallback. Contributing a blueprint is a **Blueprint** button on any saved connector and a pull request; [blueprints/README.md](../blueprints/README.md) has the steps.
+The registry is fetched from this repository when you add a server, with a copy built into the app as the fallback. A connector made from a blueprint goes on following it: the app reads the registry shortly after it starts and every hour, and when a blueprint has been improved, connectors made from it are brought up to date. The newer profile is run against your own server first, with your sign-in and your Scope answers, and is only saved if it answers; otherwise the connector stays as it was and the log says why. A profile you pasted or a model wrote is yours and is never replaced, unless it is for a host a blueprint was written for and calls only the tools that blueprint does, which is how connectors made before this existed are picked up. Contributing a blueprint is a **Blueprint** button on any saved connector and a pull request; [blueprints/README.md](../blueprints/README.md) has the steps.
 
 ## The three ways in
 

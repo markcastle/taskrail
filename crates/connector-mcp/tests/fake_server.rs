@@ -411,3 +411,49 @@ async fn a_blueprint_that_finds_nothing_for_this_person_still_connects() {
         outcome.notes
     );
 }
+
+#[tokio::test]
+async fn a_connector_made_from_an_older_blueprint_gains_the_trail_when_refreshed() {
+    use taskrail_connector_mcp::Registry;
+    let registry = Registry::bundled();
+    let demo = registry
+        .blueprints
+        .iter()
+        .find(|b| b.id == "demo-tracker")
+        .unwrap();
+    let today = demo
+        .instantiate(
+            "demo",
+            "Demo",
+            &fake_tracker_profile(server()).server,
+            taskrail_core::domain::ItemKind::Task,
+        )
+        .unwrap();
+
+    // As an earlier edition made it: nothing says where a task sits.
+    let mut old = today.clone();
+    old.list.trail.clear();
+    old.choices.clear();
+    let before = McpConnector::new(old.clone(), SessionAuth::default())
+        .list()
+        .await
+        .unwrap();
+    assert!(before.iter().all(|item| item.trail.is_empty()));
+
+    let fresh = registry
+        .refreshed(&old)
+        .expect("the blueprint has moved on");
+    let after = McpConnector::new(fresh, SessionAuth::default())
+        .list()
+        .await
+        .unwrap();
+    assert_eq!(
+        after.len(),
+        6,
+        "what the blueprint finds today: this person's open tickets"
+    );
+    assert!(
+        after.iter().all(|item| !item.trail.is_empty()),
+        "and each now says where it sits"
+    );
+}

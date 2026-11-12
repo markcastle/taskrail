@@ -229,6 +229,18 @@ impl ConnectorRegistry {
             .collect()
     }
 
+    /// Swap a connector's profile for a newer one with the same id. The live
+    /// connector is rebuilt so the next pull uses it. False when there is no
+    /// connector with that id any more.
+    pub fn replace(&mut self, profile: ConnectorProfile) -> bool {
+        let Some(slot) = self.profiles.iter_mut().find(|p| p.id == profile.id) else {
+            return false;
+        };
+        self.live.remove(&profile.id);
+        *slot = profile;
+        true
+    }
+
     pub fn add(&mut self, profile: ConnectorProfile) -> Result<(), String> {
         let problems = profile.validate();
         if !problems.is_empty() {
@@ -438,6 +450,44 @@ mod tests {
             }],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn a_newer_profile_takes_the_place_of_the_one_with_its_id() {
+        let demo = taskrail_connector_mcp::Registry::bundled()
+            .blueprints
+            .into_iter()
+            .find(|b| b.id == "demo-tracker")
+            .unwrap();
+        let server = ServerSpec::Http {
+            url: "https://example.test/mcp".into(),
+            bearer_secret: None,
+            oauth_secret: None,
+        };
+        let today = demo
+            .instantiate(
+                "demo",
+                "Demo",
+                &server,
+                taskrail_core::domain::ItemKind::Task,
+            )
+            .unwrap();
+        let mut old = today.clone();
+        old.list.trail.clear();
+        old.choices.clear();
+
+        let mut registry = ConnectorRegistry::default();
+        registry.add(old).unwrap();
+        assert!(registry.replace(today.clone()));
+        assert_eq!(registry.profiles(), std::slice::from_ref(&today));
+
+        let mut stranger = today;
+        stranger.id = "someone-else".into();
+        assert!(
+            !registry.replace(stranger),
+            "nothing with that id to replace"
+        );
+        assert_eq!(registry.profiles().len(), 1);
     }
 
     #[test]

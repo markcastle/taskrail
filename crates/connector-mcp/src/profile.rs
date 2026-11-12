@@ -273,6 +273,11 @@ pub struct ConnectorProfile {
     /// How often to poll, in seconds.
     #[serde(default = "default_poll")]
     pub poll_seconds: u32,
+    /// The blueprint this profile was made from, by its id. A connector
+    /// that has one follows it: when the blueprint is improved, so is the
+    /// connector. Absent on a profile written by hand or by discovery.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blueprint: Option<String>,
 }
 
 fn default_version() -> u32 {
@@ -466,6 +471,7 @@ pub fn fake_tracker_profile(command: impl Into<String>) -> ConnectorProfile {
             ("P4".into(), Priority::Low),
         ]),
         poll_seconds: 60,
+        blueprint: None,
     }
 }
 

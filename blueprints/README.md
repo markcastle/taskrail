@@ -11,7 +11,7 @@ A blueprint is a Task Rail connector profile for a system someone has already co
 3. If the profile names you, replace your user id with `{me}` and add an `identity` block that says which tool tells the app who the signed-in person is. The demo tracker entry shows the shape.
 4. Press **Submit for review**. Your browser opens the [submission form](https://github.com/markcastle/taskrail/issues/new?template=blueprint.yml) with the blueprint filled in. Say what the system is and what the profile pulls, and send it.
 
-From there it is automatic: a workflow checks the blueprint with the same code the app uses, turns the issue into a pull request, and comments on your issue with the link. A maintainer reviews it, and once it is merged every running Task Rail picks it up within the hour. If the check finds a problem, the comment says what, and editing the issue runs it again.
+From there it is automatic: a workflow checks the blueprint with the same code the app uses, turns the issue into a pull request, and comments on your issue with the link. A maintainer reviews it, and once it is merged every running Task Rail picks it up within the hour: new connections use it, and connectors already made from that blueprint are brought up to date with it, after the newer profile has been tried against the person's own server. If the check finds a problem, the comment says what, and editing the issue runs it again.
 
 You can also edit `registry.json` directly and open a pull request; the checks are the same.
 

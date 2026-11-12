@@ -7,6 +7,7 @@
 //! live in the core; OS rules live in the platform crate.
 
 mod autohide;
+mod blueprints;
 mod commands;
 mod connectors;
 mod dock;
@@ -94,6 +95,7 @@ pub fn run() {
             sync::start(app.handle().clone());
             update::start(app.handle().clone());
             autohide::start(app.handle().clone());
+            blueprints::start(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
