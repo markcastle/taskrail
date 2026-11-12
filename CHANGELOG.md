@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.11.0] - 2026-11-12
+
 ### Fixed
 
 - **A rail left open overnight could stop syncing for good, and not say so.** If a connection to a task system stopped answering without closing, which is what a laptop going to sleep or a network changing does, the app waited on it for ever. Nothing was pulled again, status changes made on the rail were never written back, and the footer went on saying "Up to date". Every network wait now has a limit, a connection that stops answering is dropped and made again, and a connector that fails is tried again a minute later.
@@ -237,7 +241,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/markcastle/taskrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/markcastle/taskrail/compare/v0.9.2...v0.10.0
 [0.9.2]: https://github.com/markcastle/taskrail/compare/v0.9.1...v0.9.2
 [0.9.1]: https://github.com/markcastle/taskrail/compare/v0.9.0...v0.9.1
