@@ -17,6 +17,7 @@ mod rail;
 mod secrets;
 mod seed;
 mod shortcuts;
+mod startup;
 mod state;
 mod sync;
 mod theme;
@@ -31,6 +32,7 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(logs::plugin())
         .plugin(shortcuts::plugin())
+        .plugin(startup::plugin())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             commands::rail_view,
@@ -87,6 +89,10 @@ pub fn run() {
             let rail = rail::Rail::open(data_file(app.handle()))?;
             let connectors = connectors::ConnectorRegistry::load(rail.service.repository());
             app.manage(AppState::new(rail, connectors));
+            // A rail that will not start at login is still a rail.
+            if let Err(e) = startup::apply(app.handle()) {
+                log::warn!("{e}");
+            }
             dock::attach(app.handle())?;
             theme::apply(app.handle());
             shortcuts::register(app.handle());

@@ -83,6 +83,8 @@ export interface RailSettings {
   event_lead_minutes: number
   theme: Theme
   monitor: string | null
+  /** Open when the person signs in to their computer. */
+  start_at_login: boolean
   /** Install new releases without asking. */
   auto_update: boolean
   /** Motion on the rail. The system's reduce-motion setting also turns it off. */
@@ -391,7 +393,7 @@ function browserBackend(): RailBackend {
     task('update-project-plan', 'Update project plan', 'done'),
   ]
   let active: string | null = 'design-dashboard'
-  let settings: RailSettings = { edge: 'right', width_px: 320, auto_hide: false, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, auto_update: false, animations: true, sounds: false }
+  let settings: RailSettings = { edge: 'right', width_px: 320, auto_hide: false, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, start_at_login: true, auto_update: false, animations: true, sounds: false }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
@@ -414,6 +416,7 @@ function browserBackend(): RailBackend {
         theme: state.settings.theme ?? 'system',
         auto_hide: state.settings.auto_hide ?? false,
         monitor: state.settings.monitor ?? null,
+        start_at_login: state.settings.start_at_login ?? true,
         auto_update: state.settings.auto_update ?? false,
         animations: state.settings.animations ?? true,
         sounds: state.settings.sounds ?? false,

@@ -35,7 +35,7 @@ It speaks [MCP](https://modelcontextprotocol.io), so it can read from any system
 
 ## ✨ What you get
 
-- 📌 **Always there.** A docked strip on Windows and a floating edge panel on macOS. Hide it from the tray when you need the space back.
+- 📌 **Always there.** A docked strip on Windows and a floating edge panel on macOS, there from the moment you sign in. Hide it from the tray when you need the space back, or switch off **Start at login** in Settings if you would rather open it yourself.
 - 🗓️ **Your day at a glance.** Today's date, how many tasks are done, what is up next, and your priorities in the order you set.
 - 🫥 **Out of the way when you want.** Unpin the rail with the 📌 at its top and it tucks into a thin strip at the edge. Push the pointer against that edge and it comes out; move away and it goes back. Drag its inner edge to make it as wide as you like.
 - 🖐️ **Gestures, not menus.** Drag to reorder, pull into In progress, flick to complete, tap for details.

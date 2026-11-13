@@ -409,6 +409,16 @@ await settings.reload()
 await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
 assert.equal(await settings.getByRole('switch', { name: 'Update automatically' }).getAttribute('aria-checked'), 'true', 'auto-update persisted')
 
+// 11b2. Starting at login is on unless turned off, and turning it off sticks.
+assert.equal(await settings.getByRole('switch', { name: 'Start at login' }).getAttribute('aria-checked'), 'true', 'on by default')
+await settings.getByRole('switch', { name: 'Start at login' }).click()
+await settings.waitForFunction(() => JSON.parse(localStorage.getItem('taskrail-dev-state') ?? '{}').settings?.start_at_login === false)
+await settings.reload()
+await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
+assert.equal(await settings.getByRole('switch', { name: 'Start at login' }).getAttribute('aria-checked'), 'false', 'off stays off')
+await settings.getByRole('switch', { name: 'Start at login' }).click()
+await settings.waitForFunction(() => JSON.parse(localStorage.getItem('taskrail-dev-state') ?? '{}').settings?.start_at_login === true)
+
 // 11c. Animation and sound are both switches. Motion off reaches the rail as a document attribute.
 assert.equal(await page.evaluate(() => document.documentElement.dataset.motion), 'on', 'motion on by default')
 assert.equal(await settings.getByRole('switch', { name: 'Sounds' }).getAttribute('aria-checked'), 'false', 'sounds off by default')

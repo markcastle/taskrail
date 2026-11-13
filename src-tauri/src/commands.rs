@@ -175,11 +175,12 @@ pub fn update_settings(
     state: State<'_, AppState>,
     settings: RailSettings,
 ) -> CommandResult<RailSettings> {
-    let (needs_redock, auto_hide_changed) = {
+    let (needs_redock, auto_hide_changed, startup_changed) = {
         let mut rail = lock(&state.rail);
         let before = rail.settings.clone();
         rail.preview_width_px = None;
         rail.save_settings(settings)?;
+        let startup_changed = before.start_at_login != rail.settings.start_at_login;
         let auto_hide_changed = before.auto_hide != rail.settings.auto_hide;
         if auto_hide_changed {
             // On or off, the rail is out at the moment of the change: it was
@@ -193,8 +194,10 @@ pub fn update_settings(
                 || before.monitor != rail.settings.monitor
                 || auto_hide_changed,
             auto_hide_changed,
+            startup_changed,
         )
     };
+
     if auto_hide_changed {
         // Start the rules again from "out"; the watcher takes it from there.
         *lock(&state.autohide) = taskrail_core::autohide::AutoHide::new(true);
@@ -206,6 +209,11 @@ pub fn update_settings(
     crate::theme::apply(&app);
     crate::tray::reflect_sounds(lock(&state.rail).settings.sounds);
     changed(&app);
+    // Last, so everything else has taken effect. The switch is saved either
+    // way; if the system would not follow it, the person is told.
+    if startup_changed {
+        crate::startup::apply(&app)?;
+    }
     Ok(lock(&state.rail).settings.clone())
 }
 

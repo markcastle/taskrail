@@ -58,6 +58,11 @@ pub struct RailSettings {
     /// back to it too.
     #[serde(default)]
     pub monitor: Option<String>,
+    /// Open when the person signs in to their computer. On unless they turn
+    /// it off: a rail that has to be remembered and started by hand is a
+    /// to-do list with extra steps.
+    #[serde(default = "yes")]
+    pub start_at_login: bool,
     /// Install new releases without asking. Off until the person turns it
     /// on: an update that changes things under you is a surprise.
     #[serde(default)]
@@ -86,6 +91,7 @@ impl Default for RailSettings {
             event_lead_minutes: 60,
             theme: Theme::System,
             monitor: None,
+            start_at_login: true,
             auto_update: false,
             animations: true,
             sounds: false,
@@ -117,6 +123,10 @@ mod tests {
         assert_eq!(settings.monitor, None);
         assert_eq!(settings.width_px, 300);
         assert!(!settings.auto_hide);
+        assert!(
+            settings.start_at_login,
+            "someone who never saw the switch gets the default, which is on"
+        );
         let json = serde_json::to_string(&settings).unwrap();
         assert!(json.contains("\"theme\":\"system\""));
     }

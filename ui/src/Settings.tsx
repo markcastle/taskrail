@@ -297,6 +297,10 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
       <Row label="Pull in events starting within" help="A meeting this close joins Priorities.">
         <Slider label="Pull in events starting within" value={draft.event_lead_minutes} min={0} max={240} step={5} unit="min" onChange={(v) => set('event_lead_minutes', v)} />
       </Row>
+      <div className="settings-subhead">Startup</div>
+      <Row label="Start at login" help="Task Rail opens when you sign in to your computer, so your day is there when you are.">
+        <Toggle checked={draft.start_at_login} onChange={(v) => set('start_at_login', v)} label="Start at login" />
+      </Row>
       <Updates autoUpdate={draft.auto_update} onAutoUpdate={(v) => set('auto_update', v)} fail={fail} />
       <div className="settings-subhead">Feedback</div>
       <Row label="Animation" help="Rows slide away, arrive and settle. Off here, or when your system asks for reduced motion.">
