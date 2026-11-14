@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.12.0] - 2026-11-14
+
 ### Added
 
 - **Task Rail starts when you sign in.** A rail you have to remember to open is a to-do list with extra steps, so it now opens with your computer. This is on by default, including for people updating from an earlier version: the first time this version runs, it adds itself to your startup apps. To turn it off, open Settings and switch off **Start at login** on the Rail page, under Startup. It is per user and needs no administrator: an entry in your own startup list on Windows, a launch agent in your own Library on macOS, and both are removed when you switch it off.
@@ -253,7 +257,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/markcastle/taskrail/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/markcastle/taskrail/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/markcastle/taskrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/markcastle/taskrail/compare/v0.9.2...v0.10.0
