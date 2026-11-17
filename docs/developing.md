@@ -118,6 +118,8 @@ Secrets are never written to the database or to a profile. A profile only names 
 
 ## Cutting a release
 
+This section is how to release Task Rail. For how the whole thing is put together, the traps it avoids, and how to set the same up in another project, see the [release and auto-update playbook](release-playbook.md).
+
 The work of a release is done before it, in [CHANGELOG.md](../CHANGELOG.md). Every change a person would notice goes under **Unreleased** as it lands, in one of **Added**, **Changed**, **Fixed** or **Removed**, written for the person using the app: what they will see, not which function moved. Those notes become the GitHub Release and what the app shows as **Release notes** when it offers the update, and a release refuses to run while the section is empty.
 
 They also decide the version number, so nobody has to:
