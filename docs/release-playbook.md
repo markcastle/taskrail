@@ -10,7 +10,7 @@ It is written to be followed by someone who has never seen this repository. Wher
 - **The changelog decides the version.** Something new makes a minor release; fixes make a patch.
 - **Release notes write themselves.** They are the changelog section for that version, written for the people using the app.
 - **A release is never half there.** It stays a draft until every installer is attached, then publishes.
-- **The app keeps itself current.** It checks an hour at a time, verifies a signature, and either offers the update or installs it.
+- **The app keeps itself current.** It checks every hour, verifies a signature, and either offers the update or installs it.
 - **A bad release can be undone from a button,** including for people who already installed it.
 - **A broken main cannot be released.** The button refuses unless CI passed on that exact commit.
 
@@ -342,6 +342,10 @@ if let Some(update) = updater.check().await? {
 The updater key proves an update came from you. The app refuses anything that does not verify, so a tampered download cannot install.
 
 It is not operating-system code signing. Without a Windows certificate and an Apple Developer ID, a person who downloads an installer by hand still meets SmartScreen or Gatekeeper on first run. Updates through the app are unaffected. Task Rail does not have those certificates yet; when it does they go in as repository secrets and `tauri-action` picks them up.
+
+### If the key is lost
+
+Generate a new pair, put the new public key in `tauri.conf.json`, update the two secrets, and ship a release. Apps already installed will not accept updates signed with the new key, so that one release has to be installed by hand. Back the private key up somewhere that is not the repository.
 
 ## Part 6: One-line install
 
