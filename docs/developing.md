@@ -68,6 +68,12 @@ Then, with nothing else on port 5173:
 npm run ui:test
 ```
 
+How a due date reads, and when it counts as late, is a rule about where midnight falls, so it has its own quick test that runs in several time zones without a browser:
+
+```bash
+npm run ui:unit
+```
+
 Before you push:
 
 ```bash

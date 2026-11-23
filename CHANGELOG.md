@@ -6,7 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A task due today is not past due.** A due date with no time on it means by the end of that day, but the rail read it as a deadline at midnight, so four minutes into Monday everything due on Monday was already "past due", while the same task's own line said "Due today". A task due on a day is now late only once that day is over.
+- **A due date lands on the right day wherever you are.** A date with no time could show as the day before for anyone west of Greenwich.
+
+### Changed
+
+- **A task due at a time today shows the time,** "Due 16:00" in place of "Due today", and turns red once that time has passed. So the headline and the task's line can no longer disagree about whether something is late.
 
 ## [0.12.0] - 2026-11-14
 

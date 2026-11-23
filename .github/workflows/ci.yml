@@ -36,6 +36,9 @@ jobs:
       - run: npm run lint
       # The release number is worked out by a script; its rule is tested here.
       - run: npm run scripts:test
+      # When a due date counts as late is a rule about midnight; it is tested
+      # in several time zones without a browser.
+      - run: npm run ui:unit
       - run: npm run ui:build
       # The system packages are fonts and libraries the runner mostly has
       # already. When its package mirror is unreachable, which happens, the

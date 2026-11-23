@@ -83,6 +83,10 @@ fn time_at(value: &Value, expr: &str) -> Result<Option<DateTime<Utc>>, ExtractEr
 
 /// Dates as remote systems write them: RFC 3339 with or without a zone,
 /// a bare date, or epoch seconds or milliseconds.
+///
+/// A bare date has no time, so it is kept as midnight UTC. The rail reads a
+/// due date at exactly midnight as "that day" and not as a deadline at 00:00
+/// (`dueWord` in `ui/src/format.ts`), so a task due today is not late all day.
 pub fn parse_time(text: &str) -> Option<DateTime<Utc>> {
     let text = text.trim();
     if let Ok(dt) = DateTime::parse_from_rfc3339(text) {

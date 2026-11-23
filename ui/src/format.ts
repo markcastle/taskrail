@@ -33,14 +33,42 @@ function dayWord(date: Date, now: Date): string | null {
   return null
 }
 
-/** When a task is due, the way a person says it: "Due today", "Overdue", "Due Tue", "Due 12 Nov". */
+/**
+ * The day a due date names, when it names a day and not a moment.
+ *
+ * "Due Monday" means by the end of Monday. Trackers send a date with no time as
+ * midnight, usually midnight UTC and sometimes midnight where the person is, and
+ * read as a moment that is the first second of Monday: four minutes into the day
+ * the task would already be late. So a due date at exactly midnight is a day.
+ * Midnight UTC is taken as that calendar date wherever the reader is, so the day
+ * does not slide back one for anyone west of Greenwich.
+ */
+function dueDay(due: Date): Date | null {
+  if (due.getUTCHours() === 0 && due.getUTCMinutes() === 0 && due.getUTCSeconds() === 0 && due.getUTCMilliseconds() === 0)
+    return new Date(due.getUTCFullYear(), due.getUTCMonth(), due.getUTCDate())
+  if (due.getHours() === 0 && due.getMinutes() === 0 && due.getSeconds() === 0 && due.getMilliseconds() === 0)
+    return new Date(due.getFullYear(), due.getMonth(), due.getDate())
+  return null
+}
+
+/**
+ * When a task is due, the way a person says it: "Due today", "Due 16:00",
+ * "Overdue", "Due Tue", "Due 12 Nov".
+ *
+ * A task due on a day is late once that day is over, never during it. A task
+ * due at a time is late once that time has passed.
+ */
 export function dueWord(iso: string, now = new Date()): { text: string; overdue: boolean } {
   const due = new Date(iso)
-  const word = dayWord(due, now)
-  if (word === 'Today') return { text: 'Due today', overdue: due.getTime() < now.getTime() }
-  if (due.getTime() < now.getTime()) return { text: 'Overdue', overdue: true }
+  const day = dueDay(due)
+  const on = day ?? due
+  const word = dayWord(on, now)
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const overdue = day ? day.getTime() < startOfToday : due.getTime() < now.getTime()
+  if (word === 'Today') return { text: day ? 'Due today' : `Due ${formatTime(iso)}`, overdue }
+  if (overdue) return { text: 'Overdue', overdue: true }
   if (word) return { text: `Due ${word.toLowerCase() === 'tomorrow' ? 'tomorrow' : word}`, overdue: false }
-  return { text: `Due ${due.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`, overdue: false }
+  return { text: `Due ${on.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`, overdue: false }
 }
 
 /** When an event starts: "Today, 14:30", "Tomorrow, 09:00", "Tue, 11:00", "12 Nov, 10:00". */
