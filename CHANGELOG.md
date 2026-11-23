@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.12.1] - 2026-11-23
+
 ### Fixed
 
 - **A task due today is not past due.** A due date with no time on it means by the end of that day, but the rail read it as a deadline at midnight, so four minutes into Monday everything due on Monday was already "past due", while the same task's own line said "Due today". A task due on a day is now late only once that day is over.
@@ -264,7 +268,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/markcastle/taskrail/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/markcastle/taskrail/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/markcastle/taskrail/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/markcastle/taskrail/compare/v0.10.0...v0.11.0
