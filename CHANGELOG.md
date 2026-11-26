@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.13.0] - 2026-11-26
+
 ### Added
 
 - **Tap a task and it tells you more.** An opened task now shows what its own system says about it: the description, as plain text, above where it sits and when it is due. A long one is folded to six lines with **Show more**, so one wordy task does not push the rest off the rail, and you can select and copy from it.
@@ -276,7 +280,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.12.1...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/markcastle/taskrail/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/markcastle/taskrail/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/markcastle/taskrail/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/markcastle/taskrail/compare/v0.11.0...v0.11.1
