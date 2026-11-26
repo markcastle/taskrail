@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.14.0] - 2026-11-26
+
 ### Added
 
 - **You choose how often it syncs.** Settings has a new slider, **Check for changes every**, from one minute to an hour. It applies to every connector, and a connector that asks to be pulled less often than you chose still is.
@@ -294,7 +298,8 @@ The first release anyone could install.
 - **The icon and the blue.** One blue, flat surfaces, and the icon at every size.
 - **Releases built by GitHub Actions** and a one-line install on Windows and macOS.
 
-[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/markcastle/taskrail/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/markcastle/taskrail/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/markcastle/taskrail/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/markcastle/taskrail/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/markcastle/taskrail/compare/v0.11.1...v0.12.0
