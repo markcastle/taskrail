@@ -13,7 +13,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Changed
 
 - **Syncing is every five minutes by default, down from every minute.** A list of tasks does not change by the minute, and sixty requests an hour per person adds up on the server at the other end. The rail does not rely on the interval to feel current: what you change on the rail is still sent at once, clicking the status at the bottom still syncs now, and it now syncs as soon as the computer wakes.
-
 - **The Up next card opens like any other task.** Tap it for the description, the link to open it where it lives, and everything that can be done with it. It was the one task on the rail that did nothing when tapped.
 
 ### Fixed
