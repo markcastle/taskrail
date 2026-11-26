@@ -61,6 +61,9 @@ pub struct ConnectorSummary {
     pub item_count: usize,
     /// Paused: its tasks stay on the rail, nothing is pulled or written back.
     pub paused: bool,
+    /// Where the system lives on the web, when its blueprint says. A card
+    /// with no address of its own opens this.
+    pub homepage: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -334,6 +337,14 @@ impl ConnectorRegistry {
             .collect()
     }
 
+    /// Where a connector's system lives on the web, if its profile says.
+    pub fn homepage(&self, id: &str) -> Option<String> {
+        self.profiles
+            .iter()
+            .find(|p| p.id == id)
+            .and_then(|p| p.homepage.clone())
+    }
+
     pub fn summaries(&self) -> Vec<ConnectorSummary> {
         self.profiles
             .iter()
@@ -355,6 +366,7 @@ impl ConnectorRegistry {
                     last_error: status.last_error,
                     item_count: status.item_count,
                     paused: self.is_paused(&p.id),
+                    homepage: p.homepage.clone(),
                 }
             })
             .chain(self.feeds.iter().map(|f| {
@@ -374,6 +386,7 @@ impl ConnectorRegistry {
                     last_error: status.last_error,
                     item_count: status.item_count,
                     paused: self.is_paused(&f.id),
+                    homepage: None,
                 }
             }))
             .collect()
@@ -392,6 +405,9 @@ pub fn demo_profile() -> Result<ConnectorProfile, String> {
     profile.id = "demo-tracker".into();
     profile.name = "Demo tracker".into();
     profile.poll_seconds = 30;
+    // The demo tracker is this app talking to itself: its tickets' addresses
+    // lead nowhere, so its cards offer no way to open them.
+    profile.list.fields.url = None;
     Ok(profile)
 }
 

@@ -114,6 +114,10 @@ pub struct Item {
     /// then a group, then a parent task. Empty for local items.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trail: Vec<String>,
+    /// What the source system says about the task beyond its title, as
+    /// plain text. Shown when a card is opened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 impl Item {
@@ -138,6 +142,7 @@ impl Item {
             completed_at: None,
             updated_at,
             trail: Vec::new(),
+            description: None,
         }
     }
 
@@ -161,6 +166,7 @@ impl Item {
             completed_at: None,
             updated_at,
             trail: Vec::new(),
+            description: None,
         }
     }
 

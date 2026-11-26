@@ -422,6 +422,11 @@ export default function App() {
     onBackToTodo: () => act(() => backend.moveTask(item.id, 'todo', 0)),
     onSetActive: () => act(() => backend.setActive(view.active === item.id ? null : item.id)),
     onRemove: () => act(() => backend.remove(item.id)),
+    source: connectors.find((c) => c.id === item.origin?.connector),
+    // The card stays open: the person is going to look and come back.
+    onOpenSource: () => {
+      backend.openItem(item.id).catch((e) => setNotice(String(e)))
+    },
   })
 
   // The day in numbers: every open task plus what was finished today.
@@ -863,6 +868,10 @@ interface RowProps {
   onBackToTodo: () => void
   onSetActive: () => void
   onRemove: () => void
+  /** The connector the item came from, when it came from one. */
+  source?: ConnectorSummary
+  /** Open the item where it came from, in the browser. */
+  onOpenSource: () => void
 }
 
 function Row(props: RowProps) {
@@ -944,12 +953,24 @@ function Row(props: RowProps) {
 function RowDetails(props: RowProps) {
   const { item, active } = props
   const source = item.origin ? (props.names.get(item.origin.connector) ?? item.origin.connector) : 'Local'
+  // "Open in Tuesday" goes to the task itself. When its system did not say
+  // where the task lives, "Open Tuesday" goes to the system's front page,
+  // and says so by leaving out the "in".
+  const system = props.source?.name ?? source
+  const openLabel = item.origin?.url ? `Open in ${system}` : props.source?.homepage ? `Open ${system}` : null
   return (
     <div className="card__details" onPointerDown={(e) => e.stopPropagation()}>
+      {item.description && <Description text={item.description} />}
+      {openLabel && (
+        <button type="button" className="link card__open" onClick={props.onOpenSource} data-testid="open-source">
+          {openLabel}
+          <OpenIcon />
+        </button>
+      )}
       <dl className="card__facts">
         <div>
           <dt>Source</dt>
-          <dd>{item.origin?.url ? <a href={item.origin.url} target="_blank" rel="noreferrer">{source}</a> : source}</dd>
+          <dd>{source}</dd>
         </div>
         {item.trail && item.trail.length > 0 && (
           <div>
@@ -1024,6 +1045,34 @@ function RowDetails(props: RowProps) {
   )
 }
 
+/**
+ * What the task's own system says about it. A long one is folded to a few
+ * lines with a way to read the rest, so one wordy task does not push
+ * everything else off the rail.
+ */
+function Description({ text }: { text: string }) {
+  const ref = useRef<HTMLParagraphElement>(null)
+  const [expanded, setExpanded] = useState(false)
+  const [folds, setFolds] = useState(false)
+  // Measured, not guessed from the length: whether it fits depends on the rail's width.
+  useEffect(() => {
+    const el = ref.current
+    if (el && !expanded) setFolds(el.scrollHeight > el.clientHeight + 1)
+  }, [text, expanded])
+  return (
+    <div className="card__description">
+      <p ref={ref} className={expanded ? undefined : 'card__description--folded'} data-testid="description">
+        {text}
+      </p>
+      {(folds || expanded) && (
+        <button type="button" className="link" onClick={() => setExpanded((e) => !e)}>
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  )
+}
+
 /* Icons: one stroke weight, drawn on a 20px grid so they sit level with the text. */
 
 function GearIcon() {
@@ -1085,6 +1134,17 @@ function PauseIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
       <path d="M6 4h4v16H6zM14 4h4v16h-4z" />
+    </svg>
+  )
+}
+
+/** An arrow leaving a box: this opens somewhere else. */
+function OpenIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 5h5v5" />
+      <path d="M19 5 10 14" />
+      <path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4" />
     </svg>
   )
 }

@@ -35,6 +35,8 @@ export interface Item {
   updated_at: string
   /** Where it sits in its source system, outermost first: board, group, parent. Absent for local items. */
   trail?: string[]
+  /** What its source system says about it beyond the title, as plain text. */
+  description?: string
 }
 
 export type Choice =
@@ -127,6 +129,8 @@ export interface ConnectorSummary {
   item_count: number
   /** Paused: its tasks stay on the rail, nothing is pulled or written back. */
   paused: boolean
+  /** Where the system lives on the web, when its blueprint says. A task with no address of its own opens this. */
+  homepage?: string | null
 }
 
 export interface SyncError {
@@ -253,6 +257,8 @@ export interface RailBackend {
   setConnectorScope(id: string, scope: Scope): Promise<void>
   /** Open one of the project's GitHub pages in the browser. Refuses anything else. */
   openProjectPage(url: string): Promise<void>
+  /** Open a task where it came from, in the browser: its own page, or its system's front page when it has no address. */
+  openItem(id: string): Promise<void>
   /** Run the MCP sign-in flow in the browser for a server. Resolves when the browser comes back. */
   signIn(url: string): Promise<void>
   /** Fires when something changed behind the UI's back. Returns an unsubscribe. */
@@ -331,6 +337,7 @@ function tauriBackend(): RailBackend {
     getConnectorScope: (id) => call('get_connector_scope', { id }),
     setConnectorScope: (id, scope) => call('set_connector_scope', { id, scope }),
     openProjectPage: (url) => call('open_project_page', { url }),
+    openItem: (id) => call('open_item', { id }),
     signIn: (url) => call('sign_in', { url }),
   }
 }
@@ -712,14 +719,20 @@ function browserBackend(): RailBackend {
     addDemoConnector: () =>
       async(() => {
         if (connectors.some((c) => c.id === 'demo-tracker')) throw new Error('a connector with id "demo-tracker" already exists')
-        const summary = demoSummary()
+        const summary: ConnectorSummary = { ...demoSummary(), homepage: 'https://tracker.example' }
         connectors = [...connectors, summary]
         const origin = (id: string) => ({ connector: 'demo-tracker', external_id: id, url: `https://tracker.example/tickets/${id}` })
         items = [
           ...items,
-          { ...task('demo-tracker:T-201', 'Fix login timeout', 'todo', 'highest'), origin: origin('T-201'), trail: ['Work', 'Now'] },
+          {
+            ...task('demo-tracker:T-201', 'Fix login timeout', 'todo', 'highest'),
+            origin: origin('T-201'),
+            trail: ['Work', 'Now'],
+            description:
+              'People are signed out after ten minutes even while they are typing.\n\nSupport has had fourteen reports since Monday, most from the clinic tablets. The session should last as long as someone is using the app.\n\n- Reproduce on a tablet\n- Check the refresh token is being renewed\n- Raise the idle limit to an hour\n- Tell support when it is out',
+          },
           { ...task('demo-tracker:T-202', 'Write release notes', 'todo'), origin: origin('T-202'), trail: ['Work', 'Now', 'Fix login timeout'] },
-          { ...task('demo-tracker:T-203', 'Migrate billing job', 'in_progress'), origin: origin('T-203') },
+          { ...task('demo-tracker:T-203', 'Migrate billing job', 'in_progress'), origin: { ...origin('T-203'), url: null }, description: 'Move the nightly job off the old box.' },
         ]
         notify()
         return summary
@@ -863,6 +876,17 @@ function browserBackend(): RailBackend {
     openProjectPage: (url) =>
       async(() => {
         devLog.push(`${new Date().toISOString()} [info] stand-in would open ${url}`)
+      }),
+    openItem: (id) =>
+      async(() => {
+        const origin = items.find((i) => i.id === id)?.origin
+        if (!origin) throw new Error('this task lives only on the rail, so there is nowhere to open it')
+        const address = origin.url ?? connectors.find((c) => c.id === origin.connector)?.homepage
+        if (!address) throw new Error('its connector did not say where it lives')
+        devLog.push(`${new Date().toISOString()} [info] stand-in would open ${address}`)
+        // One list for the whole page, so the browser test can see it whichever instance was asked.
+        const page = window as unknown as { __taskrailOpened?: string[] }
+        ;(page.__taskrailOpened ??= []).push(address)
       }),
     signIn: (url) =>
       new Promise((resolve) =>

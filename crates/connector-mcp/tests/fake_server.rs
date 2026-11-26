@@ -67,6 +67,15 @@ async fn list_then_transition_then_create() {
         first.url.as_deref(),
         Some("https://tracker.example/tickets/T-101")
     );
+    assert!(first
+        .description
+        .as_deref()
+        .is_some_and(|d| d.starts_with("The Q1 numbers")));
+    assert_eq!(
+        items[1].description.as_deref(),
+        Some("They asked whether we can take delivery a week early.\n\nCheck with the warehouse first & reply by Friday."),
+        "a description written as markup arrives as words"
+    );
 
     connector
         .set_status("T-104", Status::InProgress)
@@ -341,6 +350,30 @@ async fn items_carry_a_trail_of_board_group_and_parent() {
     assert!(
         items.iter().all(|i| i.external_id != "T-103"),
         "the switch is on by default, so Sam's are out"
+    );
+}
+
+#[tokio::test]
+async fn a_link_template_can_name_the_board_a_ticket_came_from() {
+    let mut profile = board_profile_with_choices();
+    profile.list.fields.url = None;
+    profile.list.fields.link =
+        Some("https://tracker.example/boards/{board_id}/tickets/{external_id}".into());
+    let connector = McpConnector::new(profile, SessionAuth::default());
+    let items = connector.list().await.unwrap();
+    let by_id = |id: &str| items.iter().find(|i| i.external_id == id).unwrap();
+    let work = by_id("T-101").url.clone().unwrap();
+    let home = by_id("T-105").url.clone().unwrap();
+    assert!(
+        work.starts_with("https://tracker.example/boards/"),
+        "{work}"
+    );
+    assert!(work.ends_with("/tickets/T-101"), "{work}");
+    assert!(home.ends_with("/tickets/T-105"), "{home}");
+    assert_ne!(
+        work.rsplit_once("/tickets/").unwrap().0,
+        home.rsplit_once("/tickets/").unwrap().0,
+        "each ticket names its own board"
     );
 }
 

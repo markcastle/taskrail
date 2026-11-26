@@ -1006,6 +1006,49 @@ html.resizing * {
   cursor: default;
 }
 
+.card__description {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.card__description p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  cursor: text;
+}
+
+.card__description--folded {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  overflow: hidden;
+}
+
+.card__description .link {
+  font-size: 12px;
+}
+
+.card__details .card__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.card__open:hover {
+  text-decoration: underline;
+}
+
 .card__facts {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -1025,15 +1068,6 @@ html.resizing * {
 .card__facts dd {
   margin: 0;
   text-transform: capitalize;
-}
-
-.card__facts a {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.card__facts a:hover {
-  text-decoration: underline;
 }
 
 .card__actions {

@@ -62,6 +62,17 @@ pub struct FieldPaths {
     pub due: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// The item's address in its own system, for servers that do not send
+    /// one. Not a JSONPath but a template, such as
+    /// `https://tracker.example/boards/{board_id}/tasks/{external_id}`:
+    /// `{external_id}` is the item's id, the `for_each` placeholder is the
+    /// container it came from, and `{$.some.path}` is read from the item.
+    /// Used only when `url` finds nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link: Option<String>,
+    /// More about the item than its title: a description, notes, a body.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -286,6 +297,16 @@ pub struct ConnectorProfile {
     /// connector. Absent on a profile written by hand or by discovery.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blueprint: Option<String>,
+    /// Where the system itself lives on the web. Opened from a card whose
+    /// item has no address of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+}
+
+/// Whether text is an address a browser can be sent to. The rail opens
+/// nothing else: no files, no other schemes.
+pub fn is_web_address(text: &str) -> bool {
+    text.starts_with("https://") || text.starts_with("http://")
 }
 
 fn default_version() -> u32 {
@@ -342,6 +363,16 @@ impl ConnectorProfile {
             && (self.list.fields.start.is_none() || self.list.fields.end.is_none())
         {
             problems.push("a calendar profile needs list.fields.start and list.fields.end".into());
+        }
+        if let Some(link) = &self.list.fields.link {
+            if !is_web_address(link) {
+                problems.push("list.fields.link must start with https:// or http://".into());
+            }
+        }
+        if let Some(homepage) = &self.homepage {
+            if !is_web_address(homepage) {
+                problems.push("homepage must start with https:// or http://".into());
+            }
         }
         for step in &self.list.trail {
             let lookup = [step.key.is_some(), step.items.is_some(), step.id.is_some()];
@@ -443,6 +474,7 @@ pub fn fake_tracker_profile(command: impl Into<String>) -> ConnectorProfile {
                 priority: Some("$.priority".into()),
                 due: Some("$.due_date".into()),
                 url: Some("$.link".into()),
+                description: Some("$.description".into()),
                 ..FieldPaths::default()
             },
             for_each: None,
@@ -480,6 +512,7 @@ pub fn fake_tracker_profile(command: impl Into<String>) -> ConnectorProfile {
         ]),
         poll_seconds: 60,
         blueprint: None,
+        homepage: None,
     }
 }
 

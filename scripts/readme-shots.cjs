@@ -46,14 +46,18 @@ for (const scheme of ['light', 'dark']) {
   await context.close()
 }
 
-// 2. A task opened: where it sits, and what can be done with it.
+// 2. A task opened: what its system says about it, the way to open it there,
+// where it sits, and what can be done with it.
 {
   const { context, page } = await open('light', 320, 900)
-  await page.locator('[data-testid="card-demo-tracker:T-202"] .card__title').click()
+  await page.locator('[data-testid="card-demo-tracker:T-201"] .card__title').click()
   await page.waitForTimeout(400)
+  // An opened task is tall: bring the section to the top so all of it is in view.
+  await page.locator('[data-testid="section-priority"]').evaluate((el) => el.scrollIntoView({ block: 'start' }))
+  await page.waitForTimeout(300)
   await page.mouse.move(160, 896)
   const top = await page.locator('[data-testid="section-priority"]').boundingBox()
-  const card = await page.locator('[data-testid="card-demo-tracker:T-202"]').boundingBox()
+  const card = await page.locator('[data-testid="card-demo-tracker:T-201"]').boundingBox()
   await page.screenshot({ path: `${out}/details.png`, clip: { x: 0, y: top.y - 10, width: 320, height: card.y + card.height - top.y + 22 } })
   await context.close()
 }

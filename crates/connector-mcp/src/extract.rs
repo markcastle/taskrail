@@ -247,18 +247,176 @@ fn extract_item(
         ItemKind::Task
     };
 
+    let external_id = required("external_id", &fields.external_id)?;
+    // The address the server sends, or else the one the profile can build.
+    let url = optional(&fields.url)?
+        .filter(|u| crate::profile::is_web_address(u))
+        .or_else(|| {
+            fields
+                .link
+                .as_deref()
+                .and_then(|template| fill_link(template, &external_id, item))
+        });
+    let description = match &fields.description {
+        Some(expr) => first(item, expr)?.and_then(plain_text),
+        None => None,
+    };
+
     Ok(RemoteItem {
-        external_id: required("external_id", &fields.external_id)?,
+        external_id,
         title: required("title", &fields.title)?,
         kind,
         status: optional(&fields.status)?,
         priority: optional(&fields.priority)?.and_then(|p| profile.priority_for(&p)),
         due: optional_time(&fields.due)?,
         window,
-        url: optional(&fields.url)?,
+        url,
         updated_at: optional_time(&fields.updated_at)?,
         trail,
+        description,
     })
+}
+
+/// The longest description the rail keeps. A card is a glance, and the
+/// whole text is one click away in the system it came from.
+const DESCRIPTION_MAX_CHARS: usize = 2000;
+
+/// A description as plain text: markup taken out, blank runs closed up, cut
+/// at a length a card can show. `None` when there is nothing left to read,
+/// or when the server sent something that is not text.
+fn plain_text(value: &Value) -> Option<String> {
+    let Value::String(raw) = value else {
+        return None;
+    };
+    let html = looks_like_html(raw);
+    let text = if html {
+        strip_html(raw)
+    } else {
+        raw.replace("\r\n", "\n")
+    };
+    // At most one blank line in a row, and none at either end. In markup
+    // only the end of a paragraph is a blank line; the rest is layout.
+    let mut out = String::new();
+    let mut gap = false;
+    for line in text.lines().map(str::trim_end) {
+        if line == PARAGRAPH_END {
+            gap = true;
+            continue;
+        }
+        if line.trim().is_empty() {
+            gap = gap || !html;
+            continue;
+        }
+        if !out.is_empty() {
+            out.push_str(if gap { "\n\n" } else { "\n" });
+        }
+        gap = false;
+        out.push_str(line);
+    }
+    if out.is_empty() {
+        return None;
+    }
+    if out.chars().count() > DESCRIPTION_MAX_CHARS {
+        out = out.chars().take(DESCRIPTION_MAX_CHARS).collect();
+        out = out.trim_end().to_owned();
+        out.push('…');
+    }
+    Some(out)
+}
+
+/// A line `strip_html` leaves where a paragraph ended.
+const PARAGRAPH_END: &str = "\u{1}";
+
+fn looks_like_html(text: &str) -> bool {
+    [
+        "<p", "<br", "<div", "<li", "<ul", "<ol", "<span", "<strong", "<em", "<a ", "<h1", "<h2",
+        "<h3",
+    ]
+    .iter()
+    .any(|tag| text.contains(tag))
+}
+
+/// HTML down to its words. Blocks and line breaks become new lines, list
+/// items get a dash, and the handful of entities people actually meet are
+/// turned back into their characters.
+fn strip_html(html: &str) -> String {
+    let mut out = String::new();
+    let mut rest = html;
+    while let Some(open) = rest.find('<') {
+        out.push_str(&rest[..open]);
+        let Some(close) = rest[open..].find('>') else {
+            rest = &rest[open..];
+            break;
+        };
+        let tag = rest[open + 1..open + close].trim().to_ascii_lowercase();
+        let name: String = tag
+            .trim_start_matches('/')
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .collect();
+        match name.as_str() {
+            "li" if !tag.starts_with('/') => out.push_str("\n- "),
+            "p" | "h1" | "h2" | "h3" | "h4" if tag.starts_with('/') => {
+                out.push('\n');
+                out.push_str(PARAGRAPH_END);
+                out.push('\n');
+            }
+            "br" | "p" | "div" | "li" | "ul" | "ol" | "tr" | "h1" | "h2" | "h3" | "h4" => {
+                out.push('\n')
+            }
+            _ => {}
+        }
+        rest = &rest[open + close + 1..];
+    }
+    out.push_str(rest);
+    out.replace("&nbsp;", " ")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&apos;", "'")
+        .replace("&amp;", "&")
+}
+
+/// An item's address built from the profile's `link` template: `{external_id}`
+/// is the item's id and `{$.path}` is read from the item. Every value is
+/// escaped, so nothing in an item can change where the link goes. `None`
+/// when a placeholder has nothing to fill it, because half an address is
+/// worse than none.
+fn fill_link(template: &str, external_id: &str, item: &Value) -> Option<String> {
+    let mut out = String::new();
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let close = rest[open..].find('}')?;
+        let name = &rest[open + 1..open + close];
+        let value = if name == "external_id" {
+            external_id.to_owned()
+        } else if name.starts_with('$') {
+            string_at(item, name).ok().flatten()?
+        } else {
+            // A placeholder nobody filled, such as a container id on a list
+            // that has no containers.
+            return None;
+        };
+        out.push_str(&escape_for_address(&value));
+        rest = &rest[open + close + 1..];
+    }
+    out.push_str(rest);
+    crate::profile::is_web_address(&out).then_some(out)
+}
+
+/// Percent-encoding for one piece of an address.
+fn escape_for_address(value: &str) -> String {
+    let mut out = String::new();
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
 }
 
 /// An item with its value for every trail step, in step order.
@@ -534,7 +692,17 @@ async fn fetch_aligned(
             &[(each.placeholder.as_str(), id.as_str())],
         );
         let raw = session.call(&list.call.tool, &arguments).await?;
-        let mut items = extract_aligned(profile, list, &raw, scope)
+        // A link template may name the container the item came from.
+        let here = match &list.fields.link {
+            Some(link) if link.contains(each.placeholder.as_str()) => {
+                let mut here = list.clone();
+                here.fields.link =
+                    Some(link.replace(each.placeholder.as_str(), &escape_for_address(&id)));
+                std::borrow::Cow::Owned(here)
+            }
+            _ => std::borrow::Cow::Borrowed(list),
+        };
+        let mut items = extract_aligned(profile, &here, &raw, scope)
             .map_err(|e| ConnectorError::Protocol(e.to_string()))?;
         all.append(&mut items);
     }
@@ -819,5 +987,129 @@ mod tests {
             filled,
             json!({ "ticket_id": "T-9", "fields": { "state": "Done" }, "tags": ["Hello"], "n": 1 })
         );
+    }
+
+    fn one(profile: &ConnectorProfile, ticket: Value) -> RemoteItem {
+        extract_items(profile, &json!({ "tickets": [ticket] }))
+            .unwrap()
+            .remove(0)
+    }
+
+    #[test]
+    fn a_description_comes_through_as_plain_text() {
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.fields.description = Some("$.body".into());
+        let item = one(
+            &profile,
+            json!({ "ticket_id": "T-1", "summary": "First", "body": "  Call Jordan.\r\n\r\n\r\nAsk about the EPR.  \n" }),
+        );
+        assert_eq!(
+            item.description.as_deref(),
+            Some("  Call Jordan.\n\nAsk about the EPR."),
+            "blank runs close up and the ends are trimmed"
+        );
+    }
+
+    #[test]
+    fn markup_in_a_description_is_taken_out() {
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.fields.description = Some("$.body".into());
+        let item = one(
+            &profile,
+            json!({ "ticket_id": "T-1", "summary": "First",
+                    "body": "<p>Book the call &amp; send the <strong>agenda</strong>.</p><ul><li>Jamie</li><li>Kevin</li></ul>" }),
+        );
+        assert_eq!(
+            item.description.as_deref(),
+            Some("Book the call & send the agenda.\n\n- Jamie\n- Kevin")
+        );
+    }
+
+    #[test]
+    fn a_description_that_says_nothing_is_no_description() {
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.fields.description = Some("$.body".into());
+        for body in [
+            json!(""),
+            json!("  \n "),
+            json!("<p></p>"),
+            json!(null),
+            json!({ "blocks": [] }),
+        ] {
+            let item = one(
+                &profile,
+                json!({ "ticket_id": "T-1", "summary": "First", "body": body }),
+            );
+            assert_eq!(item.description, None);
+        }
+        let item = one(&profile, json!({ "ticket_id": "T-1", "summary": "First" }));
+        assert_eq!(item.description, None, "a server that sends none is fine");
+    }
+
+    #[test]
+    fn a_long_description_is_cut_to_what_a_card_can_show() {
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.fields.description = Some("$.body".into());
+        let item = one(
+            &profile,
+            json!({ "ticket_id": "T-1", "summary": "First", "body": "word ".repeat(1000) }),
+        );
+        let text = item.description.unwrap();
+        assert!(text.chars().count() <= DESCRIPTION_MAX_CHARS + 1);
+        assert!(text.ends_with('…'));
+    }
+
+    #[test]
+    fn a_link_is_built_when_the_server_sends_no_address() {
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.fields.link =
+            Some("https://tracker.example/{$.project}/tickets/{external_id}".into());
+        let built = one(
+            &profile,
+            json!({ "ticket_id": "T 1/2", "summary": "First", "project": "ops" }),
+        );
+        assert_eq!(
+            built.url.as_deref(),
+            Some("https://tracker.example/ops/tickets/T%201%2F2"),
+            "values are escaped, so an id cannot change where the link goes"
+        );
+        let sent = one(
+            &profile,
+            json!({ "ticket_id": "T-1", "summary": "First", "project": "ops", "link": "https://x/1" }),
+        );
+        assert_eq!(
+            sent.url.as_deref(),
+            Some("https://x/1"),
+            "the server's own address wins"
+        );
+    }
+
+    #[test]
+    fn half_an_address_is_no_address() {
+        let mut profile = fake_tracker_profile("fake");
+        profile.list.fields.link =
+            Some("https://tracker.example/{$.project}/tickets/{external_id}".into());
+        let item = one(&profile, json!({ "ticket_id": "T-1", "summary": "First" }));
+        assert_eq!(item.url, None, "the project is missing");
+        profile.list.fields.link = Some("https://tracker.example/{board_id}/{external_id}".into());
+        let item = one(&profile, json!({ "ticket_id": "T-1", "summary": "First" }));
+        assert_eq!(item.url, None, "nothing filled the container");
+    }
+
+    #[test]
+    fn only_web_addresses_are_kept() {
+        let profile = fake_tracker_profile("fake");
+        for link in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "tracker://T-1",
+            "x/1",
+        ] {
+            let item = one(
+                &profile,
+                json!({ "ticket_id": "T-1", "summary": "First", "link": link }),
+            );
+            assert_eq!(item.url, None, "{link}");
+        }
     }
 }

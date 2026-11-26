@@ -46,6 +46,9 @@ pub struct RemoteItem {
     /// Where it sits in the source system, outermost first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trail: Vec<String>,
+    /// What the source system says about it beyond the title, as plain text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
 }
 
 fn default_kind() -> ItemKind {
@@ -100,6 +103,7 @@ impl RemoteItem {
             completed_at,
             updated_at: self.updated_at.unwrap_or(now),
             trail: self.trail.clone(),
+            description: self.description.clone(),
         }
     }
 }
@@ -226,6 +230,7 @@ mod tests {
             url: Some(format!("https://example.test/{id}")),
             updated_at: None,
             trail: vec![],
+            description: None,
         }
     }
 

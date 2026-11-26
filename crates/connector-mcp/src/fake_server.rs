@@ -33,6 +33,8 @@ struct Ticket {
     assignee: String,
     /// The group on the board this ticket sits in, if any. Subtasks have none.
     group_id: Option<String>,
+    /// What there is to say about the ticket beyond its summary.
+    description: Option<String>,
     /// For a subtask, the ticket it belongs to.
     parent_id: Option<String>,
     /// Set when the ticket has been put away. Still returned, so clients learn to filter.
@@ -114,8 +116,8 @@ struct FakeTracker {
 
 impl FakeTracker {
     fn new() -> Self {
-        let seed =
-            |id: &str, summary: &str, state: &str, priority: &str, due: Option<&str>| Ticket {
+        let seed = |id: &str, summary: &str, state: &str, priority: &str, due: Option<&str>| {
+            Ticket {
                 ticket_id: id.into(),
                 board_id: if !("T-105".."T-108").contains(&id) {
                     BOARD_WORK.into()
@@ -140,9 +142,22 @@ impl FakeTracker {
                     "T-103" | "T-104" => Some(GROUP_LATER.into()),
                     _ => None,
                 },
+                description: match id {
+                    "T-101" => Some(
+                        "The Q1 numbers for Thursday's board meeting.\n\nFinance sends the final figures on Tuesday; until then use last month's forecast. Keep it to ten slides.\n\n- Revenue against plan\n- Hiring\n- The two risks from last time, and what happened to them"
+                            .into(),
+                    ),
+                    "T-102" => Some(
+                        "<p>They asked whether we can take delivery a week early.</p><p>Check with the warehouse first &amp; reply by Friday.</p>"
+                            .into(),
+                    ),
+                    "T-105" => Some("First pass at the usage dashboard. Mock-ups are in the shared folder.".into()),
+                    _ => None,
+                },
                 parent_id: None,
                 archived_at: None,
-            };
+            }
+        };
         Self {
             tickets: Arc::new(Mutex::new(vec![
                 seed(
@@ -338,6 +353,7 @@ impl FakeTracker {
             link: format!("https://tracker.example/tickets/{id}"),
             assignee: "mark".into(),
             group_id: Some(GROUP_LATER.into()),
+            description: None,
             parent_id: None,
             archived_at: None,
         };

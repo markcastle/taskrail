@@ -6,7 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Tap a task and it tells you more.** An opened task now shows what its own system says about it: the description, as plain text, above where it sits and when it is due. A long one is folded to six lines with **Show more**, so one wordy task does not push the rest off the rail, and you can select and copy from it.
+- **Open in Tuesday.** An opened task has a link that takes your browser to that task in the system it came from, named after your connector. When the system did not say where the task lives, the link reads **Open Tuesday** and goes to its front page. A task that lives only on the rail has no link.
+- For people writing connectors: `description` and `link` in a profile's fields, and `homepage` on the profile. `link` builds a task's address for servers that do not send one. See [docs/connectors.md](docs/connectors.md).
+
+### Fixed
+
+- The source's name in an opened task looked like a link and did nothing when clicked. The new link replaces it and opens your browser.
 
 ## [0.12.1] - 2026-11-23
 

@@ -235,6 +235,33 @@ await page.locator('[data-testid="sync-status"].foot--ok', { hasText: 'Up to dat
 // and what the answer comes to; "All" is a thing you can see and press; and the
 // groups on offer follow the boards picked.
 assert.match(await page.locator('[data-testid="card-demo-tracker:T-202"] .card__trail').textContent(), /Work › Now › Fix login timeout/)
+// 9b2. Clicking a task says more about it: what its own system says, folded when
+// long, and a way to open it there. A task whose system gave no address opens the
+// system's front page, and the button says so by dropping the "in".
+const lastOpened = () => page.evaluate(() => (window.__taskrailOpened ?? []).at(-1))
+const login = page.getByTestId('card-demo-tracker:T-201')
+await login.locator('.card__title').click()
+assert.match(await login.getByTestId('description').textContent(), /signed out after ten minutes/)
+await login.getByRole('button', { name: 'Show more', exact: true }).click()
+await login.getByRole('button', { name: 'Show less', exact: true }).waitFor()
+assert.equal(await login.getByTestId('open-source').textContent(), 'Open in Demo tracker')
+await login.getByTestId('open-source').click()
+await page.waitForFunction(() => (window.__taskrailOpened ?? []).length === 1)
+assert.equal(await lastOpened(), 'https://tracker.example/tickets/T-201')
+assert.equal(await login.locator('.card__details').count(), 1, 'the card stays open while you look')
+const billing = page.getByTestId('card-demo-tracker:T-203')
+await billing.locator('.card__title').click()
+assert.equal(await billing.getByTestId('open-source').textContent(), 'Open Demo tracker')
+await billing.getByTestId('open-source').click()
+await page.waitForFunction(() => (window.__taskrailOpened ?? []).length === 2)
+assert.equal(await lastOpened(), 'https://tracker.example')
+await billing.locator('.card__title').click()
+// A task that lives only on the rail has nowhere to open.
+const local = page.getByTestId('card-update-docs')
+await local.locator('.card__title').click()
+await local.locator('.card__details').waitFor()
+assert.equal(await local.getByTestId('open-source').count(), 0)
+await local.locator('.card__title').click()
 await settings.getByRole('button', { name: 'Filter', exact: true }).click()
 const filter = settings.getByTestId('scope-demo-tracker')
 await filter.waitFor()

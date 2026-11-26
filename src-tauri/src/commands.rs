@@ -704,6 +704,31 @@ pub fn export_blueprint(state: State<'_, AppState>, id: String) -> CommandResult
     serde_json::to_string_pretty(&blueprint).map_err(|e| e.to_string())
 }
 
+/// Open a card where it came from, in the browser: the item's own page in
+/// its system, or the system's front page when the item has no address.
+/// The UI names the card and nothing else, so it cannot send the browser
+/// anywhere the connector did not; and only web addresses are opened.
+#[tauri::command]
+pub fn open_item(state: State<'_, AppState>, id: ItemId) -> CommandResult<()> {
+    let origin = lock(&state.rail)
+        .service
+        .items()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .find(|i| i.id == id)
+        .and_then(|i| i.origin)
+        .ok_or("this task lives only on the rail, so there is nowhere to open it")?;
+    let address = origin
+        .url
+        .or_else(|| lock(&state.connectors).homepage(origin.connector.as_str()))
+        .ok_or("its connector did not say where it lives")?;
+    if !taskrail_connector_mcp::profile::is_web_address(&address) {
+        return Err(format!("{address} is not a web address"));
+    }
+    log::info!("opening {address}");
+    open::that(&address).map_err(|e| e.to_string())
+}
+
 /// Open one of this project's GitHub pages in the browser, such as the
 /// prefilled blueprint submission form. Only our own pages: the UI never
 /// gets to open an arbitrary address.

@@ -218,6 +218,12 @@ impl Blueprint {
         let mut profile = complete_profile(self.profile.clone(), id, name, server, kind)?;
         // So the connector can follow the blueprint as it improves.
         profile.blueprint = Some(self.id.clone());
+        if profile.homepage.is_none() {
+            profile.homepage = self
+                .homepage
+                .clone()
+                .filter(|h| crate::profile::is_web_address(h));
+        }
         Ok(profile)
     }
 
@@ -231,7 +237,7 @@ impl Blueprint {
         };
         let mut value = serde_json::to_value(profile).unwrap_or(Value::Null);
         if let Value::Object(map) = &mut value {
-            for key in ["id", "name", "server", "version", "blueprint"] {
+            for key in ["id", "name", "server", "version", "blueprint", "homepage"] {
                 map.remove(key);
             }
         }
@@ -239,7 +245,7 @@ impl Blueprint {
             id: profile.id.clone(),
             title: title.to_owned(),
             description: description.to_owned(),
-            homepage: None,
+            homepage: profile.homepage.clone(),
             fingerprint: Match {
                 tools,
                 url_contains,

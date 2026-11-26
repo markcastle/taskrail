@@ -74,6 +74,7 @@ pub fn run() {
             commands::open_log_folder,
             commands::export_blueprint,
             commands::open_project_page,
+            commands::open_item,
             commands::check_for_update,
             commands::install_update,
         ])

@@ -89,7 +89,8 @@ Field by field:
 | `server` | How to reach the server. `http` with a `url`, or `stdio` with a `command`. An HTTP server may name a `bearer_secret` or `oauth_secret`: those are names of entries in your credential store, never the secrets themselves. |
 | `kind` | `task` or `event`. Events carry a time window instead of a status. |
 | `list` | The tool that returns your items, its arguments, and a JSONPath to the array of items in the result. |
-| `list.fields` | JSONPaths evaluated against one item. `external_id` and `title` are required. `status`, `priority`, `due`, `url`, `updated_at` are optional. Events use `start` and `end`. |
+| `list.fields` | JSONPaths evaluated against one item. `external_id` and `title` are required. `status`, `priority`, `due`, `url`, `description`, `updated_at` are optional. Events use `start` and `end`. `link` is not a path but an address to build when the server sends none. See "Opening a task where it lives" below. |
+| `homepage` | Where the system itself lives on the web. A task with no address of its own opens this. |
 | `list.where` | Keeps only items that pass every condition. See below. |
 | `list.for_each` | For systems that keep work in containers: call `list_boards` once, then the list tool once per board. See below. |
 | `identity` | Which tool says who the signed-in person is, and where their id sits in its result. Lets the profile say `{me}` instead of carrying a user id. See below. |
@@ -172,6 +173,32 @@ Most systems keep a task's board, group or parent somewhere other than on the ta
 ```
 
 A step with only `label` reads it from the whole result once. A step with `key`, `items` and `id` takes the item's value at `key`, finds the element among `items` whose `id` matches, and reads `label` from it. The rail shows the steps the item has, in order, under the title: *Tuesday · Mark's Priorities › Now*, or for a subtask *Tuesday · Mark's Priorities › VideoLib go-live*. Tapping the task shows each on its own line.
+
+### More about a task, and opening it where it lives
+
+Tap a task on the rail and it opens. Two fields decide how much it has to say.
+
+`list.fields.description` is a JSONPath to whatever the system calls the body of a task: its description, notes or details. It arrives as plain text. Markup is taken out, a long one is cut at 2,000 characters, and the rail folds it to six lines with **Show more**.
+
+The opened task also offers **Open in Tuesday** (or whatever the connector is called), which sends your browser to the task itself. The address comes from the first of these that gives one:
+
+| Source | What it is | The button says |
+| --- | --- | --- |
+| `list.fields.url` | A JSONPath to the address, for servers that send one with each item | Open in Tuesday |
+| `list.fields.link` | An address to build, for servers that do not | Open in Tuesday |
+| `homepage` | The system's front page, when neither of the others gives anything | Open Tuesday |
+
+`link` is a template, not a path:
+
+```json
+"link": "https://tracker.example/boards/{board_id}/tasks/{external_id}"
+```
+
+- `{external_id}` is the item's id.
+- The `for_each` placeholder, `{board_id}` here, is the container the item came from.
+- `{$.some.path}` is read from the item itself.
+
+Every value is escaped before it goes in, and if any placeholder has nothing to fill it there is no link at all: half an address is worse than none. Only `https://` and `http://` addresses are ever opened, and the rail asks for a task to be opened by its id, so nothing on the page can send your browser somewhere the connector did not.
 
 ### Choices, and the Filter panel
 

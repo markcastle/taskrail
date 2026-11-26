@@ -126,6 +126,7 @@ fn same_remote_fields(a: &Item, b: &Item) -> bool {
         && a.origin == b.origin
         && a.kind == b.kind
         && a.trail == b.trail
+        && a.description == b.description
 }
 
 #[cfg(test)]
@@ -167,6 +168,7 @@ mod tests {
             url: None,
             updated_at: None,
             trail: vec![],
+            description: None,
         }
     }
 

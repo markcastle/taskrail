@@ -77,17 +77,18 @@ Prefer a download? The installers are on the [releases page](https://github.com/
 | **Push the pointer** against the rail's edge of the screen | An unpinned rail comes out. Move away, or press Escape, and it goes back |
 | **Flick** a task sideways | It completes |
 | **Tap** the circle | Same thing, for people who like circles |
-| **Tap** a task | Details open: where it sits, its source, due date, priority, and buttons for everything else |
+| **Tap** a task | It opens where it is: its description, where it sits, due date, priority, and buttons for everything else |
+| **Open in…** on an opened task | Your browser goes to that task in the system it came from |
 | **Start focus** on the Up next card | That task becomes the one you are on |
 | **Ctrl+Shift+Space** | Quick-add, from anywhere on the desktop |
 | **Today / All tasks** | Today keeps the fold; All tasks shows everything. The 🔍 searches both |
 | **⚙️** | Settings open inside the rail: edge, width, theme, monitor, connectors, model, and the log |
 | **Click** the line at the foot of the rail | Sync now. It also tells you when the last sync was, and turns amber if that was too long ago |
 
-Tap a task and it opens where it is. A task from a connected system says where it sits: its board, its group, and the task it is part of.
+Tap a task and it opens where it is. A task from a connected system brings its description with it and says where it sits: its board, its group, and the task it is part of. When that is not enough, **Open in…** takes you to the task itself in your browser.
 
 <p align="center">
-  <img src="docs/images/details.png" width="320" alt="A task opened on the rail, showing the board, group and parent task it sits under, with Start, Complete and Delete" />
+  <img src="docs/images/details.png" width="320" alt="A task opened on the rail, showing its description, a link to open it in its own system, the board and group it sits under, and Start, Complete and Delete" />
 </p>
 
 The pin at the top decides whether the rail stays put or gets out of your way. Pinned, on the left below, other windows make room for it. Unpinned, it tucks into a thin strip at the screen edge until you push the pointer against it.

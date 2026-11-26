@@ -519,6 +519,7 @@ pub fn events_between(
                 url: url.clone(),
                 updated_at,
                 trail: Vec::new(),
+                description: None,
             });
         }
     }

@@ -28,7 +28,8 @@
             "status": "$.state",
             "priority": "$.priority",
             "due": "$.due_date",
-            "url": "$.link"
+            "url": "$.link",
+            "description": "$.description"
           },
           "where": [
             {
@@ -165,7 +166,8 @@
             "priority": "$.priority",
             "status": "$.status",
             "title": "$.name",
-            "updated_at": "$.updated_at"
+            "updated_at": "$.updated_at",
+            "description": "$.description"
           },
           "for_each": {
             "arguments": {},
