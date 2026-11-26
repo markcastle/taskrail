@@ -649,6 +649,27 @@ html.resizing * {
   background: var(--accent-soft);
 }
 
+.upnext__card {
+  cursor: pointer;
+}
+
+.upnext__card:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The same panel a row opens, without the indent a row has for its circle. */
+.upnext__details {
+  margin-top: 2px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  cursor: default;
+}
+
+.upnext__details .card__details {
+  padding: 0;
+}
+
 .upnext__foot {
   display: flex;
   align-items: center;

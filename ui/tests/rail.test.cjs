@@ -25,6 +25,18 @@ const count = async (tone) => page.locator(`[data-testid="section-${tone}"] .sec
 assert.match(await page.getByTestId('day-progress').textContent(), /2 of 11 complete/)
 assert.equal(await page.getByTestId('upnext').count(), 1, 'up next card shown')
 assert.match(await page.getByTestId('upnext').textContent(), /Design dashboard/, 'the focused task is up next')
+// 1b. Up next opens like any other task: a tap shows its details, another puts them away,
+// and it does not open the same task's row further down.
+const upnext = page.getByTestId('upnext')
+await upnext.locator('.upnext__title').click()
+await upnext.locator('.card__details').waitFor()
+assert.match(await upnext.locator('.card__facts').textContent(), /Source\s*Local/)
+assert.equal(await upnext.getByRole('button', { name: 'Complete', exact: true }).count(), 1, 'with what can be done to it')
+assert.equal(await page.locator('[data-testid="card-design-dashboard"] .card__details').count(), 0, 'the row below stays shut')
+await upnext.locator('.card__facts').click()
+assert.equal(await upnext.locator('.card__details').count(), 1, 'a click inside the details leaves them open')
+await upnext.locator('.upnext__title').click()
+assert.equal(await upnext.locator('.card__details').count(), 0)
 assert.deepEqual(await titles('priority'), ['Q1 board meeting', 'Prepare board deck', 'Reply to supplier', 'Book venue', 'Update docs'])
 assert.equal(await count('later'), '3', 'three items behind the fold')
 assert.equal(await page.locator('[data-testid="section-later"] .card').count(), 0, 'Later starts collapsed')

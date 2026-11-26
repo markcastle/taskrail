@@ -585,6 +585,11 @@ export default function App() {
               await backend.setActive(activeItem?.id === upNext.id ? null : upNext.id)
             })
           }
+          // Its own key, not the task's id: the same task is often in a list
+          // below, and opening one should not open both.
+          open={openCard === UP_NEXT}
+          onToggle={() => setOpenCard((cur) => (cur === UP_NEXT ? null : UP_NEXT))}
+          details={rowProps(upNext)}
         />
       )}
 
@@ -768,24 +773,73 @@ function SyncStatus({ connectors, onSynced }: { connectors: ConnectorSummary[]; 
   )
 }
 
-function UpNext({ item, focused, names, onFocus }: { item: Item; focused: boolean; names: Map<string, string>; onFocus: () => void }) {
+/** What `openCard` holds while the Up next card is the one that is open. */
+const UP_NEXT = 'upnext'
+
+/**
+ * The one thing to do next. A tap opens it like any other task on the rail:
+ * its description, the way to open it where it lives, and what can be done
+ * with it.
+ */
+function UpNext({
+  item,
+  focused,
+  names,
+  onFocus,
+  open,
+  onToggle,
+  details,
+}: {
+  item: Item
+  focused: boolean
+  names: Map<string, string>
+  onFocus: () => void
+  open: boolean
+  onToggle: () => void
+  /** The same props a row gets, so the opened card is the same panel. */
+  details: RowProps
+}) {
   const isEvent = item.kind === 'event'
   return (
     <section className="upnext" data-testid="upnext">
       <h3 className="section__title section__title--bar">Up next</h3>
-      <div key={item.id} className={`upnext__card upnext__card--arrive${focused ? ' upnext__card--focused' : ''}`}>
+      <div
+        key={item.id}
+        className={`upnext__card upnext__card--arrive${focused ? ' upnext__card--focused' : ''}${open ? ' upnext__card--open' : ''}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+          e.preventDefault()
+          onToggle()
+        }}
+      >
         <span className="upnext__title">{item.title}</span>
         <div className="upnext__foot">
           <span className="upnext__meta">{metaLine(item, names) ?? statusWord(item)}</span>
           {isEvent ? (
             <span className="upnext__when">{item.window ? relativeStart(item.window.start) : ''}</span>
           ) : (
-            <button className={`focus-button${focused ? ' focus-button--on' : ''}`} onClick={onFocus}>
+            <button
+              className={`focus-button${focused ? ' focus-button--on' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                onFocus()
+              }}
+            >
               {focused ? <PauseIcon /> : <PlayIcon />}
               {focused ? 'Focusing' : 'Start focus'}
             </button>
           )}
         </div>
+        {open && (
+          // Nothing inside the panel is a tap on the card: reading, selecting and pressing its buttons leave it open.
+          <div className="upnext__details" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+            <RowDetails {...details} />
+          </div>
+        )}
       </div>
     </section>
   )

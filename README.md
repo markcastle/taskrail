@@ -77,7 +77,7 @@ Prefer a download? The installers are on the [releases page](https://github.com/
 | **Push the pointer** against the rail's edge of the screen | An unpinned rail comes out. Move away, or press Escape, and it goes back |
 | **Flick** a task sideways | It completes |
 | **Tap** the circle | Same thing, for people who like circles |
-| **Tap** a task | It opens where it is: its description, where it sits, due date, priority, and buttons for everything else |
+| **Tap** a task, or the Up next card | It opens where it is: its description, where it sits, due date, priority, and buttons for everything else |
 | **Open in…** on an opened task | Your browser goes to that task in the system it came from |
 | **Start focus** on the Up next card | That task becomes the one you are on |
 | **Ctrl+Shift+Space** | Quick-add, from anywhere on the desktop |
