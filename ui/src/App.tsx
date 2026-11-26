@@ -90,6 +90,19 @@ export default function App() {
   }, [refresh])
 
   useEffect(() => backend.onChanged(refresh), [refresh])
+  // A pull that changes no task still happened. Without this the footer only
+  // heard about syncs that changed something, and on a quiet afternoon said
+  // "Last synced 3 h ago" over a rail that was syncing every minute.
+  useEffect(
+    () =>
+      backend.onSynced(() => {
+        backend
+          .listConnectors()
+          .then(setConnectors)
+          .catch(() => {})
+      }),
+    [],
+  )
   // The rail is left open for days. When the day changes, so does the date
   // at the top, what counts as done today, and which events are today's:
   // look twice a minute, and whenever the rail is looked at again.

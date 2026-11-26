@@ -39,6 +39,7 @@ export function Slider({
   unit,
   onChange,
   label,
+  text,
 }: {
   value: number
   min: number
@@ -47,13 +48,13 @@ export function Slider({
   unit: string
   onChange: (value: number) => void
   label: string
+  /** What to show in place of "value unit", for a slider whose stops are not evenly spaced. */
+  text?: string
 }) {
   return (
     <div className="slider">
       <input type="range" aria-label={label} min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <output className="slider__value">
-        {value} {unit}
-      </output>
+      <output className="slider__value">{text ?? `${value} ${unit}`}</output>
     </div>
   )
 }

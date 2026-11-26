@@ -14,6 +14,7 @@ import {
   type ServerSpec,
   type Theme,
   type UpdateStatus,
+  SYNC_MINUTE_STOPS,
   WIDTH_MAX_PX,
   WIDTH_MIN_PX,
 } from './backend'
@@ -230,6 +231,28 @@ function Displays({ monitors, chosen, edge, onChoose }: { monitors: MonitorInfo[
   )
 }
 
+/** Where a number of minutes sits on the sync slider: the stop closest to it. */
+function nearestStop(minutes: number): number {
+  let best = 0
+  SYNC_MINUTE_STOPS.forEach((stop, i) => {
+    if (Math.abs(stop - minutes) < Math.abs(SYNC_MINUTE_STOPS[best] - minutes)) best = i
+  })
+  return best
+}
+
+/** "1 minute", "5 minutes", "1 hour". */
+function minutesWord(minutes: number): string {
+  if (minutes === 60) return '1 hour'
+  return minutes === 1 ? '1 minute' : `${minutes} minutes`
+}
+
+/** "every 30 s", "every 5 min", "every hour": how often a connector is pulled, from its seconds. */
+function everyWord(seconds: number): string {
+  if (seconds < 60) return `every ${seconds} s`
+  if (seconds === 3600) return 'every hour'
+  return `every ${Math.round(seconds / 60)} min`
+}
+
 function RailPage({ fail }: { fail: (e: unknown) => void }) {
   const [draft, setDraft] = useState<RailSettings | null>(null)
   const [monitors, setMonitors] = useState<MonitorInfo[]>([])
@@ -296,6 +319,21 @@ function RailPage({ fail }: { fail: (e: unknown) => void }) {
       </Row>
       <Row label="Pull in events starting within" help="A meeting this close joins Priorities.">
         <Slider label="Pull in events starting within" value={draft.event_lead_minutes} min={0} max={240} step={5} unit="min" onChange={(v) => set('event_lead_minutes', v)} />
+      </Row>
+      <div className="settings-subhead">Syncing</div>
+      <Row
+        label="Check for changes every"
+        help="How often it asks your systems what is new. Your own changes are sent at once."
+      >
+        <Slider
+          label="Check for changes every"
+          value={nearestStop(draft.sync_minutes)}
+          min={0}
+          max={SYNC_MINUTE_STOPS.length - 1}
+          unit=""
+          text={minutesWord(SYNC_MINUTE_STOPS[nearestStop(draft.sync_minutes)])}
+          onChange={(i) => set('sync_minutes', SYNC_MINUTE_STOPS[i])}
+        />
       </Row>
       <div className="settings-subhead">Startup</div>
       <Row label="Start at login" help="Task Rail opens when you sign in to your computer, so your day is there when you are.">
@@ -606,7 +644,7 @@ function ConnectorsPage({ notify, fail, onOpenModel }: { notify: (tone: Tone, te
               </span>
             </div>
             <span className="connector__meta">
-              {c.kind === 'calendar' ? 'The next 14 days' : c.capabilities.write_status ? 'Changes sync back' : 'Read-only'} · {c.paused ? 'not refreshing' : `refreshes every ${c.poll_seconds}s`} ·{' '}
+              {c.kind === 'calendar' ? 'The next 14 days' : c.capabilities.write_status ? 'Changes sync back' : 'Read-only'} · {c.paused ? 'not syncing' : `syncs ${everyWord(c.poll_seconds)}`} ·{' '}
               <span className="connector__host" title={c.server}>
                 {hostOf(c.server)}
               </span>

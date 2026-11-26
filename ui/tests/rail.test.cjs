@@ -231,6 +231,20 @@ await page.reload()
 await page.locator('[data-testid="sync-status"].foot--stale', { hasText: 'Last synced 5 h ago' }).waitFor()
 await page.getByTestId('sync-status').click()
 await page.locator('[data-testid="sync-status"].foot--ok', { hasText: 'Up to date' }).waitFor()
+// 8d. The footer hears about every sync, not only the ones that change a task. A pull
+// that finds nothing new, made behind the rail's back, still brings it up to date.
+await page.evaluate(() => {
+  const state = JSON.parse(localStorage.getItem('taskrail-dev-state'))
+  state.connectors = state.connectors.map((c) => ({ ...c, last_sync: new Date(Date.now() - 3 * 3600_000).toISOString() }))
+  localStorage.setItem('taskrail-dev-state', JSON.stringify(state))
+})
+await page.reload()
+await page.locator('[data-testid="sync-status"].foot--stale', { hasText: 'Last synced 3 h ago' }).waitFor()
+await page.evaluate(async () => {
+  const b = window.__taskrail
+  for (const c of await b.listConnectors()) await b.syncConnector(c.id)
+})
+await page.locator('[data-testid="sync-status"].foot--ok', { hasText: 'Up to date' }).waitFor()
 // 9b. The trail shows on a row. Filter says what it is for, what each choice does
 // and what the answer comes to; "All" is a thing you can see and press; and the
 // groups on offer follow the boards picked.
@@ -445,6 +459,22 @@ await settings.getByRole('heading', { name: 'Rail', exact: true }).waitFor()
 assert.equal(await settings.getByRole('switch', { name: 'Start at login' }).getAttribute('aria-checked'), 'false', 'off stays off')
 await settings.getByRole('switch', { name: 'Start at login' }).click()
 await settings.waitForFunction(() => JSON.parse(localStorage.getItem('taskrail-dev-state') ?? '{}').settings?.start_at_login === true)
+
+// 11b3. Syncing is every five minutes unless changed, the slider says it in words, and a change sticks.
+const every = settings.getByRole('slider', { name: 'Check for changes every' })
+assert.equal(await every.locator('xpath=following-sibling::output').textContent(), '5 minutes', 'five minutes by default')
+await every.focus()
+await settings.keyboard.press('ArrowRight')
+await settings.keyboard.press('ArrowRight')
+assert.equal(await every.locator('xpath=following-sibling::output').textContent(), '15 minutes')
+await settings.waitForFunction(() => JSON.parse(localStorage.getItem('taskrail-dev-state') ?? '{}').settings?.sync_minutes === 15)
+await settings.keyboard.press('End')
+assert.equal(await every.locator('xpath=following-sibling::output').textContent(), '1 hour')
+await settings.keyboard.press('Home')
+assert.equal(await every.locator('xpath=following-sibling::output').textContent(), '1 minute')
+await settings.keyboard.press('ArrowRight')
+await settings.keyboard.press('ArrowRight')
+await settings.waitForFunction(() => JSON.parse(localStorage.getItem('taskrail-dev-state') ?? '{}').settings?.sync_minutes === 5)
 
 // 11c. Animation and sound are both switches. Motion off reaches the rail as a document attribute.
 assert.equal(await page.evaluate(() => document.documentElement.dataset.motion), 'on', 'motion on by default')

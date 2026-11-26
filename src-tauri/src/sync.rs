@@ -11,6 +11,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::state::{lock, AppState};
 
 pub const SYNC_ERROR_EVENT: &str = "rail:sync-error";
+/// A pull finished, well or badly. The rail re-reads its connectors' status.
+pub const SYNCED_EVENT: &str = "rail:synced";
 const TICK_SECONDS: u64 = 10;
 
 /// The longest one pull may take, end to end. Each call a connector makes
@@ -24,16 +26,46 @@ pub struct SyncError {
     pub message: String,
 }
 
+/// A tick that took this much longer than it should means the computer was
+/// asleep, or as good as: nothing ran, and every open connection is stale.
+const AWAY_SECONDS: i64 = 60;
+
 /// Wakes every few seconds and pulls from whichever connectors are due.
 pub fn start(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             let due = lock(&app.state::<AppState>().connectors).due_for_sync(chrono::Utc::now());
             for id in due {
-                // Failures are already recorded and reported inside `pull`.
-                let _ = pull(&app, &id).await;
+                // Each pull runs as its own task, so that one going badly
+                // wrong takes down that pull and not this loop. A loop that
+                // dies does so silently, and nothing syncs again until the
+                // app is restarted.
+                let task = tauri::async_runtime::spawn({
+                    let app = app.clone();
+                    let id = id.clone();
+                    // Failures are already recorded and reported inside `pull`.
+                    async move { pull(&app, &id).await }
+                });
+                if let Err(e) = task.await {
+                    let message = format!("the sync stopped unexpectedly: {e}");
+                    lock(&app.state::<AppState>().connectors).record(
+                        &id,
+                        Err(message.clone()),
+                        chrono::Utc::now(),
+                    );
+                    report(&app, &id, &message);
+                }
             }
+            let asleep_from = chrono::Utc::now();
             tokio::time::sleep(std::time::Duration::from_secs(TICK_SECONDS)).await;
+            let away = (chrono::Utc::now() - asleep_from).num_seconds();
+            if away >= AWAY_SECONDS {
+                log::info!("back after {away} seconds away: reconnecting and syncing now");
+                let open = lock(&app.state::<AppState>().connectors).woke();
+                for connector in open {
+                    connector.reset().await;
+                }
+            }
         }
     });
 }
@@ -53,6 +85,9 @@ pub async fn pull(app: &AppHandle, id: &str) -> Result<usize, String> {
     };
     let before = lock(&state.connectors).last_error(id);
     lock(&state.connectors).record(id, outcome.clone(), chrono::Utc::now());
+    // The footer's "Synced a minute ago" is this, so say so every time and
+    // not only when a task changed.
+    let _ = app.emit(SYNCED_EVENT, id);
     match &outcome {
         // Said once when it starts, not on every retry while it lasts.
         Err(message) if before.as_deref() != Some(message.as_str()) => report(app, id, message),

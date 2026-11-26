@@ -88,7 +88,8 @@ pub fn run() {
                 log::info!("log file: {}", path.display());
             }
             let rail = rail::Rail::open(data_file(app.handle()))?;
-            let connectors = connectors::ConnectorRegistry::load(rail.service.repository());
+            let mut connectors = connectors::ConnectorRegistry::load(rail.service.repository());
+            connectors.set_interval(rail.settings.sync_seconds());
             app.manage(AppState::new(rail, connectors));
             // A rail that will not start at login is still a rail.
             if let Err(e) = startup::apply(app.handle()) {

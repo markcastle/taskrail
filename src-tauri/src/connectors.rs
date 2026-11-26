@@ -74,6 +74,9 @@ pub struct SyncStatus {
     pub last_attempt: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub item_count: usize,
+    /// Pull at the next tick whatever the interval says. Set when the
+    /// computer wakes; cleared by the pull.
+    pub asap: bool,
 }
 
 /// How long to leave a connector alone after a pull failed.
@@ -88,6 +91,11 @@ pub struct ConnectorRegistry {
     scopes: HashMap<String, Scope>,
     feeds: Vec<CalendarFeed>,
     live_feeds: HashMap<String, Arc<IcsCalendar>>,
+    /// The person's sync interval from Settings, in seconds. A connector is
+    /// pulled this often, or as rarely as its own profile insists on if
+    /// that is rarer: a profile's `poll_seconds` is the fastest its system
+    /// should be asked, not a schedule.
+    every_seconds: u32,
 }
 
 impl ConnectorRegistry {
@@ -290,6 +298,7 @@ impl ConnectorRegistry {
     pub fn record(&mut self, id: &str, outcome: Result<usize, String>, at: DateTime<Utc>) {
         let status = self.status.entry(id.to_owned()).or_default();
         status.last_attempt = Some(at);
+        status.asap = false;
         match outcome {
             Ok(count) => {
                 status.last_sync = Some(at);
@@ -305,14 +314,45 @@ impl ConnectorRegistry {
         self.status.get(id).and_then(|s| s.last_error.clone())
     }
 
+    /// The computer has been asleep. Every connector is due at the next
+    /// tick, and the connections that were open are returned so the caller
+    /// can drop them: they are dead, and waiting to be told so is slow.
+    pub fn woke(&mut self) -> Vec<Arc<McpConnector>> {
+        let ids: Vec<String> = self
+            .profiles
+            .iter()
+            .map(|p| p.id.clone())
+            .chain(self.feeds.iter().map(|f| f.id.clone()))
+            .collect();
+        for id in ids {
+            self.status.entry(id).or_default().asap = true;
+        }
+        self.live.values().cloned().collect()
+    }
+
+    /// Take the sync interval from Settings.
+    pub fn set_interval(&mut self, seconds: u32) {
+        self.every_seconds = seconds;
+    }
+
+    /// How often one connector is really pulled: the person's interval, or
+    /// the connector's own if that is slower.
+    fn interval(&self, poll_seconds: u32) -> u32 {
+        poll_seconds.max(self.every_seconds)
+    }
+
     pub fn due_for_sync(&self, now: DateTime<Utc>) -> Vec<String> {
         let due = |id: &str, poll: u32| {
+            let poll = self.interval(poll);
             if self.is_paused(id) {
                 return false;
             }
             let Some(status) = self.status.get(id) else {
                 return true;
             };
+            if status.asap {
+                return true;
+            }
             // After a failure, try again soon but not at once; after a
             // success, when the connector's own interval has passed.
             let (since, wait) = match &status.last_error {
@@ -361,7 +401,7 @@ impl ConnectorRegistry {
                         write_status: p.set_status.is_some() && p.status_map.is_complete(),
                         create: p.create.is_some(),
                     }),
-                    poll_seconds: p.poll_seconds,
+                    poll_seconds: self.interval(p.poll_seconds),
                     last_sync: status.last_sync,
                     last_error: status.last_error,
                     item_count: status.item_count,
@@ -381,7 +421,7 @@ impl ConnectorRegistry {
                         write_status: false,
                         create: false,
                     },
-                    poll_seconds: f.poll_seconds,
+                    poll_seconds: self.interval(f.poll_seconds),
                     last_sync: status.last_sync,
                     last_error: status.last_error,
                     item_count: status.item_count,
@@ -509,6 +549,52 @@ mod tests {
     #[test]
     fn a_connector_never_pulled_is_due() {
         assert_eq!(one_feed().due_for_sync(Utc::now()), vec!["cal".to_owned()]);
+    }
+
+    #[test]
+    fn waking_makes_everything_due_at_once_and_one_pull_settles_it() {
+        let mut registry = one_feed();
+        let then = Utc::now();
+        registry.record("cal", Ok(3), then);
+        assert!(registry
+            .due_for_sync(then + Duration::seconds(5))
+            .is_empty());
+        registry.woke();
+        assert_eq!(
+            registry.due_for_sync(then + Duration::seconds(5)),
+            vec!["cal".to_owned()],
+            "the interval does not matter after a sleep"
+        );
+        registry.record("cal", Ok(3), then + Duration::seconds(6));
+        assert!(
+            registry
+                .due_for_sync(then + Duration::seconds(10))
+                .is_empty(),
+            "and then it is back to its interval"
+        );
+    }
+
+    #[test]
+    fn the_interval_from_settings_slows_a_connector_but_never_hurries_it() {
+        let mut registry = one_feed();
+        let then = Utc::now();
+        registry.record("cal", Ok(3), then);
+        // The calendar asks for five minutes; a one-minute setting does not hurry it.
+        registry.set_interval(60);
+        assert!(registry
+            .due_for_sync(then + Duration::seconds(299))
+            .is_empty());
+        assert_eq!(registry.summaries()[0].poll_seconds, 300);
+        // A fifteen-minute setting slows it, and the summary says so.
+        registry.set_interval(900);
+        assert!(registry
+            .due_for_sync(then + Duration::seconds(899))
+            .is_empty());
+        assert_eq!(
+            registry.due_for_sync(then + Duration::seconds(900)).len(),
+            1
+        );
+        assert_eq!(registry.summaries()[0].poll_seconds, 900);
     }
 
     #[test]

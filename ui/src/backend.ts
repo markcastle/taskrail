@@ -93,7 +93,12 @@ export interface RailSettings {
   animations: boolean
   /** A quiet tick on complete, a softer one on start. */
   sounds: boolean
+  /** Minutes between pulls from connected systems. A connector that asks to be pulled less often still is. */
+  sync_minutes: number
 }
+
+/** The sync intervals Settings offers, in minutes. Mirrors the range in `crates/core/src/settings.rs`. */
+export const SYNC_MINUTE_STOPS = [1, 2, 5, 10, 15, 30, 60]
 
 export interface AvailableUpdate {
   version: string
@@ -240,6 +245,8 @@ export interface RailBackend {
   syncConnector(id: string): Promise<number>
   /** Fires when a pull or a write-back failed. Returns an unsubscribe. */
   onSyncError(callback: (error: SyncError) => void): () => void
+  /** Fires when a pull finishes, whether or not it changed anything: the connectors' status is new. Returns an unsubscribe. */
+  onSynced(callback: () => void): () => void
   getModelSettings(): Promise<ModelSettings>
   /** `apiKey` undefined leaves the stored key alone; empty string removes it. */
   saveModelSettings(config: { provider: Provider; model: string | null; base_url: string | null }, apiKey?: string): Promise<ModelSettings>
@@ -328,6 +335,7 @@ function tauriBackend(): RailBackend {
     onChanged: (cb) => listen('rail:changed', cb),
     onQuickAdd: (cb) => listen('rail:quick-add', cb),
     onSyncError: (cb) => listen<SyncError>('rail:sync-error', cb),
+    onSynced: (cb) => listen('rail:synced', cb),
     getModelSettings: () => call('get_model_settings'),
     saveModelSettings: (config, apiKey) => call('save_model_settings', { config, apiKey: apiKey ?? null }),
     testModel: () => call('test_model'),
@@ -400,7 +408,7 @@ function browserBackend(): RailBackend {
     task('update-project-plan', 'Update project plan', 'done'),
   ]
   let active: string | null = 'design-dashboard'
-  let settings: RailSettings = { edge: 'right', width_px: 320, auto_hide: false, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, start_at_login: true, auto_update: false, animations: true, sounds: false }
+  let settings: RailSettings = { edge: 'right', width_px: 320, auto_hide: false, top_limit: 5, event_lead_minutes: 60, theme: 'system', monitor: null, start_at_login: true, auto_update: false, animations: true, sounds: false, sync_minutes: 5 }
   let connectors: ConnectorSummary[] = []
   let modelSettings: ModelSettings = { provider: 'anthropic', model: null, base_url: null, has_key: false }
   let signedIn: string[] = []
@@ -410,6 +418,7 @@ function browserBackend(): RailBackend {
   const scopes: Record<string, Scope> = {}
   const quickAddListeners = new Set<() => void>()
   const syncErrorListeners = new Set<(e: SyncError) => void>()
+  const syncedListeners = new Set<() => void>()
 
   const load = () => {
     try {
@@ -427,6 +436,7 @@ function browserBackend(): RailBackend {
         auto_update: state.settings.auto_update ?? false,
         animations: state.settings.animations ?? true,
         sounds: state.settings.sounds ?? false,
+        sync_minutes: state.settings.sync_minutes ?? 5,
       }
       connectors = state.connectors
       modelSettings = state.modelSettings
@@ -454,6 +464,11 @@ function browserBackend(): RailBackend {
     // emits the event to its one window.
     if (event.data && typeof event.data === 'object' && event.data.type === 'update') {
       updateListeners.forEach((cb) => cb(event.data.update))
+      return
+    }
+    if (event.data && typeof event.data === 'object' && event.data.type === 'synced') {
+      load()
+      syncedListeners.forEach((cb) => cb())
       return
     }
     load()
@@ -754,10 +769,14 @@ function browserBackend(): RailBackend {
     syncConnector: (id) =>
       async(() => {
         connectors = connectors.map((c) => (c.id === id ? { ...c, last_sync: new Date().toISOString(), last_error: null } : c))
-        notify()
+        // A pull that changed no task: the app says "synced", not "changed", and so does this.
+        persist()
+        syncedListeners.forEach((cb) => cb())
+        channel?.postMessage({ type: 'synced' })
         return items.filter((i) => i.origin?.connector === id).length
       }),
     onSyncError: (cb) => (syncErrorListeners.add(cb), () => syncErrorListeners.delete(cb)),
+    onSynced: (cb) => (syncedListeners.add(cb), () => syncedListeners.delete(cb)),
     getModelSettings: () => async(() => modelSettings),
     saveModelSettings: (config, apiKey) =>
       async(() => {

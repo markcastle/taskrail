@@ -353,6 +353,27 @@ async fn items_carry_a_trail_of_board_group_and_parent() {
     );
 }
 
+/// A server that restarted or forgot the session often says so as an
+/// ordinary refusal on a connection that still looks alive. The connector
+/// must not keep that connection: here the fake server is a process per
+/// connection, so a fresh one shows itself by having forgotten the ticket
+/// made on the old one.
+#[tokio::test]
+async fn any_failed_call_starts_the_next_one_on_a_fresh_connection() {
+    let connector = McpConnector::new(fake_tracker_profile(server()), SessionAuth::default());
+    connector.create("Only on this connection").await.unwrap();
+    assert_eq!(connector.list().await.unwrap().len(), 8);
+    assert!(
+        connector.set_status("T-999", Status::Done).await.is_err(),
+        "there is no such ticket, and the server says so"
+    );
+    assert_eq!(
+        connector.list().await.unwrap().len(),
+        7,
+        "the next call connected again"
+    );
+}
+
 #[tokio::test]
 async fn a_link_template_can_name_the_board_a_ticket_came_from() {
     let mut profile = board_profile_with_choices();

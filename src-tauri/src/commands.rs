@@ -208,6 +208,8 @@ pub fn update_settings(
     }
     crate::theme::apply(&app);
     crate::tray::reflect_sounds(lock(&state.rail).settings.sounds);
+    let every = lock(&state.rail).settings.sync_seconds();
+    lock(&state.connectors).set_interval(every);
     changed(&app);
     // Last, so everything else has taken effect. The switch is saved either
     // way; if the system would not follow it, the person is told.

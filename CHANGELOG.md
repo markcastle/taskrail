@@ -6,7 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **You choose how often it syncs.** Settings has a new slider, **Check for changes every**, from one minute to an hour. It applies to every connector, and a connector that asks to be pulled less often than you chose still is.
+
+### Changed
+
+- **Syncing is every five minutes by default, down from every minute.** A list of tasks does not change by the minute, and sixty requests an hour per person adds up on the server at the other end. The rail does not rely on the interval to feel current: what you change on the rail is still sent at once, clicking the status at the bottom still syncs now, and it now syncs as soon as the computer wakes.
+
+### Fixed
+
+- **The rail no longer says "Last synced 3 h ago" while it is syncing.** The status at the bottom only heard about syncs that changed a task, so on a quiet afternoon it counted up for hours over a rail that was checking on schedule. It now hears about every sync.
+- **A connector that hits trouble recovers by itself.** When a server restarted, forgot the session or let a sign-in lapse, the rail could keep failing on the same dead connection every minute until the app was restarted. Any failure now starts the next attempt on a fresh connection.
+- **Waking the computer syncs at once.** The rail used to wait up to a minute on connections that had died in its sleep, show an error, and only then reconnect.
+- One sync going badly wrong can no longer stop all syncing until the app is restarted.
 
 ## [0.13.0] - 2026-11-26
 

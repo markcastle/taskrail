@@ -101,7 +101,7 @@ Field by field:
 | `status_map.to_section` | Every status word the server might return, mapped onto `todo`, `in_progress` or `done`. |
 | `status_map.canonical` | The one word to send for each of the three when a task moves. |
 | `priority_map` | The server's priority words onto `lowest`, `low`, `normal`, `high`, `highest`. Case does not matter. |
-| `poll_seconds` | How often to refresh. |
+| `poll_seconds` | The fastest this system should be asked what is new. How often it really is asked is the person's choice in Settings; see "What sync does and does not touch". |
 
 ### Fanning out over boards
 
@@ -246,7 +246,15 @@ On the rail, today's remaining events sit in a **Today** section with their time
 
 ## What sync does and does not touch
 
-Every `poll_seconds` the connector pulls the list and merges it:
+**How often.** Every five minutes, unless you change it: **Settings → Rail → Check for changes every** goes from one minute to an hour. A profile's `poll_seconds` is the fastest its system should be asked, so a connector whose profile says 300 is pulled every five minutes even with the slider at one. Three things happen without waiting for the interval:
+
+- What you change on the rail is sent to the system at once.
+- Clicking the status at the bottom of the rail syncs now.
+- When the computer wakes from sleep, every connector reconnects and syncs straight away.
+
+**When it fails.** A failed pull is tried again after a minute, on a fresh connection, and the bottom of the rail says which connector could not sync until it can.
+
+Each pull takes the list and merges it:
 
 - Title, status, priority, due date and link belong to the remote system and are refreshed every pull.
 - The position of a task on the rail belongs to you. A pull never moves a task.

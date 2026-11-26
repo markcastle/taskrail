@@ -36,6 +36,15 @@ pub const TOP_LIMIT_MAX: u8 = 10;
 pub const WIDTH_MIN_PX: u32 = 240;
 pub const WIDTH_MAX_PX: u32 = 600;
 
+/// How often connected systems are asked what has changed, in minutes.
+/// Five by default: fresh enough for a list of tasks, and one request every
+/// five minutes is a load no server notices. The rail does not lean on it
+/// to feel current: changes made on the rail are sent at once, a click on
+/// the footer syncs now, and it syncs when the computer wakes.
+pub const SYNC_MINUTES_DEFAULT: u32 = 5;
+pub const SYNC_MINUTES_MIN: u32 = 1;
+pub const SYNC_MINUTES_MAX: u32 = 60;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RailSettings {
     pub edge: Edge,
@@ -75,10 +84,18 @@ pub struct RailSettings {
     /// for: sound from an app nobody expected to make a sound is a jolt.
     #[serde(default)]
     pub sounds: bool,
+    /// Minutes between pulls from connected systems. Read it through
+    /// [`RailSettings::sync_seconds`], which clamps it.
+    #[serde(default = "sync_minutes_default")]
+    pub sync_minutes: u32,
 }
 
 fn yes() -> bool {
     true
+}
+
+fn sync_minutes_default() -> u32 {
+    SYNC_MINUTES_DEFAULT
 }
 
 impl Default for RailSettings {
@@ -95,6 +112,7 @@ impl Default for RailSettings {
             auto_update: false,
             animations: true,
             sounds: false,
+            sync_minutes: SYNC_MINUTES_DEFAULT,
         }
     }
 }
@@ -102,6 +120,11 @@ impl Default for RailSettings {
 impl RailSettings {
     pub fn effective_top_limit(&self) -> usize {
         self.top_limit.clamp(1, TOP_LIMIT_MAX) as usize
+    }
+
+    /// Seconds between pulls, whatever was asked for kept within reason.
+    pub fn sync_seconds(&self) -> u32 {
+        self.sync_minutes.clamp(SYNC_MINUTES_MIN, SYNC_MINUTES_MAX) * 60
     }
 
     /// The width inside the range the rail can live with, whatever was
@@ -127,8 +150,20 @@ mod tests {
             settings.start_at_login,
             "someone who never saw the switch gets the default, which is on"
         );
+        assert_eq!(settings.sync_seconds(), 300, "and syncs every five minutes");
         let json = serde_json::to_string(&settings).unwrap();
         assert!(json.contains("\"theme\":\"system\""));
+    }
+
+    #[test]
+    fn the_sync_interval_is_kept_within_reason() {
+        let every = |minutes| RailSettings {
+            sync_minutes: minutes,
+            ..RailSettings::default()
+        };
+        assert_eq!(every(0).sync_seconds(), 60);
+        assert_eq!(every(15).sync_seconds(), 900);
+        assert_eq!(every(10_000).sync_seconds(), 3600);
     }
 
     #[test]

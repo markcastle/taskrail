@@ -109,8 +109,17 @@ impl McpConnector {
         Ok(out)
     }
 
+    /// Drop the connection, so the next call makes a new one. For when the
+    /// computer has been asleep: the old connection is dead but nothing has
+    /// said so yet, and finding out the slow way costs a minute.
+    pub async fn reset(&self) {
+        if let Some(session) = self.session.lock().await.take() {
+            session.close().await;
+        }
+    }
+
     /// Call a tool on a connected session, connecting first if needed. A
-    /// transport failure drops the session so the next call reconnects.
+    /// failure of any kind drops the session so the next call reconnects.
     async fn call(
         &self,
         tool: &str,
@@ -124,10 +133,13 @@ impl McpConnector {
             Some(session) => session.call(tool, arguments).await,
             None => Err(ConnectorError::Transport("no session".into())),
         };
-        if matches!(
-            outcome,
-            Err(ConnectorError::Transport(_) | ConnectorError::Auth(_))
-        ) {
+        // Whatever went wrong, start the next call on a fresh connection.
+        // A server that restarted, or forgot the session, or let a sign-in
+        // lapse, often says so as an ordinary error on a connection that
+        // still looks alive; holding on to that connection would fail the
+        // same way every minute until the app was restarted. Connecting
+        // again costs one handshake.
+        if outcome.is_err() {
             if let Some(session) = guard.take() {
                 session.close().await;
             }
@@ -166,10 +178,13 @@ impl Connector for McpConnector {
             }
             None => Err(ConnectorError::Transport("no session".into())),
         };
-        if matches!(
-            outcome,
-            Err(ConnectorError::Transport(_) | ConnectorError::Auth(_))
-        ) {
+        // Whatever went wrong, start the next call on a fresh connection.
+        // A server that restarted, or forgot the session, or let a sign-in
+        // lapse, often says so as an ordinary error on a connection that
+        // still looks alive; holding on to that connection would fail the
+        // same way every minute until the app was restarted. Connecting
+        // again costs one handshake.
+        if outcome.is_err() {
             if let Some(session) = guard.take() {
                 session.close().await;
             }
